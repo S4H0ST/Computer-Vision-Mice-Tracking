@@ -35,8 +35,8 @@ Based on the current codebase, the system includes:
 
 ---
 
-## 🎥 Demo
-![DemoRatgif](rat_detector_project\output\Gif\DemoGit_rat.gif)
+## Short demo
+![DemoRatgif](media\DemoGit_rat.gif)
 
 ---
 
