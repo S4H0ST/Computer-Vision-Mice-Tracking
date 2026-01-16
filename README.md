@@ -36,7 +36,7 @@ Based on the current codebase, the system includes:
 ---
 
 ## 🎥 Demo
-*(Place a GIF here of the `output/analizado.mp4` showing the bounding boxes and labels changing)*
+![DemoRatgif](rat_detector_project\output\Gif\DemoGit_rat.gif)
 
 ---
 
