@@ -1,5 +1,5 @@
 # Computer Vision Mice Tracking System
-### Bachelor's Thesis (TFG) - Universidad Rey Juan Carlos (URJC)
+### (TFG) - Universidad Rey Juan Carlos (URJC)
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
 ![YOLOv8](https://img.shields.io/badge/AI-YOLOv8-magenta.svg)
