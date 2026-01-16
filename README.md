@@ -49,7 +49,7 @@ Based on the current codebase, the system includes:
 ### Setup
 ```bash
 # Clone the repository
-git clone [https://github.com/YourUsername/Computer-Vision-Mice-Tracking.git](https://github.com/YourUsername/Computer-Vision-Mice-Tracking.git)
+git clone https://github.com/S4H0ST/Computer-Vision-Mice-Tracking.git
 cd Computer-Vision-Mice-Tracking
 
 # Create virtual environment (Optional but recommended)
