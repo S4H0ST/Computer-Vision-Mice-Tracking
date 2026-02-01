@@ -24,7 +24,7 @@ def main():
         opt = input("\n[?] Opción: ")
 
         if opt == "1":
-            calib = ZoneCalibrator(paths.video_source)
+            calib = ZoneCalibrator(paths.img_source)
             calib.run()
 
         elif opt == "2":

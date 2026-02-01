@@ -18,6 +18,7 @@ class ProjectPaths(BaseModel):
     # Ahora 'root' es rat_detector_project, así que buscará en las carpetas correctas
     data_yaml: Path = root / "data" / "rats" / "data.yaml"
     video_source: Path = root / "videos" / "testRata1.mp4"
+    img_source: Path = root / "videos" / "Calibraje" / "rata_4421.jpg"
     coords_json: Path = root / "config" / "coords.json"
     models_dir: Path = root / "models"
     output_video: Path = root / "output" / "analizado.mp4"
