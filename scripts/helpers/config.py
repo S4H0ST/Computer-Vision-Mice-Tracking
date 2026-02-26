@@ -1,71 +1,77 @@
-from pydantic import BaseModel
+import sys
 from pathlib import Path
-import torch
+from dataclasses import dataclass
+
+# --- 1. DEFINICIÓN DE LA RAÍZ DEL PROYECTO ---
+FILE_PATH = Path(__file__).resolve()
+PROJECT_ROOT = FILE_PATH.parent.parent.parent
 
 
-class ProjectPaths(BaseModel):
-    """Gestor de rutas del proyecto."""
-    # ---------------------------------------------------------
-    # CORRECCIÓN DE RUTA RAÍZ
-    # config.py está en: rat_detector_project / scripts / helpers
-    # parents[0] = helpers
-    # parents[1] = scripts
-    # parents[2] = rat_detector_project (LA RAÍZ REAL)
-    # ---------------------------------------------------------
-    root: Path = Path(__file__).resolve().parents[2]
+@dataclass
+class Paths:
+    root: Path = PROJECT_ROOT
 
-    # --- RUTAS DE MODELO (Main 1) ---
-    # Ahora 'root' es rat_detector_project, así que buscará en las carpetas correctas
-    data_yaml: Path = root / "data" / "rats" / "data.yaml"
-    video_source: Path = root / "videos" / "testRata1.mp4"
-    img_source: Path = root / "videos" / "Calibraje" / "rata_4421.jpg"
-    coords_json: Path = root / "config" / "coords.json"
+    # --- RUTAS DE CÓDIGO Y MODELOS ---
+    scripts: Path = root / "scripts"
     models_dir: Path = root / "models"
-    output_video: Path = root / "output" / "analizado.mp4"
 
-    # --- RUTAS DE DATASET (Main 2) ---
-    raw_videos: Path = root / "videos" / "raw"
-    raw_images: Path = root / "videos" / "imagenesRata"
-    temp_pool: Path = root / "videos" / "TEMP_POOL"
-    final_dataset: Path = root / "videos" / "DataSet_Full"
+    # NOMBRES DE ARCHIVOS CLAVE
+    base_yolo_model: Path = models_dir / "yolov8s.pt"
 
-    def check_dirs(self) -> None:
-        """Crea directorios necesarios si no existen."""
-        # Solo creará las carpetas si realmente faltan en la raíz
+    # --- ESTA ES LA LÍNEA QUE FALTABA Y DABA ERROR ---
+    # Definimos dónde vivirá el modelo final de las ratas
+    yolo_model: Path = models_dir / "yolo_ratas.pt"
+
+    # El cerebro RNN
+    rnn_model: Path = models_dir / "best_rnn.pth"
+
+    # --- RUTAS DE DATOS ---
+    data_dir: Path = root / "data"
+    output_dir: Path = data_dir / "output"
+    data_yaml: Path = scripts / "data.yaml"
+    coords_json: Path = data_dir / "coords.json"
+
+    # --- RUTAS DE VIDEO ---
+    video_dir: Path = root / "media" / "videos"
+
+    # VIDEO DE PRUEBA (Asegúrate de que este nombre es correcto)
+    video_source: Path = video_dir / "testRata1.mp4"
+
+    # Salida automática
+    output_video: Path = output_dir / "resultado_final.mp4"
+
+    def check_dirs(self):
         self.models_dir.mkdir(parents=True, exist_ok=True)
-        self.output_video.parent.mkdir(parents=True, exist_ok=True)
-        self.coords_json.parent.mkdir(parents=True, exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        # Directorios dataset
-        self.raw_videos.mkdir(parents=True, exist_ok=True)
-        self.temp_pool.mkdir(parents=True, exist_ok=True)
-        self.final_dataset.mkdir(parents=True, exist_ok=True)
+        if not self.video_source.exists():
+            print(f"[ADVERTENCIA] No encuentro el video en: {self.video_source}")
 
 
-class TrainParams(BaseModel):
-    base_model: str = "yolov8s.pt"
+paths = Paths()
+
+
+# --- PARÁMETROS DE ENTRENAMIENTO ---
+@dataclass
+class TrainParams:
     epochs: int = 50
     imgsz: int = 640
     batch_size: int = -1
-    device: str = "0" if torch.cuda.is_available() else "cpu"
-    augment: bool = True
+    device: str = "0"
+    # Usamos la ruta del modelo base para evitar descargas
+    base_model: str = str(paths.base_yolo_model)
+    augment: bool = False
 
 
-class DetectParams(BaseModel):
-    # Aseguramos que busque el nombre correcto del modelo sin la 's' extra
-    model_name: str = "yolov8_ratas_best.pt"
-    conf_threshold: float = 0.5
-    device: str = "0" if torch.cuda.is_available() else "cpu"
+# --- PARÁMETROS DE DETECCIÓN ---
+@dataclass
+class DetectParams:
+    conf_threshold: float = 0.4
+    iou_threshold: float = 0.5
+    # Ahora usamos la variable correcta que acabamos de crear arriba
+    model_path: Path = paths.yolo_model
+    device: str = "0"
 
 
-class DatasetParams(BaseModel):
-    fps_extract: int = 5
-    split_ratio: float = 0.8
-    base_name: str = "rata"
-
-
-# Instancias globales
-paths = ProjectPaths()
 train_cfg = TrainParams()
 detect_cfg = DetectParams()
-data_cfg = DatasetParams()

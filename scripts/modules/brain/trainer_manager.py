@@ -4,28 +4,39 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from modules.brain.model import RatActionRNN
 from modules.brain.dataset import RatDataset
+from helpers.config import paths  # <--- Importamos las rutas centrales
 import glob
 
 
 class RNNTrainer:
-    def __init__(self, data_path='data/training_csvs/*.csv', batch_size=32, lr=0.001):
-        self.data_path = data_path
+    def __init__(self, batch_size=32, lr=0.001):
+        # 1. BUSCAR CSVs EN LA CARPETA OUTPUT
+        self.search_pattern = str(paths.output_dir / "*.csv")
+
         self.batch_size = batch_size
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.model = RatActionRNN().to(self.device)
         self.criterion = nn.CrossEntropyLoss()
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
 
-    def train(self, epochs=50, save_path='best_rnn.pth'):
-        files = glob.glob(self.data_path)
+    def train(self, epochs=50):
+        # Buscar archivos
+        files = glob.glob(self.search_pattern)
+        print(f"[Brain] Buscando CSVs en: {self.search_pattern}")
+
         if not files:
-            print("[X] No hay CSVs para entrenar.")
+            print("[X] ERROR: No encontré archivos .csv en la carpeta 'output'.")
+            print("    -> Ejecuta primero la Opción 3 para generar datos.")
             return
 
         dataset = RatDataset(files)
+        if len(dataset) == 0:
+            print("[X] ERROR: Los CSV encontrados están vacíos o corruptos.")
+            return
+
         loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=True)
 
-        print(f"[i] Iniciando entrenamiento con {len(dataset)} secuencias...")
+        print(f"[i] Entrenando con {len(dataset)} secuencias de movimiento...")
 
         self.model.train()
         for epoch in range(epochs):
@@ -40,8 +51,10 @@ class RNNTrainer:
                 self.optimizer.step()
                 total_loss += loss.item()
 
-            if (epoch + 1) % 5 == 0:
-                print(f"Epoch {epoch + 1}/{epochs} | Loss: {total_loss / len(loader):.4f}")
+            if (epoch + 1) % 10 == 0:
+                print(f"   Epoch {epoch + 1}/{epochs} | Loss: {total_loss / len(loader):.4f}")
 
-        torch.save(self.model.state_dict(), save_path)
-        print(f"[OK] Modelo RNN guardado en: {save_path}")
+        # 2. GUARDAR EL MODELO EN LA CARPETA MODELS
+        save_location = paths.rnn_model
+        torch.save(self.model.state_dict(), save_location)
+        print(f"[OK] Cerebro RNN guardado correctamente en: {save_location}")

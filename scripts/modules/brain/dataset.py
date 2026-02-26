@@ -10,15 +10,20 @@ class RatDataset(Dataset):
         self.features = []
         self.labels = []
 
-        # MAPEO EXACTO (Debe coincidir con tu data.yaml)
-        # 0:rearing, 1:grooming, 2:horizontal/walking, 3:climbing, 4:dipping
+        # MAPEO DE ETIQUETAS (Tu diccionario)
+        # Aseguramos que reconozca tanto 'rat_rearing' como 'rearing' por si acaso
         self.label_map = {
+            # Nombres largos (Dataset original)
             'rat_rearing': 0,
             'rat_grooming': 1,
             'rat_horizontal': 2,
-            'rat_walking': 2,  # Unificamos walking y horizontal
+            'rat_walking': 2,  # Walking y Horizontal son lo mismo para el análisis
             'rat_climbing': 3,
-            'rat_head_dipping': 4
+            'rat_head_dipping': 4,
+
+            # Nombres cortos (Por si YOLO devuelve solo esto)
+            'rearing': 0, 'grooming': 1, 'horizontal': 2,
+            'walking': 2, 'climbing': 3, 'head_dipping': 4, 'dipping': 4
         }
 
         self._process_files(csv_files)
@@ -26,35 +31,64 @@ class RatDataset(Dataset):
     def _process_files(self, files):
         for f in files:
             try:
+                # 1. Cargar CSV
                 df = pd.read_csv(f)
-                # Normalización (Asumiendo 640x480, ajustar si cambia la resolución)
+
+                # 2. DETECTAR NOMBRE DE LA COLUMNA DE ETIQUETA
+                target_col = None
+                if 'final_label' in df.columns:
+                    target_col = 'final_label'  # La que genera tu código nuevo
+                elif 'label' in df.columns:
+                    target_col = 'label'  # Por compatibilidad antigua
+                elif 'yolo_label' in df.columns:
+                    target_col = 'yolo_label'  # Respaldo
+
+                if target_col is None:
+                    print(f"[!] Saltando {f}: No encuentro columna de etiqueta válida.")
+                    continue
+
+                # 3. Normalización (0.0 a 1.0)
+                # Asumimos 640x480. Si tus videos son distintos, esto se ajustará solo si usas config
                 df['w'] = (df['x2'] - df['x1']) / 640.0
                 df['h'] = (df['y2'] - df['y1']) / 480.0
                 df['cx'] = ((df['x1'] + df['x2']) / 2) / 640.0
                 df['cy'] = ((df['y1'] + df['y2']) / 2) / 480.0
 
-                # Velocidad (delta de posición)
+                # 4. Velocidad (Diferencia con frame anterior)
+                # Multiplicamos por 100 para que el número no sea tan pequeño (ayuda a la red)
                 df['speed'] = np.sqrt(df['cx'].diff() ** 2 + df['cy'].diff() ** 2).fillna(0) * 100
 
-                # Limpiar
-                clean_df = df[['cx', 'cy', 'w', 'h', 'speed', 'label']].dropna()
+                # 5. Filtrar columnas útiles
+                # Usamos 'target_col' que hemos detectado arriba
+                clean_df = df[['cx', 'cy', 'w', 'h', 'speed', target_col]].dropna()
 
-                # Crear ventanas deslizantes
+                # 6. Crear secuencias (Ventanas de tiempo)
                 data_values = clean_df[['cx', 'cy', 'w', 'h', 'speed']].values
-                label_values = clean_df['label'].values
+                label_values = clean_df[target_col].values
 
+                sequences_created = 0
                 for i in range(len(clean_df) - self.seq_length):
                     seq = data_values[i: i + self.seq_length]
-                    target = label_values[i + self.seq_length - 1]
+                    target_text = label_values[i + self.seq_length - 1]  # Etiqueta del último frame
 
-                    if target in self.label_map:
+                    if target_text in self.label_map:
                         self.features.append(seq)
-                        self.labels.append(self.label_map[target])
-            except Exception as e:
-                print(f"[!] Error procesando {f}: {e}")
+                        self.labels.append(self.label_map[target_text])
+                        sequences_created += 1
 
-        self.features = torch.FloatTensor(np.array(self.features))
-        self.labels = torch.LongTensor(np.array(self.labels))
+                # print(f"   -> {f}: {sequences_created} secuencias extraídas.")
+
+            except Exception as e:
+                print(f"[!] Error inesperado leyendo {f}: {e}")
+
+        # Convertir a tensores de PyTorch
+        if len(self.features) > 0:
+            self.features = torch.FloatTensor(np.array(self.features))
+            self.labels = torch.LongTensor(np.array(self.labels))
+        else:
+            # Crear tensores vacíos para evitar crash
+            self.features = torch.empty(0)
+            self.labels = torch.empty(0)
 
     def __len__(self):
         return len(self.features)

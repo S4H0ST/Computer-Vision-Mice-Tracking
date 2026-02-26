@@ -1,12 +1,10 @@
 import sys
 from helpers.config import paths, train_cfg, detect_cfg
 
-# Módulos del Core
+# --- CAMBIO IMPORTANTE: Apuntamos a modules.core ---
 from modules.core.calibrator import ZoneCalibrator
 from modules.core.trainer import YOLOTrainer
 from modules.core.detector import RatDetector
-
-# Módulo del Cerebro (NUEVO)
 from modules.brain.trainer_manager import RNNTrainer
 
 
@@ -14,19 +12,22 @@ def main():
     paths.check_dirs()
 
     while True:
-        print("\n" + "=" * 50)
-        print(" [(;)] RAT MODEL MANAGER (Sistema Híbrido)")
-        print("=" * 50)
+        print("\n" + "=" * 40)
+        print(" [(;)] RAT MODEL MANAGER (Entrenamiento & IA)")
+        print("=" * 40)
         print("1. Calibrar Zonas (Paredes/Agujeros)")
-        print("2. Entrenar Modelo YOLO (Visual)")
-        print("3. Ejecutar Detección (Genera datos y usa RNN si existe)")
-        print("4. Entrenar Cerebro RNN (Temporal)")
+        print("     1.1 Primero coordenadas del borde EXTERIOR")
+        print("     1.2 Luego coordenadas del borde INTERIOR")
+        print("     1.3 Luego coordenadas de los AGUJEROS (4)")
+        print("2. Entrenar Modelo YOLO")
+        print("3. Ejecutar Deteccion y Analisis")
+        print("4. Entrenar Cerebro RNN")
         print("5. Salir")
 
-        opt = input("\n[?] Elige una opción: ")
+        opt = input("\n[?] Opción: ")
 
         if opt == "1":
-            calib = ZoneCalibrator(paths.img_source)
+            calib = ZoneCalibrator(paths.video_source)
             calib.run()
 
         elif opt == "2":
@@ -34,18 +35,15 @@ def main():
             trainer.run()
 
         elif opt == "3":
-            # Verificación de seguridad
             if not paths.coords_json.exists():
-                print("[!] ERROR: Primero debes calibrar las zonas (Opción 1).")
+                print("[¿?] ERROR: Primero debes calibrar las zonas (Opción 1).")
                 continue
 
-            # Ejecutar el detector
             detector = RatDetector(detect_cfg)
             detector.run()
 
         elif opt == "4":
             print("\n[Brain] Iniciando entrenamiento de la red temporal (LSTM)...")
-            # Entrenamos usando los CSVs generados por la opción 3
             brain_trainer = RNNTrainer()
             brain_trainer.train()
 

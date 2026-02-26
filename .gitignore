@@ -10,6 +10,11 @@ videos/
 config/
 data/
 .idea/
+models/*.pt
+models/*.pth
+media/*.mp4
+media/*.gif
+models/
 
 # C extensions
 *.so

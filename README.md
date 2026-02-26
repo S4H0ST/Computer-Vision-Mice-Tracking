@@ -1,135 +1,160 @@
-# Computer Vision Mice Tracking System
-### (TFG) - Universidad Rey Juan Carlos (URJC)
+# 🐀 Computer Vision Mice Tracking System
+### Bachelor's Thesis (TFG) - Universidad Rey Juan Carlos (URJC)
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
-![YOLOv8](https://img.shields.io/badge/AI-YOLOv8-magenta.svg)
+![YOLOv8](https://img.shields.io/badge/AI-YOLOv8_Pose-magenta.svg)
+![PyTorch](https://img.shields.io/badge/Framework-PyTorch-ee4c2c.svg)
 ![OpenCV](https://img.shields.io/badge/Vision-OpenCV-green.svg)
 ![Status](https://img.shields.io/badge/Status-In%20Development-yellow)
 
-**Automated analysis of rodent behavior for pharmacological studies using Deep Learning.**
+**Automated analysis of rodent behavior for pharmacological studies using Deep Learning (Pose Estimation and Recurrent Neural Networks).**
 
 ---
 
 ## 📖 Project Overview
-This project is developed as a **Bachelor's Thesis (Trabajo de Fin de Grado)** in Computer Engineering at **Universidad Rey Juan Carlos**.
 
-The system automates the observation of **Open Field Tests**, a standard protocol in pharmacology to assess anxiety and locomotion in mice (specifically white mice in a box with holes). By replacing manual observation with Computer Vision, this tool aims to:
-* Reduce human error and bias.
-* Provide objective metrics (speed, time in zones, specific behaviors).
-* Accelerate the testing process for new drugs (e.g., chemotherapy side effects).
+This project automates the observation of the **Open Field Test**, a standard protocol in pharmacology used to assess anxiety and locomotion in mice (specifically white mice in a box with holes). 
+
+By replacing manual observation with Computer Vision and Deep Learning, this tool allows researchers to:
+* Eliminate human error and observational bias.
+* Extract objective metrics based on the animal's biomechanics.
+* Classify complex postures that require temporal analysis.
+
+![DemoRatgif](media/DemoImage.png)
+---
+
+## 🧠 Hybrid Architecture (Key Features)
+
+The system no longer relies on simple bounding boxes. Instead, it uses a two-phase hybrid AI architecture:
+
+1. **The Eyes (YOLOv8 Pose):** Identifies skeletal *Keypoints* (Snout, Spine, Tail Base) frame by frame to capture exact biomechanics.
+2. **The Brain (RNN - LSTM):** Analyzes the temporal sequence of these *Keypoints* to understand continuous movement and classify the action.
+3. **The Instinct (Spatial Logic):** Maps the physical environment (walls, holes) to provide spatial context (e.g., *Head Dipping*).
+
+### 🏷️ Detected Behaviors (Labels)
+* `Walking` 
+* `Immobility` 
+* `Rearing` (Standing on hind legs)
+* `Grooming` (Facial cleansing)
+* `Head Dipping` (Exploring holes)
+* `Climbing` (Scaling the walls)
+
+---
+## 📂 Project Structure
+
+```text
+Computer-Vision-Mice-Tracking/
+├── data/                   # Datasets, CSV labels, and calibration coordinates
+├── media/                  # Original input videos and demonstration GIFs
+├── models/                 # Trained models (yolo_ratas.pt and best_rnn.pth)
+├── scripts/
+│   ├── helpers/            # Global configurations and paths (config.py)
+│   ├── modules/
+│   │   ├── core/           # Visual Detection (YOLO Pose), Training, and Calibration
+│   │   ├── logic/          # Spatial Logic (Zone and Hole management)
+│   │   └── brain/          # Recurrent Neural Network (RNN) and sequence handling
+│   ├── tools/              # Utility scripts (frame extraction, formatting)
+│   └── main_model.py       # MAIN ENTRY POINT
+└── README.md
+
+```
 
 ---
 
-## ⚙️ Key Features
-Based on the current codebase, the system includes:
+## 🚀 Installation and Requirements
 
-* **Hybrid Detection Engine:** Combines **YOLOv8** object detection with **Heuristic Rule-Based Logic** (`behavior_rules.py`) to distinguish complex actions.
-* **Behaviors Detected:**
-    * `rat_walking` / `rat_immobility`
-    * `rat_rearing` (standing up in the center)
-    * `rat_climbing` (climbing walls)
-    * `rat_head_dipping` (exploring holes)
-* **Interactive Zone Calibration:** A GUI tool to define the arena boundaries (Walls) and interest points (Holes) before analysis.
-* **Data Toolkit:** Tools to extract frames from raw videos and build datasets automatically for training.
-* **Automated Reporting:** Generates a CSV with frame-by-frame behavioral data and speed metrics.
+### Prerequisites
 
+* Python 3.9 or higher.
+* CUDA-compatible GPU (Highly recommended for training and real-time inference).
+
+### Installation Steps
+
+1. **Clone the repository:**
+```bash
+git clone [https://github.com/YOUR_USERNAME/Computer-Vision-Mice-Tracking.git](https://github.com/YOUR_USERNAME/Computer-Vision-Mice-Tracking.git)
+cd Computer-Vision-Mice-Tracking
+
+```
+
+
+2. **Create a virtual environment and install dependencies:**
+```bash
+pip install torch torchvision torchaudio --index-url [https://download.pytorch.org/whl/cu118](https://download.pytorch.org/whl/cu118)
+pip install ultralytics opencv-python pandas pyyaml
+
+```
 ---
 
-## 📂 Project Architecture & File Hierarchy
+## 🕹️ Workflow (Usage)
 
-The system is modularized to separate data management from the AI logic. Below is the index of the file structure and the utility of each module:
+The system is designed to be highly modular. Run the main script to open the interactive menu:
 
-### 1. 🛠️ Main Entry Points (Scripts)
-These are the files you execute directly in the terminal:
-
-* **`main_model.py`**: **The Core Manager.** Use this for the daily workflow.
-    * **Option 1 (Calibration):** Opens the GUI to draw walls and holes.
-    * **Option 2 (Training):** Starts the YOLOv8 training process.
-    * **Option 3 (Inference):** Runs the analysis on a video using the calibrated zones.
-* **`main_data.py`**: **The Data Factory.** Use this only when building a new dataset.
-    * **Option 1:** Extracts frames from raw videos for labeling.
-    * **Option 2:** Compiles, shuffles, and splits labeled images into `train/valid` folders.
-
-### 2. 🧩 Modules (`scripts/modules/`)
-
-#### 🧠 Core (`modules/core/`)
-Contains the business logic and detection algorithms.
-
-* **`behavior_rules.py`**: **Heuristic Rules Engine.** This is the "brain" that corrects YOLO. It applies logic such as *"If the mouse is moving fast, it is walking"* or *"If it is at the wall and vertical, it is climbing"*. It solves conflicts between classes like `climbing` vs `head_dipping` based on location.
-* **`calibrator.py`**: **Calibration Tool.** A GUI that allows the user to click and define the **Outer Boundary** (Walls), **Inner Boundary** (Safe Zone), and **Holes**. Saves coordinates to `coords.json`.
-* **`detector.py`**: **Inference Engine.** Loads the trained model, processes the video frame-by-frame, calculates speed, and applies the `behavior_rules` to generate the final CSV and labeled video.
-* **`trainer.py`**: **Training Wrapper.** Manages the YOLOv8 training session, automatically estimating batch size based on your GPU and applying data augmentation.
-
-#### 🗃️ Dataset (`modules/dataset/`)
-Tools for raw data handling.
-
-* **`frame_extractor.py`**: Takes raw `.mp4` videos and extracts images at a specific frame rate for manual labeling.
-* **`dataset_builder.py`**: The "Vacuum Cleaner." It gathers all labeled images, renames them to avoid conflicts, and structures them into the final YOLO directory format.
-
-### 3. ⚙️ Helpers (`scripts/helpers/`)
-Global configuration and utilities.
-
-* **`config.py`**: **Control Center.** Contains all project paths (root, videos, models) and parameters (thresholds, model names). **If you change a video file, you update it here.**
-* **`interfaces.py`**: Defines the abstract base classes to ensure code consistency across modules.
-
----
-
-## 🚀 Workflow: How to Run a Test
-
-To analyze a new video (e.g., `testRata2.mp4`), follow this specific order:
-
-### Step 1: Configuration
-Open `scripts/helpers/config.py` and update the `video_source` path:
-```python
-video_source: Path = root / "videos" / "testRata2.mp4"
-
-### Step 2: Execution
-Open your terminal in the scripts folder and run the model manager:
 ```bash
 cd scripts
 python main_model.py
+
 ```
-### Step 3: Interactive Menu
-Inside the menu, perform these actions in order:
 
-1. Select Option 1 (Calibrate Zones):
+### Main Menu Options:
 
-   + The first frame of the video will appear.
-
-   + Clicks 1-2: Define the Outer Wall (Blue rectangle).
-
-   + Clicks 3-4: Define the Inner Boundary (Green rectangle). The area between Green and Blue is considered the "Wall Zone".
-
-   + Clicks 5-8: Click the center of the 4 Holes (Red dots).
-
-   + Press q to save and exit.
-  
-2. Select Option 3 (Execute Detection):
-
-   + The system will load the model and the new coordinates.
-
-   + It will process the video and save the results in output/analizado.mp4 and output/analizado.csv.
-  
-  ## Short demo
-![DemoRatgif](media/DemoImage.png)
+1. **[SETUP] Calibrate Zones:** Opens the first frame of the video. Click to define the outer wall, inner wall, and the center of the 4 holes (Creates `coords.json`).
+2. **[EYES] Train YOLO Model:** Trains the visual model using the dataset labeled with articular points (Pose).
+3. **[DATA] Generate CSV (YOLO Only):** Analyzes the video using only the visual model and saves the articular coordinates frame by frame into a `.csv` file.
+4. **[BRAIN] Train Temporal Network (RNN):** Uses the previously generated `.csv` to teach the recurrent network how to interpret temporal movement patterns.
+5. **[FINAL] Generate HYBRID FINAL VIDEO:** Runs the system in production by merging **YOLO Pose + Spatial Logic + RNN** to export the fully analyzed and corrected video.
 
 ---
 
-## 🚀 Installation
+## 📖 Project Evolution and Architecture Decision Record (ADR)
 
-### Prerequisites
-* Python 3.9+
-* CUDA-compatible GPU (Recommended for training)
+This project has gone through multiple research and development phases, iterating over different Computer Vision approaches to overcome physical limitations in detecting complex animal behavior.
 
-### Setup
-```bash
-# Clone the repository
-git clone https://github.com/S4H0ST/Computer-Vision-Mice-Tracking.git
-cd Computer-Vision-Mice-Tracking
+### Phase 1: Base Tracking and Overfitting Control
 
-# Create virtual environment (Optional but recommended)
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+* **Repository Status:** `[🔗 Insert Commit Link or Hash here]`
+* **Objective:** Achieve 100% rat detection in the controlled environment.
+* **Development:** Training began with a massive dataset. However, due to the high similarity between frames, the neural network suffered from severe *overfitting*.
+* **Solution:** The dataset size was drastically reduced, and rigorous *Data Augmentation* was applied. Being a hyper-controlled environment, lighting modifications were discarded, applying exclusively geometric transformations (rotations, scaling, and cropping) to force the model to generalize the rodent's shape.
 
-# Install dependencies
-pip install ultralytics opencv-python numpy pydantic
+### Phase 2: Behavior Labeling and CNN Limitations
+
+* **Repository Status:** `[🔗 Insert Commit Link or Hash here]`
+* **Objective:** Classify static and dynamic postures using **MakeSense** for bounding box labeling.
+* **Physical Problem:** Convolutional Neural Networks (CNNs) like YOLO analyze frame by frame. For a CNN without temporal context, a rat *Walking* looks visually identical to an *Immobile* rat, since the outer Bounding Box enclosing them is exactly the same.
+
+*[📸 INSERT IMAGE: Screenshot of MakeSense showing a square bounding box around the rat]*
+
+### Phase 3: Mathematical Heuristics and Spatial Logic (Brute Force)
+
+* **Repository Status:** `[🔗 Insert Commit Link or Hash here]`
+* **Objective:** Differentiate movement from inactivity by measuring spatial pixel displacement.
+* **Development:** Algorithmic logic was implemented by extracting the centroid $(cx, cy)$ of the Bounding Box in each frame. Displacement speed was calculated using the Euclidean distance between consecutive frames:
+
+$$v = \frac{\sqrt{(cx_t - cx_{t-1})^2 + (cy_t - cy_{t-1})^2}}{\Delta t}$$
+
+* **Result:** This allowed estimating the *Walking* state using speed thresholds and mapping the spatial location relative to walls/holes. Even so, it remained a fragile system against subtle posture changes.
+
+### Phase 4: Temporal Integration (RNN) and Dual Tracking
+
+* **Repository Status:** `[🔗 Insert Commit Link or Hash here]`
+* **Objective:** Provide the system with "memory" to understand continuous actions over time.
+* **Development:** A Recurrent Neural Network (RNN) was introduced to analyze YOLO's historical data, and a specific *Box Tracking* was added for the rat's head.
+* **Phase Status:**
+[SUCCESS] Perfect detection of Head Dipping thanks to head tracking and spatial zones.
+
+[WARNING] Data Issue: Climbing failed due to a shortage of images in atypical vertical positions.
+
+[FAIL] Architectural Limit: The RNN still confused Rearing, Grooming, and Walking because the outer bounding box is "blind" to the articular micro-movements of the limbs.
+
+### 🚀 Phase 5 (Current): Architectural Leap to YOLO Pose (Pose Estimation)
+
+* **Repository Status:** In Active Development (`main`)
+* **Objective:** Overcome geometric ambiguity by moving from an "area" approach to an "articular biomechanics" approach.
+* **Development:** Bounding boxes are replaced by **Skeletal Keypoints** (Snout, Spine Center, Tail Base).
+* **Technological Base:** The **YOLOv8-Pose** model is used, which shares the real-time inference *backbone* but adapts its output *head* to predict matrices of articular point coordinates.
+* **Key Advantage:** It allows the RNN to differentiate complex states by measuring the variation in height ($Y$) between the snout and the tail (solving the Walking vs Rearing conflict) or by detecting exclusive local vibrations in the snout (Grooming).
+
+*[📸 INSERT IMAGE: A screenshot of you labeling articular points in Roboflow/CVAT, or the final skeleton drawn during inference]*
+
+
