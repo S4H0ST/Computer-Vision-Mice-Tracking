@@ -86,8 +86,6 @@ pip install torch torchvision torchaudio --index-url [https://download.pytorch.o
 pip install ultralytics opencv-python pandas pyyaml
 ```
 
-
-
 ---
 
 ## Workflow (Usage)
@@ -147,7 +145,6 @@ $$v = \frac{\sqrt{(cx_t - cx_{t-1})^2 + (cy_t - cy_{t-1})^2}}{\Delta t}$$
 * **[SUCCESS]** Perfect detection of *Head Dipping* thanks to head tracking and spatial zones.
 * **[WARNING]** *Data Issue:* *Climbing* failed due to a shortage of images in atypical vertical positions.
 * **[LIMITATION]** *Architectural Limit:* The RNN still confused *Rearing*, *Grooming*, and *Walking* because the outer bounding box is "blind" to the articular micro-movements of the limbs.
-
 
 
 ### Phase 5 (Current): Architectural Leap to YOLO Pose (Pose Estimation)
