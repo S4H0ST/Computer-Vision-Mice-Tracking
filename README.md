@@ -21,7 +21,7 @@ By replacing manual observation with Computer Vision and Deep Learning, this too
 * Extract objective metrics based on the animal's biomechanics.
 * Classify complex postures that require temporal analysis.
 
-    ![data_demo](media_original/DemoGit_rat.gif)
+    ![data_demo](media_original/poses.png)
 
 ---
 
@@ -124,7 +124,7 @@ This project has gone through multiple research and development phases, iteratin
 * **Objective:** Classify static and dynamic postures using **MakeSense** for bounding box labeling.
 * **Physical Problem:** Convolutional Neural Networks (CNNs) like YOLO analyze frame by frame. For a CNN without temporal context, a rat *Walking* looks visually identical to an *Immobile* rat, since the outer Bounding Box enclosing them is exactly the same.
 
-*[INSERT IMAGE: Screenshot of MakeSense showing a square bounding box around the rat]*
+![data_demo](media_original/DemoGit_rat.gif)
 
 ### Phase 3: Mathematical Heuristics and Spatial Logic (Brute Force)
 
