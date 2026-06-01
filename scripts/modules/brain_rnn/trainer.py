@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from modules.brain.model import RatActionRNN
-from modules.brain.dataset import RatDataset
-from helpers.config import paths  # <--- Importamos las rutas centrales
+from modules.brain_rnn.model import RatActionRNN
+from modules.brain_rnn.dataset import RatDataset
+from helpers.configuracion import paths
 import glob
 
 

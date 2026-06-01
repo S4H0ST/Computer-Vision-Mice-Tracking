@@ -18,7 +18,6 @@ class Paths:
     # NOMBRES DE ARCHIVOS CLAVE
     base_yolo_model: Path = models_dir / "yolov8s.pt"
 
-    # --- ESTA ES LA LÍNEA QUE FALTABA Y DABA ERROR ---
     # Definimos dónde vivirá el modelo final de las ratas
     yolo_model: Path = models_dir / "yolo_ratas.pt"
 
@@ -39,6 +38,12 @@ class Paths:
 
     # Salida automática
     output_video: Path = output_dir / "resultado_final.mp4"
+
+    # --- RUTAS PARA EXTRACCIÓN DE DATASET ---
+    raw_videos: Path = root / "media_original" / "videos"
+    raw_images: Path = root / "media_original" / "frames_original"
+    temp_pool: Path = root / "media_original" / "TEMP_POOL"
+    final_dataset: Path = root / "datasets" / "DataSet_Full"
 
     def check_dirs(self):
         self.models_dir.mkdir(parents=True, exist_ok=True)
@@ -73,5 +78,14 @@ class DetectParams:
     device: str = "0"
 
 
+# --- PARÁMETROS DE EXTRACCIÓN DE DATASET ---
+@dataclass
+class DatasetParams:
+    fps_extract: float = 2.0    # frames por segundo a extraer
+    split_ratio: float = 0.8    # 80% train, 20% valid
+    base_name: str = "rat"
+
+
 train_cfg = TrainParams()
 detect_cfg = DetectParams()
+data_cfg = DatasetParams()

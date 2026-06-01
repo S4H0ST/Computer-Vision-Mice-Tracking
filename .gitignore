@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+__init__.py
 *.py[codz]
 *$py.class
 README_HELPS/
@@ -15,7 +16,11 @@ models/*.pth
 media/*.mp4
 media/*.gif
 models/
-
+datasets/
+anotaciones/
+media_original/
+outputs/
+scripts/guia/
 # C extensions
 *.so
 

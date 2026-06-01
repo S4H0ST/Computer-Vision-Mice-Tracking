@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from collections import deque
-from modules.brain.model import RatActionRNN
-from helpers.config import paths  # <--- Usamos rutas centrales
+from modules.brain_rnn.model import RatActionRNN
+from helpers.configuracion import paths
 
 
 class ActionPredictor:

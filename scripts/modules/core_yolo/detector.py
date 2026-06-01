@@ -5,12 +5,11 @@ from ultralytics import YOLO
 from pathlib import Path
 from typing import Tuple, Optional
 
-from helpers.interfaces import BaseModule
-from helpers.config import paths, DetectParams
+from helpers.base import BaseModule
+from helpers.configuracion import paths, DetectParams
 
-# Importamos los módulos de inteligencia
-from modules.brain.inference import ActionPredictor
-from modules.logic.spatial import SpatialAnalyzer
+from modules.brain_rnn.inference import ActionPredictor
+from modules.detector_agujeros.agujeros import SpatialAnalyzer
 
 
 class RatDetector(BaseModule):

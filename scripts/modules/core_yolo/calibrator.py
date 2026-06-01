@@ -2,8 +2,8 @@ import cv2
 import json
 import numpy as np
 from pathlib import Path
-from helpers.interfaces import BaseModule
-from helpers.config import paths
+from helpers.base import BaseModule
+from helpers.configuracion import paths
 
 
 class ZoneCalibrator(BaseModule):

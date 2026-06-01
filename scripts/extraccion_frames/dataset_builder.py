@@ -3,8 +3,8 @@ import random
 import os
 from pathlib import Path
 from typing import List, Tuple
-from helpers.interfaces import BaseModule
-from helpers.config import paths, DatasetParams
+from helpers.base import BaseModule
+from helpers.configuracion import paths, DatasetParams
 
 class DatasetBuilder(BaseModule):
     """La 'Aspiradora': Junta, renombra, baraja y divide (Train/Valid)."""

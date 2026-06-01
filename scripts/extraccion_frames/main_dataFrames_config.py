@@ -1,9 +1,12 @@
 import sys
-from helpers.config import paths, data_cfg
+from pathlib import Path
 
-# --- CAMBIO IMPORTANTE: Apuntamos a modules.dataset ---
-from modules.dataset.frame_extractor import FrameExtractor
-from modules.dataset.dataset_builder import DatasetBuilder
+# Añadir scripts/ al path para que helpers y tools sean importables
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from helpers.configuracion import paths, data_cfg
+from extraccion_frames.frame_extractor import FrameExtractor
+from extraccion_frames.dataset_builder import DatasetBuilder
 
 def main():
     paths.check_dirs()

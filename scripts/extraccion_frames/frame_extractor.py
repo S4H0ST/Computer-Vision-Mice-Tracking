@@ -1,7 +1,7 @@
 import cv2
 from pathlib import Path
-from helpers.interfaces import BaseModule
-from helpers.config import paths, DatasetParams
+from helpers.base import BaseModule
+from helpers.configuracion import paths, DatasetParams
 
 class FrameExtractor(BaseModule):
     """Extrae frames de videos crudos para ser etiquetados."""
@@ -9,7 +9,7 @@ class FrameExtractor(BaseModule):
     def __init__(self, config: DatasetParams):
         self.fps_target = config.fps_extract
         self.input_dir = paths.raw_videos
-        self.output_dir = paths.raw_images / "extracted_frames"
+        self.output_dir = paths.raw_images
 
     def run(self) -> None:
         if not self.validate_file(self.input_dir): return

@@ -1,11 +1,11 @@
 import sys
-from helpers.config import paths, train_cfg, detect_cfg
+from helpers.configuracion import paths, train_cfg, detect_cfg
 
 # --- CAMBIO IMPORTANTE: Apuntamos a modules.core ---
-from modules.core.calibrator import ZoneCalibrator
-from modules.core.trainer import YOLOTrainer
-from modules.core.detector import RatDetector
-from modules.brain.trainer_manager import RNNTrainer
+from modules.core_yolo.calibrator import ZoneCalibrator
+from modules.core_yolo.trainer import YOLOTrainer
+from modules.core_yolo.detector import RatDetector
+from modules.brain_rnn.trainer import RNNTrainer
 
 
 def main():

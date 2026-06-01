@@ -2,8 +2,8 @@ import torch
 import shutil  # Librería para mover archivos
 from pathlib import Path
 from ultralytics import YOLO
-from helpers.interfaces import BaseModule
-from helpers.config import paths, TrainParams
+from helpers.base import BaseModule
+from helpers.configuracion import paths, TrainParams
 
 
 class YOLOTrainer(BaseModule):
