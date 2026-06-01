@@ -16,7 +16,9 @@ models/*.pth
 media/*.mp4
 media/*.gif
 models/
-datasets/
+datasets/test
+datasets/train
+datasets/valid
 anotaciones/
 media_original/frames_original
 media_original/videos
