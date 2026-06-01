@@ -18,7 +18,8 @@ media/*.gif
 models/
 datasets/
 anotaciones/
-media_original/
+media_original/frames_original
+media_original/videos
 outputs/
 scripts/guia/
 # C extensions

@@ -21,7 +21,7 @@ By replacing manual observation with Computer Vision and Deep Learning, this too
 * Extract objective metrics based on the animal's biomechanics.
 * Classify complex postures that require temporal analysis.
 
-    ![data_demo](media/DemoImage.png)
+    ![data_demo](media_original/DemoGit_rat.gif)
 
 ---
 
