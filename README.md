@@ -70,6 +70,8 @@ Computer-Vision-Mice-Tracking/
 │   └── `detector_agujeros/`
 │       └── `agujeros.py`
 └── `README.md`
+```
+
 ---
 
 ## Installation and Requirements
