@@ -47,21 +47,29 @@ The system no longer relies on simple bounding boxes. Instead, it uses a two-pha
 
 ```text
 Computer-Vision-Mice-Tracking/
-├── data/                   # Datasets, CSV labels, and calibration coordinates
-├── media/                  # Original input videos and demonstration GIFs
-├── models/                 # Trained models (yolo_ratas.pt and best_rnn.pth)
-├── scripts/
-│   ├── helpers/            # Global configurations and paths (config.py)
-│   ├── modules/
-│   │   ├── core/           # Visual Detection (YOLO Pose), Training, and Calibration
-│   │   ├── logic/          # Spatial Logic (Zone and Hole management)
-│   │   └── brain/          # Recurrent Neural Network (RNN) and sequence handling
-│   ├── tools/              # Utility scripts (frame extraction, formatting)
-│   └── main_model.py       # MAIN ENTRY POINT
-└── README.md
-
-```
-
+├── `data.yaml`
+├── `main_model.py`
+├── `extraccion_frames/`
+│   ├── `dataset_builder.py`
+│   ├── `frame_extractor.py`
+│   └── `main_dataFrames_config.py`
+├── `helpers/`
+│   ├── `base.py`
+│   ├── `configuracion.py`
+│   └── `interfaces.py`
+├── `modules/`
+│   ├── `brain_rnn/`
+│   │   ├── `dataset.py`
+│   │   ├── `inference.py`
+│   │   ├── `model.py`
+│   │   └── `trainer.py`
+│   ├── `core_yolo/`
+│   │   ├── `calibrator.py`
+│   │   ├── `detector.py`
+│   │   └── `trainer.py`
+│   └── `detector_agujeros/`
+│       └── `agujeros.py`
+└── `README.md`
 ---
 
 ## Installation and Requirements
