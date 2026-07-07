@@ -28,7 +28,7 @@ class Paths:
     data_dir: Path = root / "data"
     output_dir: Path = data_dir / "output"
     data_yaml: Path = root / "datasets" / "data.yaml"
-    coords_json: Path = data_dir / "coords.json"
+    coords_json: Path = root / "datasets" / "coords.json"
 
     # --- RUTAS DE VIDEO ---
     video_dir: Path = root / "media" / "videos"
