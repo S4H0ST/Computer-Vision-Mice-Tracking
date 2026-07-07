@@ -27,7 +27,7 @@ class Paths:
     # --- RUTAS DE DATOS ---
     data_dir: Path = root / "data"
     output_dir: Path = data_dir / "output"
-    data_yaml: Path = scripts / "data.yaml"
+    data_yaml: Path = root / "datasets" / "data.yaml"
     coords_json: Path = data_dir / "coords.json"
 
     # --- RUTAS DE VIDEO ---
@@ -44,6 +44,7 @@ class Paths:
     raw_images: Path = root / "media_original" / "frames_original"
     temp_pool: Path = root / "media_original" / "TEMP_POOL"
     final_dataset: Path = root / "datasets" / "DataSet_Full"
+    dataset_valid: Path = root / "datasets" / "valid"
 
     def check_dirs(self):
         self.models_dir.mkdir(parents=True, exist_ok=True)
@@ -81,7 +82,6 @@ class DetectParams:
 # --- PARÁMETROS DE EXTRACCIÓN DE DATASET ---
 @dataclass
 class DatasetParams:
-    fps_extract: float = 2.0    # frames por segundo a extraer
     split_ratio: float = 0.8    # 80% train, 20% valid
     base_name: str = "rat"
 

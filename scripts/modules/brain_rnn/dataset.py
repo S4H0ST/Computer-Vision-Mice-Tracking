@@ -10,14 +10,18 @@ class RatDataset(Dataset):
         self.features = []
         self.labels = []
 
-        # MAPEO DE ETIQUETAS (Tu diccionario)
-        # Aseguramos que reconozca tanto 'rat_rearing' como 'rearing' por si acaso
+        # El vocabulario mezcla clases YOLO (rat_climbing, rat_grooming,
+        # rat_head_dipping, rat_horizontal, rat_rearing) con labels que serán
+        # derivados por lógica de post-procesado en RatDetector (rat_walking
+        # cuando speed supera un umbral). PENDIENTE DE IMPLEMENTAR en
+        # detector.py — el label_map ya está preparado para cuando se añada
+        # esa lógica.
         self.label_map = {
             # Nombres largos (Dataset original)
             'rat_rearing': 0,
             'rat_grooming': 1,
             'rat_horizontal': 2,
-            'rat_walking': 2,  # Walking y Horizontal son lo mismo para el análisis
+            'rat_walking': 2,  # PENDIENTE: asignado por lógica de velocidad en RatDetector
             'rat_climbing': 3,
             'rat_head_dipping': 4,
 

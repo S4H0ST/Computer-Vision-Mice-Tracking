@@ -12,6 +12,15 @@ from modules.brain_rnn.inference import ActionPredictor
 from modules.detector_agujeros.agujeros import SpatialAnalyzer
 
 
+LABEL_ES = {
+    "rat_climbing":     "Trepar / Escalar",
+    "rat_grooming":     "Acicalamiento / Limpieza",
+    "rat_head_dipping": "Asomarse por agujero",
+    "rat_horizontal":   "Movimiento horizontal / Caminar",
+    "rat_rearing":      "Incorporarse / Erguirse",
+}
+
+
 class RatDetector(BaseModule):
     def __init__(self, config: DetectParams):
         self.cfg: DetectParams = config
@@ -70,7 +79,18 @@ class RatDetector(BaseModule):
         writer.writerow(["frame", "time", "yolo_label", "final_label", "x1", "y1", "x2", "y2"])
 
         print(f"[>] Procesando video... Salida en: {paths.output_video}")
+
+        print("\n" + "=" * 52)
+        print("  LEYENDA DE ETIQUETAS YOLO")
+        print(f"  {'ID':<4}  {'Etiqueta':<22}  Traducción (ES)")
+        print("=" * 52)
+        for cls_id, name in self.model.names.items():
+            es = LABEL_ES.get(name, "-")
+            print(f"  [{cls_id}]   {name:<22}  {es}")
+        print("=" * 52 + "\n")
+
         frame_idx = 0
+        last_label = "—"
 
         # Inferencia
         results = self.model.predict(
@@ -130,10 +150,13 @@ class RatDetector(BaseModule):
 
                 # Guardar datos en CSV
                 writer.writerow([frame_idx, f"{frame_idx / fps:.2f}", yolo_label_rat, final_label, rx1, ry1, rx2, ry2])
+                last_label = final_label
 
             out_vid.write(img)
             frame_idx += 1
-            if frame_idx % 20 == 0: print(f"   Frame {frame_idx}...", end='\r')
+            if frame_idx % 20 == 0:
+                es = LABEL_ES.get(last_label, "—")
+                print(f"   Frame {frame_idx:>6} | {last_label:<22} ({es})     ", end='\r')
 
         cap.release()
         out_vid.release()

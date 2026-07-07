@@ -28,7 +28,7 @@ class ActionPredictor:
             print(f"[Brain] Error cargando modelo: {e}")
             self.active = False
 
-        self.class_names = ['Rearing', 'Grooming', 'Walking', 'Climbing', 'Head_Dipping']
+        self.class_names = ['rat_rearing', 'rat_grooming', 'rat_horizontal', 'rat_climbing', 'rat_head_dipping']
 
     def update_and_predict(self, box, img_w=640, img_h=480):
         if not self.active:
