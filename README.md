@@ -33,13 +33,50 @@ The system no longer relies on simple bounding boxes. Instead, it uses a two-pha
 2. **The Brain (RNN - LSTM):** Analyzes the temporal sequence of these *Keypoints* to understand continuous movement and classify the action.
 3. **The Instinct (Spatial Logic):** Maps the physical environment (walls, holes) to provide spatial context (e.g., *Head Dipping*).
 
-### Detected Behaviors (Labels)
-* `Walking` 
-* `Immobility` 
-* `Rearing` (Standing on hind legs)
-* `Grooming` (Facial cleansing)
-* `Head Dipping` (Exploring holes)
-* `Climbing` (Scaling the walls)
+### Detected Behaviors
+
+The system trains YOLO on **5 base labels** but outputs **7 final behaviors** to the researcher. See the [Posture Hierarchy](#posture-hierarchy-yolo-labels-vs-final-output-behaviors) section below for the full breakdown.
+
+| Final Behavior | Origin |
+|---|---|
+| Climbing | Direct YOLO label |
+| Grooming | Direct YOLO label |
+| Head Dipping | YOLO label + spatial zone confirmation |
+| Rearing | Direct YOLO label |
+| Walking | Derived from `rat_horizontal` via RNN / displacement |
+| Immobile | Derived from `rat_horizontal` via RNN / displacement |
+| Sniffing | Derived from `rat_horizontal` via spatial logic (nose near wall) |
+
+---
+
+## Posture Hierarchy: YOLO Labels vs. Final Output Behaviors
+
+### The 5 YOLO Training Classes and 7 Final Behaviors
+
+YOLO is trained on **5 classes** — each representing a visually distinct body posture that a CNN can learn from a single frame. These are then processed by a second logic layer to produce **7 final output behaviors**:
+
+| # | YOLO Training Label | Final Behavior | Detection Layer |
+|---|---|---|---|
+| 1 | `rat_climbing` | **Climbing** | YOLO (direct) |
+| 2 | `rat_grooming` | **Grooming** | YOLO (direct) |
+| 3 | `rat_head_dipping` | **Head Dipping** | YOLO + spatial zone (hole map) |
+| 4 | `rat_rearing` | **Rearing** | YOLO (direct) |
+| 5 | `rat_horizontal` | **Walking** | YOLO + RNN / centroid displacement |
+| 5 | `rat_horizontal` | **Immobile** | YOLO + RNN / centroid displacement |
+| 5 | `rat_horizontal` | **Sniffing** | YOLO + spatial logic (nose keypoint near wall) |
+
+### Why Does `rat_horizontal` Become 3 Different Behaviors?
+
+This is a core architectural decision of the project. YOLO analyzes each frame **independently** and can only capture **static posture** — the shape of the animal's silhouette at a single instant. When a rat is walking, standing still, or sniffing the wall edge, its body maintains the same horizontal profile in every individual frame. There is no pixel-level difference that a CNN can exploit.
+
+Differentiating these three states requires **information that a single frame cannot provide**:
+
+- **Walking vs. Immobile** → requires **temporal context**: the RNN observes the sequence of keypoint positions across multiple frames and detects whether the centroid and spine keypoints are displacing over time.
+- **Sniffing** → requires **spatial context**: the nose keypoint (snout) is checked against the arena wall boundaries. If the rat is in a horizontal posture *and* the snout keypoint is within a threshold distance of the wall, the behavior is reclassified as sniffing.
+
+Training YOLO on fewer, visually clean classes (5 instead of 7+) is deliberate: it reduces label ambiguity during training, avoids the model learning indistinguishable visual patterns, and delegates temporal and spatial disambiguation to the appropriate downstream layers. This is the same reason `head_dipping` also relies on spatial zone mapping to confirm the snout is above a labeled hole, rather than trusting posture alone.
+
+> **TFG note:** This multi-layer derivation is a fundamental argument in the system's design justification — it demonstrates why a pure CNN approach (Phase 2) was insufficient and why the hybrid architecture (YOLO Pose + RNN + Spatial Logic) was necessary.
 
 ---
 
@@ -166,3 +203,29 @@ $$v = \frac{\sqrt{(cx_t - cx_{t-1})^2 + (cy_t - cy_{t-1})^2}}{\Delta t}$$
 * **Key Advantage:** It allows the RNN to differentiate complex states by measuring the variation in height ($Y$) between the snout and the tail (solving the Walking vs Rearing conflict) or by detecting exclusive local vibrations in the snout (Grooming).
 
 *[INSERT IMAGE: A screenshot of you labeling articular points in Roboflow/CVAT, or the final skeleton drawn during inference]*
+
+### Phase 5b (Current): Dataset Quality Analysis — Motion Blur vs. Sharp Frames
+
+* **Objective:** Quantify the performance gap caused by motion blur and provide hard evidence for the TFG memory.
+* **Problem:** In Open Field Test recordings, the rat frequently moves fast between frames, producing **motion blur**. Blurry frames significantly reduce keypoint localization accuracy, since the snout and tail base keypoints become ill-defined. A single aggregated mAP50 score on the full validation set masks this effect.
+* **Solution — Sharpness Classification:** Each validation frame is evaluated using the **Laplacian variance** metric:
+
+$$\sigma^2_{\nabla} = \text{Var}\!\left(\nabla^2 I\right)$$
+
+The Laplacian operator amplifies high-frequency edges; its variance collapses to near-zero in blurry images. A threshold of **100** (tunable) separates *sharp* frames from *blurry* frames. This is implemented in `scripts/dataset_tools/sharpness_splitter.py`.
+
+* **Solution — Split Evaluation:** The validation set is split into two independent subsets (`valid_sharp/` and `valid_blurry/`), each with its own temporary `data.yaml`. The trained YOLO-Pose model is evaluated separately on both, producing two independent mAP50 scores (`scripts/evaluation/evaluate_sharpness_gap.py`):
+
+```
+=== EVALUACIÓN: SOLO IMÁGENES NÍTIDAS ===
+mAP50 (nítidas): 0.8921
+
+=== EVALUACIÓN: SOLO IMÁGENES BORROSAS ===
+mAP50 (borrosas): 0.7134
+
+[GAP] Diferencia de rendimiento: 0.1787
+[i] El gap es notable — el motion blur está afectando la precisión.
+```
+
+* **Why this appears in training debug statistics:** When the gap exceeds **0.05 mAP50**, the system flags it as significant. This means the training set is underrepresenting blurry-but-valid frames, and the model has not learned to handle them. The corrective action is a targeted labeling round where blurry frames are deliberately included in the training split, forcing the model to generalize across image quality levels.
+* **TFG justification:** Instead of the qualitative claim *"motion blur degrades performance"*, the gap metric provides the quantitative argument: *"the model loses X mAP50 points on blurry frames, which represents Y% of all captured frames in the test video."* This is the kind of objective evidence expected in an engineering thesis.
