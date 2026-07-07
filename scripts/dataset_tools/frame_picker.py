@@ -15,11 +15,11 @@ Controles:
   A / ←        Retroceder 1 frame (en pausa)
   ESPACIO      Play/Pausa (modo normal) | Guardar sin clase (modo --flat)
   P            Play / Pausa
-  1            Guardar → rearing
+  1            Guardar → climbing
   2            Guardar → grooming
-  3            Guardar → horizontal
-  4            Guardar → climbing
-  5            Guardar → head_dipping
+  3            Guardar → head_dipping
+  4            Guardar → horizontal
+  5            Guardar → rearing
   Q            Salir
 
 Uso:
@@ -32,11 +32,11 @@ import cv2
 from pathlib import Path
 
 CLASSES = {
-    ord('1'): "rearing",
+    ord('1'): "climbing",
     ord('2'): "grooming",
-    ord('3'): "horizontal",
-    ord('4'): "climbing",
-    ord('5'): "head_dipping",
+    ord('3'): "head_dipping",
+    ord('4'): "horizontal",
+    ord('5'): "rearing",
 }
 
 BLUR_THRESHOLD = 100.0
@@ -113,7 +113,7 @@ def main(argv=None):
         )
 
         if args.flat:
-            hint = ("ESPACIO=guardar | 1=rear 2=groom 3=horiz 4=climb 5=dip "
+            hint = ("ESPACIO=guardar | 1=climb 2=groom 3=dip 4=horiz 5=rear "
                     "| A/D=frame | P=play | Q=salir")
         else:
             abbr = {"rearing": "rear", "grooming": "groom", "horizontal": "horiz",
