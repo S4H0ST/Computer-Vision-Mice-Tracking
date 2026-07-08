@@ -229,3 +229,61 @@ mAP50 (borrosas): 0.7134
 
 * **Why this appears in training debug statistics:** When the gap exceeds **0.05 mAP50**, the system flags it as significant. This means the training set is underrepresenting blurry-but-valid frames, and the model has not learned to handle them. The corrective action is a targeted labeling round where blurry frames are deliberately included in the training split, forcing the model to generalize across image quality levels.
 * **TFG justification:** Instead of the qualitative claim *"motion blur degrades performance"*, the gap metric provides the quantitative argument: *"the model loses X mAP50 points on blurry frames, which represents Y% of all captured frames in the test video."* This is the kind of objective evidence expected in an engineering thesis.
+
+### Phase 5c (Current): Offline Data Augmentation Strategy
+
+* **Objective:** Artificially expand a small labeled dataset (248 unique images) to reach a training size sufficient for robust pose estimation, while correcting the class imbalance between majority and minority behaviors.
+
+#### Why Data Augmentation Is Necessary
+
+A dataset of 248 unique frames is insufficient to train a 5-class pose estimator to production quality. Without augmentation, the model would memorize the specific texture, lighting, and framing of those exact frames — a textbook case of **overfitting**: the training loss converges but the validation mAP50 plateaus or degrades. Augmentation forces the model to learn the invariant features of each posture (the rat's silhouette, limb angles, keypoint geometry) rather than superficial image properties.
+
+#### Why ×3 (and Not ×2 or ×5)
+
+The multiplier represents a trade-off between two failure modes:
+
+| Multiplier | Risk |
+|---|---|
+| ×2 | Training set too small (~496 images). Insufficient diversity, model still prone to overfitting. |
+| **×3 (chosen)** | **~744 images. Diversity gain is real; augmented variants still differ meaningfully from originals.** |
+| ×5+ | Most training examples are derivatives of the same 248 images. Model overfits to augmented artifacts (e.g., overly bright frames that do not exist in real inference). |
+
+This sweet spot is consistent with empirical findings in the YOLOv8 documentation for small-dataset fine-tuning scenarios.
+
+#### Asymmetric ×4 for Minority Classes
+
+The raw class distribution contains a 2:1 imbalance between the most frequent class (`head_dipping`, 69 images) and the least frequent (`rearing`, 34 images). Left uncorrected, this causes the model to systematically under-predict minority behaviors. One additional augmentation round is applied exclusively to `grooming` and `rearing`, reducing the effective ratio to approximately 1.5:1 — within the acceptable range for detection tasks.
+
+#### Augmentation Transforms and Their Biological Justification
+
+Only transforms that reflect real variation in the experimental setup are applied. Physically implausible augmentations (e.g., extreme zoom, heavy blur on already-blurry footage) are deliberately excluded.
+
+| Transform | Applied to | Justification |
+|---|---|---|
+| **Horizontal flip** | All classes | Rats traverse the arena in both directions. The behavior is identical regardless of which way the animal faces. Keypoint coordinates are adjusted: `x_new = 1.0 − x_old`. |
+| **Brightness +30 %** | All classes | Ambient lighting conditions vary between experimental sessions and recording environments. The model must be robust to moderate overexposure. |
+| **Brightness −25 %** | `grooming`, `rearing` only | Minority behaviors are also observed in underlit frames (e.g., rat near a corner or partially occluded). The extra dark variant increases difficulty specifically for these classes, forcing the model to learn their keypoint structure rather than relying on global brightness cues. |
+
+#### Implementation
+
+Augmentation is applied offline **after** the Roboflow export is placed in `datasets/train/` and **before** training. This keeps the augmented data on disk, making the training process transparent and reproducible.
+
+```bash
+cd scripts
+python dataset_tools/augment_dataset.py
+```
+
+The script is **idempotent**: re-running it detects the `_aug1/_aug2/_aug3` suffixes and does not create duplicates.
+
+#### Target Metrics and Justification
+
+The augmentation is designed to push the model from its current baseline to the following targets:
+
+| Metric | Baseline (313 imgs, no aug) | Target (248 labeled + aug) | Rationale |
+|---|---|---|---|
+| **mAP50-pose** | 0.51 | **≥ 0.70** | Minimum defensible threshold for an engineering thesis. Published rodent trackers (SLEAP, DeepLabCut) report 0.85–0.92 on high-resolution infrared footage; 0.70 is realistic with a consumer camera at this resolution. |
+| **mAP50-cls** | 0.70 | **≥ 0.80** | Classification of the 5 base labels. Already at 0.70; augmentation should push it above 0.80 by reducing overfitting on majority classes. |
+| **Per-class mAP50** | Varies | **≥ 0.60 all classes** | No single behavior should be systematically missed. Values below 0.60 on a class indicate the model has effectively not learned it. |
+| **mAP50-95** | 0.44 | **≥ 0.45** | Strict IoU metric (50 %–95 %). Values of 0.45–0.60 represent success in pose estimation tasks. |
+
+> **Overfitting check during training:** If `val/pose_loss` starts rising while `train/pose_loss` continues to fall (typically after epoch 35–40 with this dataset size), training should be stopped early. The 50-epoch default in `configuracion.py` includes a 10-epoch safety margin for this monitoring.
