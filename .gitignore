@@ -19,6 +19,7 @@ datasets/test
 datasets/train
 datasets/valid
 anotaciones/
+CHULETARIO.md
 media_original/frames_original
 media_original/videos
 media_original/*.gif
