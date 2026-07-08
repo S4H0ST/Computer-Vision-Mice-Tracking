@@ -16,7 +16,7 @@ class Paths:
     models_dir: Path = root / "models"
 
     # NOMBRES DE ARCHIVOS CLAVE
-    base_yolo_model: Path = models_dir / "yolov8s.pt"
+    base_yolo_model: Path = models_dir / "yolov8s-pose.pt"
 
     # Definimos dónde vivirá el modelo final de las ratas
     yolo_model: Path = models_dir / "yolo_ratas.pt"

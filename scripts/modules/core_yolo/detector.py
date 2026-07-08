@@ -196,6 +196,13 @@ class RatDetector(BaseModule):
             print(f"  {k:<22}  {v}")
         print("=" * 55 + "\n")
 
+        # Verificar si la calibración es válida para este vídeo
+        spatial_ok = self.spatial_logic.is_valid_for(w, h)
+        if not spatial_ok:
+            print(f"[!] AVISO: coords.json no está calibrado para este vídeo ({w}×{h}).")
+            print(f"    head_dipping y sniffing no usarán referencias espaciales.")
+            print(f"    Ejecuta: python calibrate.py --video <video.mp4>")
+
         results = self.model.predict(
             source=str(paths.video_source), stream=True,
             conf=self.cfg.conf_threshold, device=self.cfg.device, iou=0.5
@@ -207,6 +214,10 @@ class RatDetector(BaseModule):
         for res in results:
             img = res.orig_img.copy()
 
+            # Dibujar zonas calibradas si son válidas para este vídeo
+            if spatial_ok:
+                self.spatial_logic.draw_zones(img)
+
             rat_box      = None
             yolo_label   = "Unknown"
             final_label  = "Unknown"
@@ -215,11 +226,10 @@ class RatDetector(BaseModule):
 
             # ── 1. Extraer detecciones de YOLO ──────────────────────────
             if res.boxes and len(res.boxes) > 0:
-                # Tomar la detección con mayor confianza
-                confs   = res.boxes.conf.cpu().numpy()
-                best    = int(np.argmax(confs))
-                rat_box = res.boxes.xyxy[best].cpu().numpy()
-                cls_id  = int(res.boxes.cls[best].cpu())
+                confs      = res.boxes.conf.cpu().numpy()
+                best       = int(np.argmax(confs))
+                rat_box    = res.boxes.xyxy[best].cpu().numpy()
+                cls_id     = int(res.boxes.cls[best].cpu())
                 yolo_label = self.model.names.get(cls_id, "Unknown")
 
             # ── 2. Extraer snout keypoint ────────────────────────────────
@@ -230,18 +240,38 @@ class RatDetector(BaseModule):
             if rat_box is not None:
                 final_label = yolo_label  # base: confiar en YOLO
 
-                # A) HEAD DIPPING: prioridad absoluta — snout sobre agujero
-                if snout_kp is not None and self.spatial_logic.check_dipping(snout_kp):
+                # A) HEAD DIPPING — solo si calibración válida y snout sobre agujero
+                if spatial_ok and snout_kp is not None and self.spatial_logic.check_dipping(snout_kp):
                     final_label = "rat_head_dipping"
 
+                # A2) YOLO dice head_dipping pero no hay calibración o snout no está en agujero
+                #     → reclasificar como horizontal para desambiguar con velocidad/sniffing
+                elif yolo_label == "rat_head_dipping":
+                    if not spatial_ok or snout_kp is None:
+                        final_label = "rat_horizontal"
+                    elif not self.spatial_logic.check_dipping(snout_kp):
+                        final_label = "rat_horizontal"
+
                 # B) Desambiguar horizontal → walking / immobile / sniffing
-                elif yolo_label == "rat_horizontal":
+                if final_label == "rat_horizontal":
                     final_label = self._derive_horizontal(snout_kp, rat_box, w, h)
                     speed_val   = self._speed_tracker._history[-1] if self._speed_tracker._history else 0.0
 
-                # C) Para otros estados (rearing, grooming, climbing):
-                #    YOLO es suficiente; la RNN puede refinar si está activa.
-                else:
+                # C) climbing: separar de sniffing con lógica espacial.
+                #    Si el centroide de la bbox está DENTRO del área interior
+                #    la rata no está en la pared → puede ser sniffing mal clasificado.
+                elif yolo_label == "rat_climbing" and spatial_ok:
+                    rx1, ry1, rx2, ry2 = rat_box
+                    cx = (rx1 + rx2) / 2
+                    cy = (ry1 + ry2) / 2
+                    if self.spatial_logic.is_inside_inner((cx, cy)):
+                        if snout_kp is not None and self.spatial_logic.check_sniffing(snout_kp):
+                            final_label = "sniffing"
+                        # Si está dentro pero no olfatea → puede ser horizontal mal clasificado
+                        # Dejamos YOLO climbing en caso de duda
+
+                # D) Para rearing / grooming: RNN puede refinar si está activa
+                elif yolo_label in ("rat_rearing", "rat_grooming"):
                     rnn_pred = self.rnn_brain.update_and_predict(rat_box, w, h)
                     if rnn_pred and rnn_pred not in ("Analyzing...", yolo_label):
                         final_label = rnn_pred
@@ -250,10 +280,13 @@ class RatDetector(BaseModule):
                 color = self._get_color(final_label)
                 rx1, ry1, rx2, ry2 = map(int, rat_box)
                 cv2.rectangle(img, (rx1, ry1), (rx2, ry2), color, 2)
-                cv2.putText(img, final_label, (rx1, ry1 - 10),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+                # Mostrar etiqueta YOLO entre paréntesis si difiere
+                label_txt = final_label
+                if yolo_label != final_label and yolo_label != "Unknown":
+                    label_txt = f"{final_label} [{yolo_label}]"
+                cv2.putText(img, label_txt, (rx1, ry1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
 
-                # Dibujar snout keypoint
                 if snout_kp is not None:
                     sx, sy = int(snout_kp[0]), int(snout_kp[1])
                     cv2.circle(img, (sx, sy), 5, (0, 0, 255), -1)

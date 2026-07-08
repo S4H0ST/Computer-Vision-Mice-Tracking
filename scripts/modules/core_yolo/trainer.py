@@ -29,6 +29,9 @@ class YOLOTrainer(BaseModule):
         if batch_size == -1:
             batch_size = self._estimate_batch()
 
+        import platform
+        workers = 0 if platform.system() == "Windows" else 8
+
         # 1. ENTRENAR
         self.model.train(
             data=str(paths.data_yaml),
@@ -36,6 +39,7 @@ class YOLOTrainer(BaseModule):
             imgsz=self.cfg.imgsz,
             batch=batch_size,
             device=self.cfg.device,
+            workers=workers,
             project=str(paths.root / "runs" / "train"),
             name="exp",
             exist_ok=False,  # Crea exp, exp2, exp3... para no borrar historial
