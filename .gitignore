@@ -20,6 +20,7 @@ datasets/train
 datasets/valid
 anotaciones/
 dicProyect.md
+PROYECTO.md
 media_original/frames_original
 media_original/videos
 media_original/*.gif

@@ -2,8 +2,8 @@ import cv2
 import json
 import numpy as np
 from pathlib import Path
-from helpers.base import BaseModule
-from helpers.configuracion import paths
+from config.interfaces import BaseModule
+from config.config import paths
 
 
 class ZoneCalibrator(BaseModule):
@@ -107,6 +107,14 @@ class ZoneCalibrator(BaseModule):
                 "y_min": min(y1, y2), "y_max": max(y1, y2)
             }
 
+        if len(self.rect_exterior) == 2:
+            x1, y1 = self.rect_exterior[0]
+            x2, y2 = self.rect_exterior[1]
+            data["limits_outer"] = {
+                "x_min": min(x1, x2), "x_max": max(x1, x2),
+                "y_min": min(y1, y2), "y_max": max(y1, y2)
+            }
+
         with open(self.output_json, "w") as f:
             json.dump(data, f, indent=4)
 
@@ -127,21 +135,15 @@ class ZoneCalibrator(BaseModule):
 
         self.img_raw = frame.copy()
 
-        # --- CAMBIO AQUÍ PARA REDIMENSIONAR LA VENTANA ---
         window_name = "CALIBRADOR"
-        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)  # Permite cambiar el tamaño
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
 
-        # Obtenemos el tamaño original para mantener la proporción
         h, w = frame.shape[:2]
         aspect_ratio = w / h
-
-        # Definimos un ancho fijo para portátiles (ej. 1000 píxeles)
-        # y calculamos el alto proporcional
         new_w = 1000
         new_h = int(new_w / aspect_ratio)
 
         cv2.resizeWindow(window_name, new_w, new_h)
-        # -------------------------------------------------
 
         self._refresh_display()
         cv2.setMouseCallback(window_name, self._click_event)

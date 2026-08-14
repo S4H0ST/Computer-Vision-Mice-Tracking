@@ -1,15 +1,15 @@
 import torch
-import shutil  # Librería para mover archivos
+import shutil
+import platform
 from pathlib import Path
 from ultralytics import YOLO
-from helpers.base import BaseModule
-from helpers.configuracion import paths, TrainParams
+from config.interfaces import BaseModule
+from config.config import paths, TrainParams
 
 
 class YOLOTrainer(BaseModule):
     def __init__(self, config: TrainParams):
         self.cfg = config
-        # Cargar modelo base
         self.model = YOLO(self.cfg.base_model)
 
     def _estimate_batch(self) -> int:
@@ -29,10 +29,16 @@ class YOLOTrainer(BaseModule):
         if batch_size == -1:
             batch_size = self._estimate_batch()
 
-        import platform
         workers = 0 if platform.system() == "Windows" else 8
 
         # 1. ENTRENAR
+        # Augmentation geométrico puro — apropiado para cámara cenital fija:
+        #   · degrees=180  → rotaciones ±180° (cualquier orientación es válida)
+        #   · flipud/fliplr → espejos válidos en vista top-down
+        #   · translate=0.05, scale=0.4 → variaciones pequeñas (rata siempre en caja)
+        #   · mosaic=0.0   → desactivado (mezcla fondos irreales)
+        #   · hsv_*=0.0    → sin cambios de color (iluminación controlada, blanco/negro)
+        #   · erasing=0.0  → sin borrado sintético (el fondo negro es parte del dominio)
         self.model.train(
             data=str(paths.data_yaml),
             epochs=self.cfg.epochs,
@@ -42,25 +48,35 @@ class YOLOTrainer(BaseModule):
             workers=workers,
             project=str(paths.root / "runs" / "train"),
             name="exp",
-            exist_ok=False,  # Crea exp, exp2, exp3... para no borrar historial
-            augment=self.cfg.augment
+            exist_ok=False,
+            # Regularización (dataset pequeño, ~176 imágenes)
+            dropout=0.2,          # reduce overfitting en dataset pequeño
+            weight_decay=0.0008,  # ligeramente más que el default (0.0005)
+            cos_lr=True,          # cosine LR: convergencia más suave al final
+            # Geometría (cámara cenital fija, todas las orientaciones son válidas)
+            degrees=180,
+            translate=0.05,
+            scale=0.4,
+            fliplr=0.5,
+            flipud=0.5,
+            # Sin augmentation de color/textura (iluminación controlada, fondo negro)
+            mosaic=0.0,
+            hsv_h=0.0,
+            hsv_s=0.0,
+            hsv_v=0.0,
+            erasing=0.0,
         )
 
         print("[+] Entrenamiento finalizado.")
 
         # 2. AUTOMATIZACIÓN: COPIAR EL MODELO
         try:
-            # Buscamos dónde guardó YOLO el resultado
             save_dir = Path(self.model.trainer.save_dir)
             best_weight = save_dir / "weights" / "best.pt"
 
             if best_weight.exists():
                 print(f"[Auto] Encontrado mejor modelo en: {best_weight}")
-
-                # Destino: models/yolo_ratas.pt
                 target_path = paths.yolo_model
-
-                # Copiar archivo
                 shutil.copy(str(best_weight), str(target_path))
 
                 print("=" * 60)

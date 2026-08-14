@@ -17,6 +17,7 @@ class SpatialAnalyzer:
         self.holes        = []
         self.hole_radius  = 20
         self.inner_limits = None
+        self.outer_limits = None
         self._calibrated  = False   # True solo si el json cargó correctamente
         self._load_config(config_path)
 
@@ -32,6 +33,7 @@ class SpatialAnalyzer:
         self.holes        = [tuple(h) for h in data.get("holes", [])]
         self.hole_radius  = data.get("hole_radius", 20)
         self.inner_limits = data.get("limits_inner", None)
+        self.outer_limits = data.get("limits_outer", None)
         self._calibrated  = len(self.holes) == 4 and self.inner_limits is not None
 
         print(f"[OK] SpatialAnalyzer: {len(self.holes)} agujeros | "
@@ -64,7 +66,41 @@ class SpatialAnalyzer:
         return False
 
     # ------------------------------------------------------------------ #
-    #  SNIFFING                                                            #
+    #  SNIFFING — PARED INTERIOR                                          #
+    # ------------------------------------------------------------------ #
+    def check_sniffing_wall(self, snout_point, margin: int = 30) -> bool:
+        """
+        Devuelve True si el snout está DENTRO del área interior y a menos de
+        `margin` píxeles de cualquiera de los cuatro lados del rectángulo interior.
+
+        La rata está olfateando la pared cuando:
+          · su hocico está dentro de la caja (inside_inner = True)
+          · pero muy cerca del borde — a menos de `margin` px de la pared
+
+        Parámetros
+        ----------
+        snout_point : array-like con (x, y) en píxeles de la imagen.
+        margin      : distancia máxima en píxeles desde la pared para activar (default 30).
+        """
+        if snout_point is None or self.inner_limits is None:
+            return False
+
+        x, y = float(snout_point[0]), float(snout_point[1])
+        lim  = self.inner_limits
+
+        inside = (lim["x_min"] <= x <= lim["x_max"] and
+                  lim["y_min"] <= y <= lim["y_max"])
+        if not inside:
+            return False
+
+        near_wall = (x < lim["x_min"] + margin or
+                     x > lim["x_max"] - margin or
+                     y < lim["y_min"] + margin or
+                     y > lim["y_max"] - margin)
+        return near_wall
+
+    # ------------------------------------------------------------------ #
+    #  SNIFFING — COMBINADO (pared + anillo de agujero)                   #
     #  Dos condiciones equivalentes (la primera que se cumpla):           #
     #    a) Snout cerca de la pared interior                              #
     #    b) Snout en el anillo exterior al agujero (cerca pero no dentro) #
@@ -112,6 +148,19 @@ class SpatialAnalyzer:
         lim = self.inner_limits
         return (lim["x_min"] <= x <= lim["x_max"] and
                 lim["y_min"] <= y <= lim["y_max"])
+
+    def bbox_entirely_inside(self, x1: float, y1: float, x2: float, y2: float) -> bool:
+        """
+        True si el bounding box completo está dentro del área interior.
+        Más robusto que is_inside_inner(centroid): si cualquier borde
+        del bbox toca la zona de pared el método devuelve False,
+        indicando que la rata puede estar realmente escalando.
+        """
+        if self.inner_limits is None:
+            return True
+        lim = self.inner_limits
+        return (x1 >= lim["x_min"] and x2 <= lim["x_max"] and
+                y1 >= lim["y_min"] and y2 <= lim["y_max"])
 
     def nearest_hole_dist(self, point_xy) -> float:
         """Distancia en px al agujero más cercano."""

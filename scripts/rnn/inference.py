@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from collections import deque
-from modules.brain_rnn.model import RatActionRNN
-from helpers.configuracion import paths
+from rnn.model import RatActionRNN
+from config.config import paths
 
 
 class ActionPredictor:
@@ -11,7 +11,6 @@ class ActionPredictor:
         self.buffer = deque(maxlen=seq_length)
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        # Cargar modelo desde la ruta definida en config
         self.model = RatActionRNN().to(self.device)
         model_path = paths.rnn_model
 
@@ -34,14 +33,12 @@ class ActionPredictor:
         if not self.active:
             return None
 
-        # Desempaquetar y normalizar
         x1, y1, x2, y2 = box
         cx = ((x1 + x2) / 2) / img_w
         cy = ((y1 + y2) / 2) / img_h
         w = (x2 - x1) / img_w
         h = (y2 - y1) / img_h
 
-        # Calcular velocidad (simple)
         speed = 0.0
         if len(self.buffer) > 0:
             prev_cx, prev_cy = self.buffer[-1][0], self.buffer[-1][1]
@@ -55,7 +52,6 @@ class ActionPredictor:
                 outputs = self.model(tensor_in)
                 _, predicted = torch.max(outputs, 1)
                 idx = predicted.item()
-                # Protección de índice
                 if 0 <= idx < len(self.class_names):
                     return self.class_names[idx]
 
