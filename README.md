@@ -12,9 +12,7 @@
 
 ---
 
-![Demo detection overlay](media_original/DemoGit_detection.gif)
-
-> *Pipeline v3 — exp8 model. Bounding box + behavior label + calibrated zone boundaries (green = inner wall, circles = holes). Segment: 25 s showing head dipping, grooming, rearing, climbing, immobile and sniffing.*
+![Early detection demo](media_original/DemoGit_rat.gif)
 
 ---
 
@@ -49,9 +47,9 @@ The system uses a three-layer hybrid pipeline — each layer handles what it is 
 
 | Layer | Component | Role |
 |---|---|---|
-| 👁️ **Eyes** | YOLOv8-Pose | Detects the rat and predicts 3 skeletal keypoints (Snout · Spine · Tail) per frame |
-| 📐 **Spatial logic** | `SpatialAnalyzer` | Uses calibrated zone geometry (walls, holes) to confirm or reclassify detections |
-| ⏱️ **Temporal filter** | `_LabelStabilizer` | Hysteresis filter — a label must persist for ≥ 8 consecutive frames before switching |
+| **Eyes** | YOLOv8-Pose | Detects the rat and predicts 3 skeletal keypoints (Snout · Spine · Tail) per frame |
+| **Spatial logic** | `SpatialAnalyzer` | Uses calibrated zone geometry (walls, holes) to confirm or reclassify detections |
+| **Temporal filter** | `_LabelStabilizer` | Hysteresis filter — a label must persist for ≥ 8 consecutive frames before switching |
 
 **Why not a pure neural network end-to-end?**
 The recording environment is hyper-controlled (same arena, same lighting, same camera). A CNN trained on this data memorises background and lighting rather than learning invariant posture geometry. The spatial rules (e.g. "head dipping = snout inside hole radius") are exact, interpretable, and require zero training data — making them more reliable than a learned classifier for these cases.
@@ -99,9 +97,9 @@ Zones are calibrated interactively per video (first frame is extracted automatic
 
 | Metric | Value | Target | Status |
 |---|---|---|---|
-| mAP50 | **0.82** | ≥ 0.65 | ✅ |
-| Recall | **0.887** | ≥ 0.70 | ✅ |
-| val/train loss gap | **0.142** | ≤ 0.20 | ✅ |
+| mAP50 | **0.82** | ≥ 0.65 | OK |
+| Recall | **0.887** | ≥ 0.70 | OK |
+| val/train loss gap | **0.142** | ≤ 0.20 | OK |
 | Detection rate on test video | **92.1 %** | — | — |
 
 **Behavior distribution on `testRata5.mp4` (7.4 min, 15 fps):**
@@ -131,9 +129,10 @@ Computer-Vision-Mice-Tracking/
 │   ├── data.yaml            # YOLO config (kpt_shape=[3,3], nc=5)
 │   └── coords.json          # Calibration: outer wall, inner wall, 4 holes
 ├── media_original/
-│   ├── poses.png            # Reference: 5 training posture classes
+│   ├── poses.png                  # Reference: 5 training posture classes
 │   ├── tracking_template.png
-│   └── DemoGit_rat.gif
+│   ├── DemoGit_rat.gif            # Phase 2 demo — bounding box detection
+│   └── DemoGit_detection.gif      # Phase 6 demo — full pipeline v3 overlay
 ├── models/
 │   ├── yolov8s-pose.pt      # Base pretrained model (Ultralytics)
 │   └── yolo_ratas.pt        # Trained model — auto-copied after training
@@ -297,7 +296,7 @@ exp8 was selected as the active model. Three post-processing improvements were a
 
 Result: detection rate 92.1 %, climbing +13.4 pp over exp9 on the same test video.
 
-![Pipeline v3 detection demo](media_original/DemoGit_detection.gif)
+![Pipeline v3 detection output](media_original/DemoGit_detection.gif)
 
-> *testRata5.mp4 — exp8 + pipeline v3. Bbox + behavior label + inner wall (rectangle) + holes (circles). 25 s segment covering head dipping, grooming, rearing, climbing, immobile and sniffing.*
+> *testRata5.mp4 — exp8 model + pipeline v3. Bounding box + behavior label + calibrated zone overlay (inner wall boundary + hole markers). 30 s segment from minute 5: head dipping, walking, sniffing, climbing and grooming.*
 </details>
