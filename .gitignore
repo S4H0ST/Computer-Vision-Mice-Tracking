@@ -28,6 +28,7 @@ media_original/videos
 media_original/*.gif
 !media_original/DemoGit_rat.gif
 !media_original/DemoGit_detection.gif
+!media_original/DemoGit_phase4.gif
 datasets/coords.json
 outputs/
 scripts/guia/

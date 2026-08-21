@@ -132,6 +132,7 @@ Computer-Vision-Mice-Tracking/
 │   ├── poses.png                  # Reference: 5 training posture classes
 │   ├── tracking_template.png
 │   ├── DemoGit_rat.gif            # Phase 2 demo — bounding box detection
+│   ├── DemoGit_phase4.gif         # Phase 4 demo — YOLO + RNN classifier
 │   └── DemoGit_detection.gif      # Phase 6 demo — full pipeline v3 overlay
 ├── models/
 │   ├── yolov8s-pose.pt      # Base pretrained model (Ultralytics)
@@ -255,6 +256,10 @@ Designed and implemented a 2-layer LSTM to analyse the temporal sequence of boun
 3. **Class mismatch** — the RNN's output vocabulary (`rat_climbing`, `rat_horizontal`, …) did not include `walking`, `immobile`, `sniffing`.
 
 The RNN never contributed to any detection output. Its code is archived for reference.
+
+![Phase 4 RNN-era detection output](media_original/DemoGit_phase4.gif)
+
+> *resultado_final.mp4 — YOLOv8 bounding box detection with RNN temporal classifier active. Minute 3, 30 s segment.*
 </details>
 
 <details>
