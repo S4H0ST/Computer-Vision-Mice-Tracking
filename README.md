@@ -12,10 +12,9 @@
 
 ---
 
-<!-- DEMO GIF — replace with actual overlay output once exported -->
-![Demo detection overlay](media_original/DemoGit_rat.gif)
+![Demo detection overlay](media_original/DemoGit_detection.gif)
 
-> *Overlay output: bounding box + behavior label + calibrated zone boundaries + hole markers, rendered in real time.*
+> *Pipeline v3 — exp8 model. Bounding box + behavior label + calibrated zone boundaries (green = inner wall, circles = holes). Segment: 25 s showing head dipping, grooming, rearing, climbing, immobile and sniffing.*
 
 ---
 
@@ -297,4 +296,8 @@ exp8 was selected as the active model. Three post-processing improvements were a
 - `_LabelStabilizer` added (8-frame hysteresis)
 
 Result: detection rate 92.1 %, climbing +13.4 pp over exp9 on the same test video.
+
+![Pipeline v3 detection demo](media_original/DemoGit_detection.gif)
+
+> *testRata5.mp4 — exp8 + pipeline v3. Bbox + behavior label + inner wall (rectangle) + holes (circles). 25 s segment covering head dipping, grooming, rearing, climbing, immobile and sniffing.*
 </details>

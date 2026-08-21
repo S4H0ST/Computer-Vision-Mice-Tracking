@@ -26,6 +26,8 @@ adminScripts/
 media_original/frames_original
 media_original/videos
 media_original/*.gif
+!media_original/DemoGit_rat.gif
+!media_original/DemoGit_detection.gif
 datasets/coords.json
 outputs/
 scripts/guia/
