@@ -21,6 +21,8 @@ datasets/valid
 anotaciones/
 dicProyect.md
 PROYECTO.md
+DECISIONES_TFG.md
+adminScripts/
 media_original/frames_original
 media_original/videos
 media_original/*.gif
