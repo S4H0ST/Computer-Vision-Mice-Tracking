@@ -12,7 +12,7 @@
 
 ---
 
-![Early detection demo](media_original/DemoGit_rat.gif)
+![Pipeline v3 detection output](media_original/DemoGit_detection.gif)
 
 ---
 
