@@ -3,20 +3,20 @@ Detector principal de comportamiento del raton usando YOLO Pose + logica hibrida
 
 Clases:
     _SpeedTracker — calcula y suaviza la velocidad del centroide entre frames.
-    RatDetector   — orquesta la inferencia YOLO, la logica espacial, la RNN y la escritura
-                    de video y CSV con la etiqueta de comportamiento final.
+    RatDetector   — orquesta la inferencia YOLO, delega la clasificacion en
+                    BehaviorClassifier, y escribe video y CSV via VideoOutput/CsvOutput.
 """
 
 import cv2
-import csv
 import numpy as np
 from collections import deque
 from ultralytics import YOLO
-from pathlib import Path
 
 from config.interfaces import BaseModule
 from config.config import paths, DetectParams
 from spatial.spatial import SpatialAnalyzer
+from behavior.behavior_classifier import BehaviorClassifier
+from output.writers import VideoOutput, CsvOutput
 
 
 # Traducciones de etiquetas internas para la leyenda impresa en consola
@@ -31,19 +31,6 @@ LABEL_ES: dict[str, str] = {
     "sniffing_immobile": "Olfateando (parado)",
 }
 
-# Umbrales de velocidad para walking vs immobile.
-# Speed = desplazamiento normalizado del centroide x 100 (igual que en la RNN).
-WALK_SPEED_THRESHOLD: float  = 0.35   # por encima -> walking
-STILL_SPEED_THRESHOLD: float = 0.15   # por debajo -> immobile
-# Entre ambos umbrales el estado es ambiguo: se mantiene la etiqueta de YOLO.
-
-# Aspect ratio minimo (altura/ancho del bbox) para confirmar rearing.
-# Un raton erguido tiene el bbox claramente mas alto que ancho (ratio > 1.0).
-# Un raton inmovil/horizontal tiene el bbox mas ancho que alto (ratio ~ 0.4-0.7).
-# Con 0.80 se acepta rearing cuando la caja es casi cuadrada o mas alta que ancha,
-# descartando poses claramente horizontales que YOLO confunde con rearing.
-REARING_ASPECT_RATIO: float = 0.70
-
 # Indices de keypoints segun kpt_shape: [snout, spine, tail]
 KP_SNOUT: int = 0
 KP_SPINE: int = 1
@@ -57,7 +44,6 @@ class _SpeedTracker:
     """
 
     # Salto maximo plausible entre frames a 15fps en caja normalizada.
-    # Un salto mayor indica deteccion erronea — se descarta preservando la ultima velocidad.
     _MAX_PLAUSIBLE_SPEED: float = 8.0
 
     def __init__(self, smoothing: int = 5) -> None:
@@ -92,89 +78,27 @@ class _SpeedTracker:
         self._history.clear()
 
 
-class _LabelStabilizer:
-    """
-    Evita el parpadeo de etiquetas en el video aplicando histéresis temporal.
-
-    Una etiqueta solo reemplaza a la actual si aparece durante al menos
-    `hold_frames` frames consecutivos. Las etiquetas en TRANSPARENT se tratan
-    como señal nula: no activan el temporizador de cambio ni se muestran en video.
-    """
-
-    TRANSPARENT: frozenset[str] = frozenset({"rat_horizontal", "Unknown"})
-
-    def __init__(self, hold_frames: int = 8,
-                 fast_labels: dict[str, int] | None = None) -> None:
-        self._stable: str    = ""
-        self._candidate: str = ""
-        self._count: int     = 0
-        self._hold: int      = hold_frames
-        # Etiquetas con umbral de confirmacion mas bajo (respuesta mas rapida)
-        self._fast: dict[str, int] = fast_labels or {}
-
-    def update(self, label: str) -> str:
-        # Etiquetas transparentes: devolver lo que hay estable (o la propia si no hay nada aun)
-        if label in self.TRANSPARENT:
-            return self._stable if self._stable else label
-
-        # Primera etiqueta real: aceptar directamente sin esperar
-        if not self._stable:
-            self._stable = label
-            return self._stable
-
-        # Misma etiqueta que la estable: confirmar, resetear candidato
-        if label == self._stable:
-            self._candidate = ""
-            self._count = 0
-            return self._stable
-
-        # Umbral de confirmacion: fast_labels aplica en ambas direcciones.
-        # Si la etiqueta entrante ES rapida, la acepta pronto.
-        # Si la etiqueta estable actual ES rapida, tambien se sale de ella pronto.
-        required = self._fast.get(label, self._hold)
-        if self._stable in self._fast:
-            required = min(required, self._fast[self._stable])
-
-        # Acumular o cambiar candidato
-        if label == self._candidate:
-            self._count += 1
-            if self._count >= required:
-                self._stable    = self._candidate
-                self._candidate = ""
-                self._count     = 0
-        else:
-            self._candidate = label
-            self._count     = 1
-
-        return self._stable
-
-
 class RatDetector(BaseModule):
     """
     Detecta y clasifica el comportamiento del raton frame a frame.
-    Combina YOLO Pose, la RNN de movimiento y la logica espacial calibrada.
+    Combina YOLO Pose, BehaviorClassifier y la logica espacial calibrada.
     """
 
     def __init__(self, config: DetectParams,
                  show_skeleton: bool = False,
                  show_preview: bool = True,
                  dual_output: bool = False) -> None:
-        self.cfg: DetectParams           = config
-        self.show_skeleton: bool         = show_skeleton
-        self.show_preview: bool          = show_preview
-        self.dual_output: bool           = dual_output
+        self.cfg: DetectParams                     = config
+        self.show_skeleton: bool                   = show_skeleton
+        self.show_preview: bool                    = show_preview
+        self.dual_output: bool                     = dual_output
         self.model: YOLO | None                    = None
         self.spatial_logic: SpatialAnalyzer | None = None
-        self._speed_tracker: _SpeedTracker       = _SpeedTracker(smoothing=5)
-        self._label_stabilizer: _LabelStabilizer  = _LabelStabilizer(
-            hold_frames=8,
-            # fast_labels aplica en entrada Y salida (bidireccional)
-            fast_labels={"rat_climbing": 3, "rat_head_dipping": 3,
-                         "rat_grooming": 3, "rat_rearing": 3},
-        )
+        self._speed_tracker: _SpeedTracker         = _SpeedTracker(smoothing=5)
+        self._behavior_classifier: BehaviorClassifier | None = None
 
     def _setup(self) -> None:
-        """Carga el modelo YOLO, la RNN y el analizador espacial."""
+        """Carga el modelo YOLO, el analizador espacial y el clasificador de comportamiento."""
         if not paths.yolo_model.exists():
             raise FileNotFoundError(f"Modelo YOLO no encontrado: {paths.yolo_model}")
 
@@ -182,21 +106,20 @@ class RatDetector(BaseModule):
         self.model = YOLO(str(paths.yolo_model))
 
         self.spatial_logic = SpatialAnalyzer(config_path=paths.coords_json)
+        self._behavior_classifier = BehaviorClassifier(spatial_logic=self.spatial_logic)
 
     @staticmethod
     def _get_color(label: str) -> tuple[int, int, int]:
         """Devuelve el color BGR asociado a cada etiqueta de comportamiento."""
         label = label.lower()
-        # sniffing_immobile antes del check generico "sniffing" para que no
-        # quede capturado por el y tome el color equivocado.
-        if "sniffing_immobile" in label: return (200, 100, 180)  # lila/orquidea
-        if "sniffing"   in label: return (0,   200, 255)  # ambar/dorado  (sniffing_walking)
-        if "immobile"   in label: return (180, 180, 180)  # gris
-        if "walking"    in label: return (0,   255, 255)  # amarillo
-        if "climbing"   in label: return (255,   0, 255)  # magenta
-        if "dipping"    in label: return (0,   165, 255)  # naranja oscuro
-        if "rearing"    in label: return (0,   255,   0)  # verde
-        if "grooming"   in label: return (180, 255, 180)  # verde claro
+        if "sniffing_immobile" in label: return (200, 100, 180)
+        if "sniffing"   in label: return (0,   200, 255)
+        if "immobile"   in label: return (180, 180, 180)
+        if "walking"    in label: return (0,   255, 255)
+        if "climbing"   in label: return (255,   0, 255)
+        if "dipping"    in label: return (0,   165, 255)
+        if "rearing"    in label: return (0,   255,   0)
+        if "grooming"   in label: return (180, 255, 180)
         return (128, 128, 128)
 
     @staticmethod
@@ -207,8 +130,8 @@ class RatDetector(BaseModule):
         """
         if res.keypoints is None:
             return None
-        kps_xy   = res.keypoints.xy    # (N, K, 2)
-        kps_conf = res.keypoints.conf  # (N, K) o None
+        kps_xy   = res.keypoints.xy
+        kps_conf = res.keypoints.conf
 
         if len(kps_xy) <= detection_idx:
             return None
@@ -220,7 +143,6 @@ class RatDetector(BaseModule):
             if conf < 0.3:
                 return None
 
-        # YOLO representa keypoints no visibles como (0, 0)
         if snout[0] < 1.0 and snout[1] < 1.0:
             return None
 
@@ -257,7 +179,7 @@ class RatDetector(BaseModule):
         kps  = kps_xy[detection_idx].cpu().numpy()
         conf = kps_conf[detection_idx].cpu().numpy() if kps_conf is not None else None
 
-        kp_colors = [(0, 0, 255), (0, 255, 0), (255, 80, 0)]  # snout=rojo, spine=verde, tail=azul
+        kp_colors = [(0, 0, 255), (0, 255, 0), (255, 80, 0)]
         kp_names  = ["snout", "spine", "tail"]
 
         visible: list[bool] = []
@@ -280,26 +202,6 @@ class RatDetector(BaseModule):
                     pb = (int(kps[b][0]), int(kps[b][1]))
                     cv2.line(img, pa, pb, (0, 220, 255), 2)
 
-    def _derive_horizontal(self, snout_kp: np.ndarray | None) -> str:
-        """
-        Desambigua rat_horizontal en:
-          1. sniffing  — snout cerca de pared interior (prioridad)
-          2. walking   — desplazamiento rapido del centroide
-          3. immobile  — desplazamiento minimo
-
-        El speed tracker debe haberse actualizado antes de llamar a este metodo.
-        """
-        if snout_kp is not None and self.spatial_logic.check_sniffing_wall(snout_kp):
-            return "sniffing"
-
-        speed = float(np.mean(self._speed_tracker._history)) if self._speed_tracker._history else 0.0
-        if speed >= WALK_SPEED_THRESHOLD:
-            return "walking"
-        if speed <= STILL_SPEED_THRESHOLD:
-            return "immobile"
-
-        return "rat_horizontal"
-
     def run(self) -> None:
         """Procesa el video completo y escribe el video anotado y el CSV de resultados."""
         self._setup()
@@ -314,29 +216,13 @@ class RatDetector(BaseModule):
         h: int     = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
-        fourcc  = cv2.VideoWriter_fourcc(*"mp4v")
-        out_vid = cv2.VideoWriter(str(paths.output_video), fourcc, fps, (w, h))
-
-        # Video limpio (sin superposicion de zonas) para presentacion
-        out_clean: cv2.VideoWriter | None = None
-        clean_path: Path | None = None
-        if self.dual_output:
-            clean_path = paths.output_video.with_name(
-                paths.output_video.stem + "_limpio.mp4"
-            )
-            out_clean = cv2.VideoWriter(str(clean_path), fourcc, fps, (w, h))
-
-        csv_path = paths.output_video.with_suffix(".csv")
-        f_csv    = open(csv_path, "w", newline="")
-        writer   = csv.writer(f_csv)
-        writer.writerow(["frame", "time_s", "yolo_label", "final_label",
-                         "x1", "y1", "x2", "y2",
-                         "snout_x", "snout_y", "speed", "tail_x", "tail_y"])
+        vid_out = VideoOutput(paths.output_video, fps, w, h, dual_output=self.dual_output)
+        csv_out = CsvOutput(paths.output_video.with_suffix(".csv"))
 
         print(f"[>] Procesando: {paths.video_source.name}")
         print(f"    Salida    : {paths.output_video}")
-        if out_clean is not None:
-            print(f"    Limpio    : {clean_path}")
+        if vid_out.clean_path is not None:
+            print(f"    Limpio    : {vid_out.clean_path}")
 
         print("\n" + "=" * 55)
         print("  LEYENDA")
@@ -363,7 +249,6 @@ class RatDetector(BaseModule):
             img       = img_base.copy()
             img_clean: np.ndarray | None = img_base.copy() if self.dual_output else None
 
-            # Las zonas calibradas solo se dibujan en el video principal
             if spatial_ok:
                 self.spatial_logic.draw_zones(img)
 
@@ -376,10 +261,10 @@ class RatDetector(BaseModule):
 
             # 1. Extraer la deteccion de mayor confianza de YOLO
             if res.boxes and len(res.boxes) > 0:
-                confs   = res.boxes.conf.cpu().numpy()
-                best    = int(np.argmax(confs))
-                rat_box = res.boxes.xyxy[best].cpu().numpy()
-                cls_id  = int(res.boxes.cls[best].cpu())
+                confs      = res.boxes.conf.cpu().numpy()
+                best       = int(np.argmax(confs))
+                rat_box    = res.boxes.xyxy[best].cpu().numpy()
+                cls_id     = int(res.boxes.cls[best].cpu())
                 yolo_label = self.model.names.get(cls_id, "Unknown")
 
             # 2. Extraer keypoints del snout y la cola
@@ -387,83 +272,17 @@ class RatDetector(BaseModule):
                 snout_kp = self._extract_snout(res, detection_idx=0)
                 tail_kp  = self._extract_keypoint(res, KP_TAIL, detection_idx=0)
 
-            # 3. Logica hibrida de clasificacion
+            # 3. Calcular velocidad y delegar clasificacion
             if rat_box is not None:
-                # Actualizar el tracker en TODOS los frames con deteccion
-                # para que el historial de velocidad sea continuo
-                speed_val = self._speed_tracker.update(rat_box, w, h)
-
-                final_label = yolo_label
-
-                # A) HEAD DIPPING — el snout cae dentro del radio del agujero.
-                #    YOLOv8 Pose siempre estima la posicion del snout aunque este
-                #    ocluido (lo infiere del contexto corporal), por lo que la
-                #    confianza del keypoint no es una senal fiable de oclusión.
-                #    El trigger correcto es espacial: si el snout estimado cae
-                #    dentro del radio del agujero, el raton esta haciendo dipping.
-                if spatial_ok and snout_kp is not None and self.spatial_logic.check_dipping(snout_kp):
-                    final_label = "rat_head_dipping"
-
-                # A2) YOLO dice head_dipping pero el snout no esta sobre un agujero: reclasificar.
-                elif yolo_label == "rat_head_dipping":
-                    if not spatial_ok or snout_kp is None:
-                        final_label = "rat_horizontal"
-                    elif not self.spatial_logic.check_dipping(snout_kp):
-                        final_label = "rat_horizontal"
-
-                # B) Desambiguar horizontal -> walking / immobile / sniffing
-                if final_label == "rat_horizontal":
-                    final_label = self._derive_horizontal(snout_kp)
-
-                # C) Climbing: confirmado si el bbox penetra al menos 15px en la zona
-                #    de pared (entre borde interior y exterior). El margen evita falsos
-                #    positivos cuando el raton camina cerca del borde sin trepar.
-                elif yolo_label == "rat_climbing" and spatial_ok:
-                    x1c, y1c, x2c, y2c = rat_box
-                    if not self.spatial_logic.bbox_entirely_inside(x1c, y1c, x2c, y2c):
-                        final_label = "rat_climbing"
-                    else:
-                        final_label = self._derive_horizontal(snout_kp)
-
-                # D) Rearing: confirmado por aspect ratio del bbox (altura/ancho).
-                #    Un raton erguido tiene el bbox claramente mas alto que ancho.
-                #    Si el bbox es horizontal (ratio < REARING_ASPECT_RATIO) YOLO
-                #    ha confundido una pose inmovil o caminando con rearing.
-                elif yolo_label == "rat_rearing":
-                    x1r, y1r, x2r, y2r = rat_box
-                    h_box = y2r - y1r
-                    w_box = x2r - x1r
-                    aspect = h_box / w_box if w_box > 0 else 1.0
-                    if aspect >= REARING_ASPECT_RATIO:
-                        final_label = "rat_rearing"
-                    else:
-                        final_label = self._derive_horizontal(snout_kp)
-
-                # E) Climbing recovery eliminado: exp8 tiene recall=0.887 y detecta
-                #    climbing de forma nativa. La recovery rule causaba falsos positivos
-                #    cuando el raton caminaba cerca de la pared (bbox rozando el borde
-                #    interior). Solo se reintroduciria si se usa un modelo con recall bajo.
-
-                # Estabilizacion temporal: la etiqueta solo cambia tras hold_frames
-                # consecutivos con la misma senyal. rat_horizontal es transparente
-                # (no aparece en video ni activa el temporizador de cambio).
-                final_label = self._label_stabilizer.update(final_label)
-
-                # Sub-estado de sniffing: distingue si el raton se mueve o esta parado.
-                # Se aplica DESPUES del estabilizador (que trabaja con "sniffing" como
-                # unidad) para que el movimiento se muestre en tiempo real sin retardo.
-                if final_label == "sniffing":
-                    spd = float(np.mean(self._speed_tracker._history)) if self._speed_tracker._history else 0.0
-                    final_label = "sniffing_walking" if spd >= WALK_SPEED_THRESHOLD else "sniffing_immobile"
+                speed_val   = self._speed_tracker.update(rat_box, w, h)
+                final_label = self._behavior_classifier.classify(
+                    yolo_label, speed_val, snout_kp, rat_box, spatial_ok
+                )
 
                 # Dibujar bbox y etiqueta
                 color = self._get_color(final_label)
                 rx1, ry1, rx2, ry2 = map(int, rat_box)
 
-                # Formato de texto para la superposicion:
-                # - rat_ se elimina del prefijo para que sea mas limpio visualmente
-                # - sniffing_* -> "sniffing [walking]" / "sniffing [immobile]"
-                # - resto       -> "nombre [yolo_nombre]" si difieren y yolo no es ruido
                 if final_label.startswith("sniffing_"):
                     motion = final_label.split("_", 1)[1]
                     label_txt = f"sniffing [{motion}]"
@@ -483,22 +302,11 @@ class RatDetector(BaseModule):
                     if self.show_skeleton:
                         self._draw_skeleton(target, res, detection_idx=0)
 
-                # Escribir fila en el CSV
-                snout_x = float(snout_kp[0]) if snout_kp is not None else -1.0
-                snout_y = float(snout_kp[1]) if snout_kp is not None else -1.0
-                tail_x  = float(tail_kp[0])  if tail_kp  is not None else -1.0
-                tail_y  = float(tail_kp[1])  if tail_kp  is not None else -1.0
-                writer.writerow([frame_idx, f"{frame_idx / fps:.2f}",
-                                 yolo_label, final_label,
-                                 rx1, ry1, rx2, ry2,
-                                 f"{snout_x:.1f}", f"{snout_y:.1f}",
-                                 f"{speed_val:.3f}",
-                                 f"{tail_x:.1f}", f"{tail_y:.1f}"])
+                csv_out.write_row(frame_idx, fps, yolo_label, final_label,
+                                  rat_box, snout_kp, tail_kp, speed_val)
                 last_label = final_label
 
-            out_vid.write(img)
-            if out_clean is not None:
-                out_clean.write(img_clean)
+            vid_out.write(img, img_clean)
 
             if self.show_preview:
                 preview = img.copy()
@@ -511,8 +319,7 @@ class RatDetector(BaseModule):
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord('k') or key == ord('K'):
                     self.show_skeleton = not self.show_skeleton
-                    estado = "ON" if self.show_skeleton else "OFF"
-                    print(f"\n[Preview] Skeleton {estado}")
+                    print(f"\n[Preview] Skeleton {'ON' if self.show_skeleton else 'OFF'}")
                 elif key == ord('q') or key == ord('Q'):
                     print("\n[Preview] Detencion manual (Q)")
                     break
@@ -525,11 +332,9 @@ class RatDetector(BaseModule):
 
         if self.show_preview:
             cv2.destroyAllWindows()
-        out_vid.release()
-        if out_clean is not None:
-            out_clean.release()
-        f_csv.close()
+        vid_out.release()
+        csv_out.close()
         print(f"\n[+] Finalizado. {frame_idx} frames -> {paths.output_video.name}")
-        if out_clean is not None:
-            print(f"    Limpio    : {clean_path.name}")
-        print(f"    CSV: {csv_path.name}")
+        if vid_out.clean_path is not None:
+            print(f"    Limpio    : {vid_out.clean_path.name}")
+        print(f"    CSV: {csv_out.path.name}")

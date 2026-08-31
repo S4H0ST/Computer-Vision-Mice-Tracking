@@ -12,10 +12,10 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 from config.config import paths, train_cfg, detect_cfg
-from detection.calibrator import ZoneCalibrator
+from calibration.calibrator import ZoneCalibrator
 from detection.trainer import YOLOTrainer
 from detection.detector import RatDetector
-from utils.calibrator_image import ImageCalibrator
+from calibration.calibrator_image import ImageCalibrator
 from utils.stats_generator import StatsGenerator
 
 

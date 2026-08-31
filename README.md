@@ -116,6 +116,10 @@ Zones are calibrated interactively per video (first frame is extracted automatic
 
 > **Why Recall over Precision:** A missed frame = a lost behavioral data point. Occasional false positives are filtered by the spatial logic downstream; false negatives are unrecoverable.
 
+**Trajectory output** — tail path drawn over arena template (testRata4, 600-frame segment):
+
+![Trajectory example](media_original/trajectory_example.png)
+
 ---
 
 ## Project Structure
@@ -130,7 +134,7 @@ Computer-Vision-Mice-Tracking/
 │   └── coords.json          # Calibration: outer wall, inner wall, 4 holes
 ├── media_original/
 │   ├── poses.png                  # Reference: 5 training posture classes
-│   ├── tracking_template.png
+│   ├── trajectory_example.png     # Sample trajectory output
 │   ├── DemoGit_rat.gif            # Phase 2 demo — bounding box detection
 │   ├── DemoGit_phase4.gif         # Phase 4 demo — YOLO + RNN classifier
 │   └── DemoGit_detection.gif      # Phase 6 demo — full pipeline v3 overlay
@@ -144,14 +148,19 @@ Computer-Vision-Mice-Tracking/
     ├── config/
     │   ├── config.py        # Central config: Paths, TrainParams, DetectParams
     │   └── interfaces.py    # BaseModule abstract class
+    ├── calibration/
+    │   ├── calibrator.py        # ZoneCalibrator — interactive video calibration
+    │   └── calibrator_image.py  # ImageCalibrator — static image calibration
     ├── detection/
-    │   ├── detector.py      # RatDetector — hybrid YOLO + spatial + temporal pipeline
-    │   ├── trainer.py       # YOLOTrainer — geometric augmentation only
-    │   └── calibrator.py    # ZoneCalibrator — interactive video calibration
+    │   ├── detector.py      # RatDetector — orchestrates YOLO + classifier + writers
+    │   └── trainer.py       # YOLOTrainer — geometric augmentation only
     ├── spatial/
     │   └── spatial.py       # SpatialAnalyzer — dipping, sniffing, wall checks
+    ├── behavior/
+    │   └── behavior_classifier.py  # BehaviorClassifier + _LabelStabilizer
+    ├── output/
+    │   └── writers.py       # VideoOutput + CsvOutput — persistence only
     └── utils/
-        ├── calibrator_image.py  # Static image calibrator
         └── stats_generator.py   # Excel report + trajectory image
 ```
 
