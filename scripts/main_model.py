@@ -8,6 +8,7 @@ Funciones:
 """
 
 import sys
+import json
 import tempfile
 from pathlib import Path
 from datetime import datetime
@@ -45,6 +46,42 @@ def _pick_file() -> Path | None:
     except Exception as e:
         print(f"[!] No se pudo abrir el explorador: {e}")
         return None
+
+
+def _ask_box_size(coords_path: Path) -> None:
+    """Pregunta el tamano fisico de la caja y lo guarda en coords.json."""
+    print("\n[Calibrador] Tamano fisico de la caja (Enter para omitir):")
+    try:
+        w_str = input("  Ancho de la caja en cm: ").strip()
+        h_str = input("  Alto  de la caja en cm: ").strip()
+    except (EOFError, KeyboardInterrupt):
+        return
+
+    try:
+        box_w = float(w_str) if w_str else None
+        box_h = float(h_str) if h_str else None
+    except ValueError:
+        print("[!] Valor no valido — tamano fisico no guardado.")
+        return
+
+    if box_w is None and box_h is None:
+        return
+
+    if not coords_path.exists():
+        return
+
+    with open(coords_path, "r") as f:
+        data = json.load(f)
+
+    if box_w is not None:
+        data["box_width_cm"]  = box_w
+    if box_h is not None:
+        data["box_height_cm"] = box_h
+
+    with open(coords_path, "w") as f:
+        json.dump(data, f, indent=4)
+
+    print(f"[OK] Tamano guardado: {box_w} x {box_h} cm")
 
 
 def _pick_video() -> Path | None:
@@ -96,10 +133,14 @@ def main() -> None:
                 print(f"[Calibrador] Imagen seleccionada: {file_path.name}")
                 calib = ImageCalibrator(file_path, paths.coords_json)
                 calib.run()
+                if paths.coords_json.exists():
+                    _ask_box_size(paths.coords_json)
             elif ext in VIDEO_EXTS:
                 print(f"[Calibrador] Video seleccionado: {file_path.name}")
                 calib = ZoneCalibrator(file_path)
                 calib.run()
+                if paths.coords_json.exists():
+                    _ask_box_size(paths.coords_json)
             else:
                 print(f"[!] Formato no reconocido: {ext}. Usa imagen o video.")
 
@@ -136,6 +177,8 @@ def main() -> None:
                 print("[Calibrador] Marca las zonas y pulsa S para guardar, Q para cancelar.")
                 calib = ImageCalibrator(tmp_frame, paths.coords_json)
                 calib.run()
+                if paths.coords_json.exists():
+                    _ask_box_size(paths.coords_json)
 
             if not paths.coords_json.exists():
                 print("[!] Sin calibracion disponible. No se ejecutara la deteccion.")

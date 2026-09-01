@@ -50,6 +50,7 @@ class StatsGenerator:
         self.outer_limits: dict | None = None
         self.holes:        list[tuple] = []
         self.hole_radius:  int = 20
+        self.px_per_cm:    float | None = None
 
         self._load()
 
@@ -77,6 +78,14 @@ class StatsGenerator:
             self.outer_limits = data.get("limits_outer")
             self.holes        = [tuple(h) for h in data.get("holes", [])]
             self.hole_radius  = data.get("hole_radius", 20)
+
+            box_w_cm = data.get("box_width_cm")
+            box_h_cm = data.get("box_height_cm")
+            if box_w_cm and box_h_cm and self.outer_limits:
+                lim = self.outer_limits
+                px_w = lim["x_max"] - lim["x_min"]
+                px_h = lim["y_max"] - lim["y_min"]
+                self.px_per_cm = ((px_w / box_w_cm) + (px_h / box_h_cm)) / 2
 
     # ------------------------------------------------------------------
     # Punto de entrada publico
@@ -161,20 +170,27 @@ class StatsGenerator:
 
         x_min, y_min, x_scale, y_scale = self._canvas_mapping()
 
-        # Trayectoria del tail en verde
+        # Agujeros: contorno blanco (referencia espacial para head-dipping)
+        if self.holes:
+            r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
+            for hx, hy in self.holes:
+                cx, cy = self._to_canvas(hx, hy, x_min, y_min, x_scale, y_scale)
+                cv2.circle(img, (cx, cy), r_canvas, (255, 255, 255), 1)
+
+        # Trayectoria del snout en verde (el hocico es el punto relevante en holeboard)
         COLOR_TRACK = (0, 200, 0)
         prev_pt: tuple[int, int] | None = None
         for row in self.rows:
             try:
-                tx = float(row.get("tail_x", -1))
-                ty = float(row.get("tail_y", -1))
+                sx = float(row.get("snout_x", -1))
+                sy = float(row.get("snout_y", -1))
             except ValueError:
                 prev_pt = None
                 continue
-            if tx < 0 or ty < 0:
+            if sx < 0 or sy < 0:
                 prev_pt = None
                 continue
-            pt = self._to_canvas(tx, ty, x_min, y_min, x_scale, y_scale)
+            pt = self._to_canvas(sx, sy, x_min, y_min, x_scale, y_scale)
             if prev_pt is not None:
                 cv2.line(img, prev_pt, pt, COLOR_TRACK, 1)
             prev_pt = pt
@@ -382,10 +398,21 @@ class StatsGenerator:
         # --- Escritura de la hoja OFT ----------------------------------
         r = 1
 
+        if self.px_per_cm:
+            dist_val  = round(total_dist  / self.px_per_cm / 100, 2)
+            dist_unit = "m"
+            speed_val = round(avg_speed   / self.px_per_cm, 1)
+            speed_unit = "cm/s"
+        else:
+            dist_val  = round(total_dist, 0)
+            dist_unit = "px"
+            speed_val = avg_speed
+            speed_unit = "px/s"
+
         _s(r, "Duracion y Actividad General"); r += 1
-        _m(r, "Duracion total del video",              round(duration_s, 1), "s");    r += 1
-        _m(r, "Distancia total recorrida (tail)",      round(total_dist, 0), "px");   r += 1
-        _m(r, "Velocidad media (tail)",                avg_speed,            "px/s"); r += 1
+        _m(r, "Duracion total del video",              round(duration_s, 1), "s");       r += 1
+        _m(r, "Distancia total recorrida (tail)",      dist_val,             dist_unit); r += 1
+        _m(r, "Velocidad media (tail)",                speed_val,            speed_unit); r += 1
         _m(r, "Walking (deambulacion)",                walking_pct,          "%");    r += 1
         _m(r, "Transiciones conductuales totales",     transitions,          "");     r += 1
         _m(r, "Tasa de transicion",                    trans_pm,             "trans/min"); r += 1
