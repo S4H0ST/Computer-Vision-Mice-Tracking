@@ -32,7 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 IMAGE_PATH  = PROJECT_ROOT / "media_original" / "cajaBordes.jpg"
 OUTPUT_JSON = PROJECT_ROOT / "datasets" / "coords.json"
 
-HOLE_RADIUS   = 20
+HOLE_RADIUS   = 15
 DISPLAY_WIDTH = 1000   # ancho de la imagen mostrada en pantalla (px)
 WIN_NAME      = "CALIBRADOR"
 
@@ -116,7 +116,7 @@ class ImageCalibrator:
         cv2.imshow(WIN_NAME, disp)
 
     def _draw_header(self, disp: np.ndarray):
-        """Banner de instrucciones encima de la imagen (tamaño fijo en pixels display)."""
+        """Banner de instrucciones en la parte inferior de la imagen (no obstruye el borde superior)."""
         total = len(self.exterior) + len(self.interior) + len(self.holes)
 
         if total < 2:
@@ -134,15 +134,16 @@ class ImageCalibrator:
 
         hint = "  R = repetir     S = guardar     Q = salir"
 
-        # Fondo negro semitransparente en la franja superior
+        # Fondo negro semitransparente en la franja INFERIOR (no tapa el borde superior de la caja)
+        h = disp.shape[0]
         overlay = disp.copy()
-        cv2.rectangle(overlay, (0, 0), (disp.shape[1], 48), BLACK, -1)
+        cv2.rectangle(overlay, (0, h - 50), (disp.shape[1], h), BLACK, -1)
         cv2.addWeighted(overlay, 0.75, disp, 0.25, 0, disp)
 
         # Texto principal (fuente pequeña, escala 0.48)
-        cv2.putText(disp, msg,  (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.48, color, 1, cv2.LINE_AA)
+        cv2.putText(disp, msg,  (10, h - 30), cv2.FONT_HERSHEY_SIMPLEX, 0.48, color, 1, cv2.LINE_AA)
         # Texto secundario (escala 0.38)
-        cv2.putText(disp, hint, (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.38, GRAY,  1, cv2.LINE_AA)
+        cv2.putText(disp, hint, (10, h - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.38, GRAY,  1, cv2.LINE_AA)
 
     # ── Guardar JSON ─────────────────────────────────────────────────── #
     def _save(self):

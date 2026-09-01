@@ -154,31 +154,31 @@ class StatsGenerator:
     def _generate_trajectory(self, out_path: Path) -> None:
         sz = self.CANVAS_SIZE
         m  = self.CANVAS_MARGIN
-        img = np.zeros((sz, sz, 3), dtype=np.uint8)
 
-        # Rectangulo blanco de la caja
-        cv2.rectangle(img, (m, m), (sz - m, sz - m), (255, 255, 255), 2)
+        # Fondo blanco
+        img = np.full((sz, sz, 3), 255, dtype=np.uint8)
 
-        # Cuadricula gris semitransparente (4x4)
-        grid = img.copy()
+        # Cuadricula gris muy suave (4x4)
         step = (sz - 2 * m) // 4
         for i in range(1, 4):
             o = m + i * step
-            cv2.line(grid, (o, m),     (o, sz - m), (70, 70, 70), 1)
-            cv2.line(grid, (m, o), (sz - m, o),     (70, 70, 70), 1)
-        cv2.addWeighted(grid, 0.55, img, 0.45, 0, img)
+            cv2.line(img, (o, m),      (o, sz - m), (210, 210, 210), 1)
+            cv2.line(img, (m, o),  (sz - m, o),     (210, 210, 210), 1)
+
+        # Borde de la caja — gris oscuro
+        cv2.rectangle(img, (m, m), (sz - m, sz - m), (60, 60, 60), 2)
 
         x_min, y_min, x_scale, y_scale = self._canvas_mapping()
 
-        # Agujeros: contorno blanco (referencia espacial para head-dipping)
+        # Agujeros: circulo gris oscuro
         if self.holes:
             r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
             for hx, hy in self.holes:
                 cx, cy = self._to_canvas(hx, hy, x_min, y_min, x_scale, y_scale)
-                cv2.circle(img, (cx, cy), r_canvas, (255, 255, 255), 1)
+                cv2.circle(img, (cx, cy), r_canvas, (80, 80, 80), 1)
 
-        # Trayectoria del snout en verde (el hocico es el punto relevante en holeboard)
-        COLOR_TRACK = (0, 200, 0)
+        # Trayectoria del snout — azul oscuro (BGR: 160, 60, 10)
+        COLOR_TRACK = (160, 60, 10)
         prev_pt: tuple[int, int] | None = None
         for row in self.rows:
             try:

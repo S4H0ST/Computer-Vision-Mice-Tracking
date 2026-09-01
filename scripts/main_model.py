@@ -13,39 +13,13 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 from config.config import paths, train_cfg, detect_cfg
-from calibration.calibrator import ZoneCalibrator
 from detection.trainer import YOLOTrainer
 from detection.detector import RatDetector
 from calibration.calibrator_image import ImageCalibrator
 from utils.stats_generator import StatsGenerator
 
 
-IMAGE_EXTS: set[str] = {".jpg", ".jpeg", ".png", ".bmp"}
 VIDEO_EXTS: set[str] = {".mp4", ".avi", ".mov", ".mkv"}
-
-
-def _pick_file() -> Path | None:
-    """Abre un explorador de archivos y devuelve la ruta elegida, o None si se cancela."""
-    try:
-        import tkinter as tk
-        from tkinter import filedialog
-        root_tk = tk.Tk()
-        root_tk.withdraw()
-        root_tk.attributes("-topmost", True)
-        chosen = filedialog.askopenfilename(
-            title="Selecciona imagen o video para calibrar",
-            filetypes=[
-                ("Imagenes y videos", "*.jpg *.jpeg *.png *.bmp *.mp4 *.avi *.mov *.mkv"),
-                ("Imagenes", "*.jpg *.jpeg *.png *.bmp"),
-                ("Videos", "*.mp4 *.avi *.mov *.mkv"),
-                ("Todos", "*.*"),
-            ],
-        )
-        root_tk.destroy()
-        return Path(chosen) if chosen else None
-    except Exception as e:
-        print(f"[!] No se pudo abrir el explorador: {e}")
-        return None
 
 
 def _ask_box_size(coords_path: Path) -> None:
@@ -113,42 +87,17 @@ def main() -> None:
         print("\n" + "=" * 40)
         print(" [(;)] RAT MODEL MANAGER (Entrenamiento & IA)")
         print("=" * 40)
-        print("1. Calibrar Zonas (Paredes/Agujeros)")
-        print("2. Entrenar Modelo YOLO")
-        print("3. Ejecutar Deteccion y Analisis")
-        print("4. Salir")
+        print("1. Entrenar Modelo YOLO")
+        print("2. Ejecutar Deteccion y Analisis")
+        print("3. Salir")
 
         opt: str = input("\n[?] Opcion: ")
 
         if opt == "1":
-            print("\n[Calibrador] Abriendo explorador de archivos...")
-            file_path = _pick_file()
-
-            if file_path is None:
-                print("[!] Ningun archivo seleccionado.")
-                continue
-
-            ext = file_path.suffix.lower()
-            if ext in IMAGE_EXTS:
-                print(f"[Calibrador] Imagen seleccionada: {file_path.name}")
-                calib = ImageCalibrator(file_path, paths.coords_json)
-                calib.run()
-                if paths.coords_json.exists():
-                    _ask_box_size(paths.coords_json)
-            elif ext in VIDEO_EXTS:
-                print(f"[Calibrador] Video seleccionado: {file_path.name}")
-                calib = ZoneCalibrator(file_path)
-                calib.run()
-                if paths.coords_json.exists():
-                    _ask_box_size(paths.coords_json)
-            else:
-                print(f"[!] Formato no reconocido: {ext}. Usa imagen o video.")
-
-        elif opt == "2":
             trainer = YOLOTrainer(train_cfg)
             trainer.run()
 
-        elif opt == "3":
+        elif opt == "2":
             import cv2
 
             print("\n[Detector] Selecciona el video a analizar...")
@@ -205,7 +154,7 @@ def main() -> None:
 
             print(f"\n[OK] Resultados guardados en: {run_folder}")
 
-        elif opt == "4":
+        elif opt == "3":
             print("[*] Saliendo...")
             break
 

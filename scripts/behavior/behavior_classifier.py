@@ -14,6 +14,7 @@ from spatial.spatial import SpatialAnalyzer
 WALK_SPEED_THRESHOLD: float  = 0.35   # por encima -> walking
 STILL_SPEED_THRESHOLD: float = 0.15   # por debajo -> immobile
 REARING_ASPECT_RATIO: float  = 0.70   # altura/ancho minimo para confirmar rearing
+SNOUT_CONF_HIGH: float       = 0.55   # confianza minima para anular rearing/climbing con check espacial
 
 
 class _LabelStabilizer:
@@ -87,9 +88,13 @@ class BehaviorClassifier:
 
     def _derive_horizontal(self, snout_kp: np.ndarray | None, speed: float) -> str:
         """
-        Desambigua rat_horizontal en sniffing / walking / immobile.
-        Prioridad: sniffing_wall > walking > immobile.
+        Desambigua rat_horizontal en climbing / sniffing / walking / immobile.
+        Prioridad: climbing (snout en zona de pared) > sniffing_wall > walking > immobile.
         """
+        if (snout_kp is not None and self._spatial is not None
+                and self._spatial.snout_in_wall_zone(snout_kp)):
+            return "rat_climbing"
+
         if (snout_kp is not None and self._spatial is not None
                 and self._spatial.check_sniffing_wall(snout_kp)):
             return "sniffing"
@@ -117,20 +122,31 @@ class BehaviorClassifier:
         """
         final_label = yolo_label
 
-        # A) HEAD DIPPING — el snout cae dentro del radio del agujero.
-        if spatial_ok and self._spatial is not None and snout_kp is not None:
-            if self._spatial.check_dipping(snout_kp):
-                final_label = "rat_head_dipping"
+        # Confianza del snout: snout_kp llega como [x, y, conf] desde el detector.
+        snout_conf = float(snout_kp[2]) if (snout_kp is not None and len(snout_kp) > 2) else 0.3
 
-        # A2) YOLO dice head_dipping pero el snout no confirma: reclasificar.
+        # A) HEAD DIPPING — check espacial del snout.
+        # Cuando la postura es rearing/climbing, el keypoint puede estar mal posicionado
+        # (cuerpo vertical, cabeza fuera del plano de la camara): solo se permite anular
+        # la postura si la confianza del keypoint es suficientemente alta.
+        _spatial_dipping = False
+        if spatial_ok and self._spatial is not None and snout_kp is not None:
+            _posture_uncertain = (yolo_label in ("rat_rearing", "rat_climbing")
+                                  and snout_conf < SNOUT_CONF_HIGH)
+            if not _posture_uncertain:
+                _spatial_dipping = self._spatial.check_dipping(snout_kp)
+
+        if _spatial_dipping:
+            final_label = "rat_head_dipping"
+
+        # A2) YOLO dice head_dipping: confiar en ello aunque el snout no confirme.
+        # Cuando el raton mete la cabeza en el agujero el keypoint puede quedar
+        # parcialmente ocluido y predecirse fuera del radio.
         elif yolo_label == "rat_head_dipping":
-            if not spatial_ok or snout_kp is None:
-                final_label = "rat_horizontal"
-            elif self._spatial is not None and not self._spatial.check_dipping(snout_kp):
-                final_label = "rat_horizontal"
+            final_label = "rat_head_dipping"
 
         # B) Desambiguar horizontal -> walking / immobile / sniffing
-        if final_label == "rat_horizontal":
+        elif final_label == "rat_horizontal":
             final_label = self._derive_horizontal(snout_kp, speed)
 
         # C) Climbing: confirmado si el bbox penetra en la zona de pared.

@@ -116,7 +116,7 @@ Zones are calibrated interactively per video (first frame is extracted automatic
 
 > **Why Recall over Precision:** A missed frame = a lost behavioral data point. Occasional false positives are filtered by the spatial logic downstream; false negatives are unrecoverable.
 
-**Trajectory output** — tail path drawn over arena template (testRata4, 600-frame segment):
+**Trajectory output** — snout path drawn over arena template (testRata4):
 
 ![Trajectory example](media_original/trajectory_example.png)
 
@@ -141,7 +141,9 @@ Computer-Vision-Mice-Tracking/
 ├── models/
 │   ├── yolov8s-pose.pt      # Base pretrained model (Ultralytics)
 │   └── yolo_ratas.pt        # Trained model — auto-copied after training
-├── outputs/                 # Per-run results: annotated video + CSV + Excel + trajectory
+├── outputs/
+│   ├── detections/          # Per-run results: annotated video + CSV + Excel + trajectory
+│   └── reports/             # Dataset quality report (pre-augmentation)
 ├── runs/train/              # YOLO training runs (weights, metrics, plots)
 └── scripts/
     ├── main_model.py        # Interactive entry point (menu)
@@ -200,10 +202,9 @@ python main_model.py
 
 | Option | Action |
 |---|---|
-| **1 — Calibrate Zones** | Opens a file picker to select an image or video. Click to define the outer wall, inner wall, and the 4 hole centers. Saves `datasets/coords.json`. |
-| **2 — Train YOLO Model** | Trains YOLOv8s-Pose for up to 100 epochs on `datasets/`. Copies `best.pt` to `models/yolo_ratas.pt` on completion. |
-| **3 — Run Detection** | Picks a video, extracts the first frame for calibration (if needed), runs the full pipeline and saves results to `outputs/`. |
-| **4 — Exit** | — |
+| **1 — Train YOLO Model** | Trains YOLOv8s-Pose for up to 100 epochs on `datasets/`. Copies `best.pt` to `models/yolo_ratas.pt` on completion. |
+| **2 — Run Detection** | Picks a video, extracts the first frame for calibration (if needed or on request), runs the full pipeline and saves results to `outputs/`. |
+| **3 — Exit** | — |
 
 ### Output per Detection Run
 
@@ -212,7 +213,7 @@ Each run creates a folder `outputs/detections/{video}_{date}/` containing:
 | File | Content |
 |---|---|
 | `{video}_{date}.mp4` | Annotated video — bbox + label + calibrated zone overlay |
-| `{video}_{date}_label.mp4` | Clean video — bbox + label only (no zone overlay) |
+| `{video}_{date}_limpio.mp4` | Clean video — bbox + label only (no zone overlay) |
 | `{video}_{date}.csv` | Per-frame data: label, bbox, keypoints, speed |
 | `stats/trajectory_{...}.png` | Animal path drawn over arena template |
 | `stats/stats_{...}.xlsx` | Time budget per behavior + OFT pharmacological indices |

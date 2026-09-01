@@ -138,15 +138,17 @@ class RatDetector(BaseModule):
 
         snout = kps_xy[detection_idx][KP_SNOUT].cpu().numpy()
 
+        conf_val = 1.0
         if kps_conf is not None:
-            conf = float(kps_conf[detection_idx][KP_SNOUT].cpu())
-            if conf < 0.3:
+            conf_val = float(kps_conf[detection_idx][KP_SNOUT].cpu())
+            if conf_val < 0.3:
                 return None
 
         if snout[0] < 1.0 and snout[1] < 1.0:
             return None
 
-        return snout
+        # Devuelve [x, y, conf] para que el clasificador pueda ponderar la fiabilidad
+        return np.array([snout[0], snout[1], conf_val], dtype=float)
 
     @staticmethod
     def _extract_keypoint(res, kp_idx: int, detection_idx: int = 0,
