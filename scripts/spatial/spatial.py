@@ -69,6 +69,29 @@ class SpatialAnalyzer:
                 return True
         return False
 
+    WALL_CLIMB_MARGIN: int = 10   # px que el snout debe penetrar en la zona de pared
+
+    def snout_in_wall_zone(self, snout_point) -> bool:
+        """
+        Devuelve True si el snout esta claramente en la zona de pared
+        (al menos WALL_CLIMB_MARGIN px mas alla del borde interior).
+        Evita falsos positivos por keypoints justo en el borde.
+        """
+        if snout_point is None or self.inner_limits is None:
+            return False
+        x, y = float(snout_point[0]), float(snout_point[1])
+        lim_i = self.inner_limits
+        m = self.WALL_CLIMB_MARGIN
+        outside_inner = (x < lim_i["x_min"] - m or x > lim_i["x_max"] + m or
+                         y < lim_i["y_min"] - m or y > lim_i["y_max"] + m)
+        if not outside_inner:
+            return False
+        if self.outer_limits is None:
+            return True
+        lim_o = self.outer_limits
+        return (lim_o["x_min"] <= x <= lim_o["x_max"] and
+                lim_o["y_min"] <= y <= lim_o["y_max"])
+
     def check_sniffing_wall(self, snout_point, margin: int = 30) -> bool:
         """
         Devuelve True si el snout esta dentro del area interior y a menos de
