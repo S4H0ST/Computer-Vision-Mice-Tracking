@@ -1,10 +1,17 @@
 """
 Menu principal interactivo del pipeline de deteccion y entrenamiento.
 
+Opciones disponibles:
+  1. Entrenar Modelo YOLO       - lanza YOLOTrainer con los parametros de config.py
+  2. Deteccion desde Video      - selector de archivo, calibracion, deteccion y stats
+  3. Deteccion desde Camara     - captura frame de camara, calibracion, deteccion en vivo
+  4. Salir
+
 Funciones:
-    _pick_file  — abre un explorador de archivos (imagen o video) y devuelve la ruta elegida.
-    _pick_video — abre un explorador de archivos filtrado a videos y devuelve la ruta elegida.
-    main        — bucle de menu que orquesta calibracion, entrenamiento y deteccion.
+    _ask_box_size  - pregunta el tamano fisico de la caja y lo guarda en coords.json.
+    _pick_video    - abre un explorador de archivos filtrado a videos.
+    _run_detection - logica compartida entre modo video y modo camara (calibracion + detector + stats).
+    main           - bucle del menu.
 """
 
 import sys
@@ -23,7 +30,11 @@ VIDEO_EXTS: set[str] = {".mp4", ".avi", ".mov", ".mkv"}
 
 
 def _ask_box_size(coords_path: Path) -> None:
-    """Pregunta el tamano fisico de la caja y lo guarda en coords.json."""
+    """
+    Pregunta al usuario el tamano fisico de la caja y lo guarda en coords_path.
+    Este dato permite a StatsGenerator convertir pixeles a centimetros en el Excel.
+    Si el usuario deja los campos vacios, no se guarda nada (es opcional).
+    """
     print("\n[Calibrador] Tamano fisico de la caja (Enter para omitir):")
     try:
         w_str = input("  Ancho de la caja en cm: ").strip()
@@ -59,7 +70,10 @@ def _ask_box_size(coords_path: Path) -> None:
 
 
 def _pick_video() -> Path | None:
-    """Abre un explorador de archivos filtrado a videos y devuelve la ruta elegida, o None si se cancela."""
+    """
+    Abre un explorador de archivos filtrado a formatos de video.
+    Devuelve la ruta elegida o None si el usuario cancela.
+    """
     try:
         import tkinter as tk
         from tkinter import filedialog
@@ -80,23 +94,98 @@ def _pick_video() -> Path | None:
         return None
 
 
+def _run_detection(frame_for_calib, source_label: str,
+                   camera_index: int | None = None,
+                   video_path: Path | None = None) -> None:
+    """
+    Logica compartida de calibracion + deteccion + estadisticas.
+    Sirve tanto para modo video como para modo camara en vivo.
+
+    frame_for_calib : frame BGR (numpy array) que se usara para calibrar.
+    source_label    : nombre de la fuente para los mensajes de consola.
+    camera_index    : si no es None, RatDetector usara la camara en lugar de archivo.
+    video_path      : ruta del video (solo en modo video).
+    """
+    import cv2
+
+    # -- Calibracion --
+    recalibrar = True
+    if paths.coords_json.exists():
+        resp = input("[?] Ya existe una calibracion guardada. Recalibrar? (s/N): ").strip().lower()
+        recalibrar = resp == "s"
+
+    if recalibrar:
+        # Guardamos el frame en un temporal y lanzamos el calibrador visual
+        tmp_frame = Path(tempfile.gettempdir()) / "rat_calib_frame.jpg"
+        cv2.imwrite(str(tmp_frame), frame_for_calib)
+        print(f"[Calibrador] Frame extraido de: {source_label}")
+        print("[Calibrador] Marca las zonas y pulsa S para guardar, Q para cancelar.")
+        calib = ImageCalibrator(tmp_frame, paths.coords_json)
+        calib.run()
+        if paths.coords_json.exists():
+            _ask_box_size(paths.coords_json)
+
+    if not paths.coords_json.exists():
+        print("[!] Sin calibracion disponible. Cancelando deteccion.")
+        return
+
+    # -- Rutas de salida --
+    today = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if video_path is not None:
+        stem = video_path.stem
+    else:
+        stem = "camera"
+
+    run_folder = paths.detect_dir / f"{stem}_{today}"
+    run_folder.mkdir(parents=True, exist_ok=True)
+
+    if video_path is not None:
+        paths.video_source = video_path
+
+    paths.output_video = run_folder / f"{stem}_{today}.mp4"
+
+    # -- Deteccion --
+    # show_preview=True en camara para que el usuario vea y pueda parar con Q
+    show_preview = camera_index is not None
+    detector = RatDetector(detect_cfg,
+                           show_skeleton=False,
+                           show_preview=show_preview,
+                           dual_output=(camera_index is None),
+                           camera_index=camera_index)
+    detector.run()
+
+    # -- Estadisticas --
+    csv_path = paths.output_video.with_suffix(".csv")
+    if csv_path.exists():
+        print("\n[Stats] Generando estadisticas...")
+        StatsGenerator(csv_path, coords_json=paths.coords_json).generate(
+            run_folder / "stats"
+        )
+
+    print(f"\n[OK] Resultados guardados en: {run_folder}")
+
+
 def main() -> None:
+    """Bucle principal del menu. Orquesta las opciones del pipeline."""
     paths.check_dirs()
 
     while True:
-        print("\n" + "=" * 40)
-        print(" [(;)] RAT MODEL MANAGER (Entrenamiento & IA)")
-        print("=" * 40)
+        print("\n" + "=" * 45)
+        print("  RAT MODEL MANAGER")
+        print("=" * 45)
         print("1. Entrenar Modelo YOLO")
-        print("2. Ejecutar Deteccion y Analisis")
-        print("3. Salir")
+        print("2. Ejecutar Deteccion desde Video")
+        print("3. Ejecutar Deteccion desde Camara (en vivo)")
+        print("4. Salir")
 
         opt: str = input("\n[?] Opcion: ")
 
+        # -- OPCION 1: Entrenamiento --
         if opt == "1":
             trainer = YOLOTrainer(train_cfg)
             trainer.run()
 
+        # -- OPCION 2: Deteccion desde video --
         elif opt == "2":
             import cv2
 
@@ -113,48 +202,39 @@ def main() -> None:
                 print(f"[!] No se pudo leer el video: {video_path.name}")
                 continue
 
-            recalibrar = True
-            if paths.coords_json.exists():
-                resp = input("[?] Ya existe una calibracion guardada. Recalibrar? (s/N): ").strip().lower()
-                recalibrar = resp == "s"
+            _run_detection(frame, source_label=video_path.name,
+                           video_path=video_path)
 
-            if recalibrar:
-                tmp_frame = Path(tempfile.gettempdir()) / "rat_calib_frame.jpg"
-                cv2.imwrite(str(tmp_frame), frame)
+        # -- OPCION 3: Deteccion en vivo desde camara --
+        elif opt == "3":
+            import cv2
 
-                print(f"[Calibrador] Primer frame extraido de: {video_path.name}")
-                print("[Calibrador] Marca las zonas y pulsa S para guardar, Q para cancelar.")
-                calib = ImageCalibrator(tmp_frame, paths.coords_json)
-                calib.run()
-                if paths.coords_json.exists():
-                    _ask_box_size(paths.coords_json)
+            cam_idx = 0   # indice 0 = camara principal del sistema
+            print(f"\n[Camara] Intentando abrir camara [{cam_idx}]...")
+            cap = cv2.VideoCapture(cam_idx)
 
-            if not paths.coords_json.exists():
-                print("[!] Sin calibracion disponible. No se ejecutara la deteccion.")
+            if not cap.isOpened():
+                print(f"[!] No se pudo abrir la camara [{cam_idx}].")
+                print("    Asegurate de que la camara no esta siendo usada por otra aplicacion.")
+                cap.release()
                 continue
 
-            today      = datetime.now().strftime("%Y%m%d")
-            stem       = video_path.stem
-            run_folder = paths.detect_dir / f"{stem}_{today}"
-            run_folder.mkdir(parents=True, exist_ok=True)
+            ok, frame = cap.read()
+            cap.release()
 
-            paths.video_source = video_path
-            paths.output_video = run_folder / f"{stem}_{today}.mp4"
+            if not ok:
+                print("[!] La camara se abrio pero no devolvio ningun frame.")
+                continue
 
-            detector = RatDetector(detect_cfg, show_skeleton=False, show_preview=False,
-                                   dual_output=True)
-            detector.run()
+            print(f"[OK] Camara abierta. Frame de muestra capturado para calibracion.")
+            print("     Una vez calibrado, la deteccion se ejecutara en tiempo real.")
+            print("     Pulsa Q en la ventana de preview para detener la grabacion.\n")
 
-            csv_path = paths.output_video.with_suffix(".csv")
-            if csv_path.exists():
-                print("\n[Stats] Generando estadisticas...")
-                StatsGenerator(csv_path, coords_json=paths.coords_json).generate(
-                    run_folder / "stats"
-                )
+            _run_detection(frame, source_label=f"camara [{cam_idx}]",
+                           camera_index=cam_idx)
 
-            print(f"\n[OK] Resultados guardados en: {run_folder}")
-
-        elif opt == "3":
+        # -- OPCION 4: Salir --
+        elif opt == "4":
             print("[*] Saliendo...")
             break
 

@@ -87,11 +87,14 @@ class RatDetector(BaseModule):
     def __init__(self, config: DetectParams,
                  show_skeleton: bool = False,
                  show_preview: bool = True,
-                 dual_output: bool = False) -> None:
+                 dual_output: bool = False,
+                 camera_index: int | None = None) -> None:
         self.cfg: DetectParams                     = config
         self.show_skeleton: bool                   = show_skeleton
         self.show_preview: bool                    = show_preview
         self.dual_output: bool                     = dual_output
+        # camera_index != None activa el modo camara en vivo (0 = camara por defecto)
+        self.camera_index: int | None              = camera_index
         self.model: YOLO | None                    = None
         self.spatial_logic: SpatialAnalyzer | None = None
         self._speed_tracker: _SpeedTracker         = _SpeedTracker(smoothing=5)
@@ -205,12 +208,25 @@ class RatDetector(BaseModule):
                     cv2.line(img, pa, pb, (0, 220, 255), 2)
 
     def run(self) -> None:
-        """Procesa el video completo y escribe el video anotado y el CSV de resultados."""
+        """
+        Procesa el video (o camara en vivo) y escribe el video anotado y el CSV.
+        Si camera_index no es None, usa la camara en lugar del archivo de video.
+        """
         self._setup()
 
-        cap = cv2.VideoCapture(str(paths.video_source))
+        # Determinar la fuente: archivo de video o indice de camara
+        if self.camera_index is not None:
+            source_cv2 = self.camera_index          # cv2.VideoCapture(0)
+            source_yolo = self.camera_index         # model.predict(source=0, ...)
+            source_name = f"camara [{self.camera_index}]"
+        else:
+            source_cv2  = str(paths.video_source)
+            source_yolo = str(paths.video_source)
+            source_name = paths.video_source.name
+
+        cap = cv2.VideoCapture(source_cv2)
         if not cap.isOpened():
-            print(f"[X] Error abriendo video: {paths.video_source}")
+            print(f"[X] Error abriendo fuente: {source_name}")
             return
 
         fps: float = cap.get(cv2.CAP_PROP_FPS) or 30.0
@@ -221,7 +237,7 @@ class RatDetector(BaseModule):
         vid_out = VideoOutput(paths.output_video, fps, w, h, dual_output=self.dual_output)
         csv_out = CsvOutput(paths.output_video.with_suffix(".csv"))
 
-        print(f"[>] Procesando: {paths.video_source.name}")
+        print(f"[>] Procesando: {source_name}")
         print(f"    Salida    : {paths.output_video}")
         if vid_out.clean_path is not None:
             print(f"    Limpio    : {vid_out.clean_path}")
@@ -234,12 +250,11 @@ class RatDetector(BaseModule):
 
         spatial_ok: bool = self.spatial_logic.is_valid_for(w, h)
         if not spatial_ok:
-            print(f"[!] AVISO: coords.json no esta calibrado para este video ({w}x{h}).")
+            print(f"[!] AVISO: coords.json no esta calibrado para esta fuente ({w}x{h}).")
             print(f"    head_dipping y sniffing no usaran referencias espaciales.")
-            print(f"    Ejecuta: python calibrate.py --video <video.mp4>")
 
         results = self.model.predict(
-            source=str(paths.video_source), stream=True,
+            source=source_yolo, stream=True,
             conf=self.cfg.conf_threshold, device=self.cfg.device, iou=0.5
         )
 
