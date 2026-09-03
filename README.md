@@ -19,13 +19,13 @@
 ## Table of Contents
 
 - [Project Overview](#project-overview)
+- [Project Evolution (ADR)](#project-evolution-adr)
 - [Hybrid Architecture](#hybrid-architecture)
 - [Detected Behaviors](#detected-behaviors)
 - [Results](#results)
-- [Project Structure](#project-structure)
 - [Installation](#installation)
 - [Usage](#usage)
-- [Project Evolution (ADR)](#project-evolution-adr)
+- [Project Structure](#project-structure)
 
 ---
 
@@ -38,6 +38,104 @@ This project automates the observation of the **Open Field Test (OFT)**, a stand
 - Outputs an annotated video, a per-frame CSV, a trajectory image and an Excel report — all in a single run
 - Calibrates spatially to any camera position in under 2 minutes
 - Runs on a consumer GPU with no cloud dependency
+
+---
+
+## Project Evolution (ADR)
+
+The project went through 6 iterative phases. Each phase is linked to the commit where it was implemented.
+
+<details>
+<summary><strong>Phase 1 — Base Detection and Overfitting Control</strong></summary>
+
+**Commit:** [17050d38](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/17050d38f900f684169ed35e07098b993205c43e)
+
+Standard YOLOv8 trained on a large frame-extracted dataset. Immediate overfitting — high visual similarity between frames caused the model to memorise background rather than learn posture. Fixed by drastically reducing dataset size and applying geometric augmentation only (no color changes — the environment is always the same white arena).
+</details>
+
+<details>
+<summary><strong>Phase 2 — Behavior Labeling and CNN Limitations</strong></summary>
+
+**Commit:** [a3c817d7](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/a3c817d7a1edca2046258149519fc6171b413144)
+
+Added 5 behavior classes. Found that Walking and Immobile are visually identical to a CNN — both produce the same horizontal bounding box. A single frame carries no temporal information.
+
+![bounding box demo](media_original/DemoGit_rat.gif)
+</details>
+
+<details>
+<summary><strong>Phase 3 — Centroid Speed and Spatial Heuristics</strong></summary>
+
+**Commit:** [60defaae](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/60defaae6c993f1306cf4d460bde992cbd8418ae)
+
+Introduced centroid displacement speed to separate Walking from Immobile:
+
+$$v = \frac{\sqrt{(cx_t - cx_{t-1})^2 + (cy_t - cy_{t-1})^2}}{\Delta t}$$
+
+Also mapped arena walls and holes as geometric zones. Functional but fragile — subtle posture changes bypassed the rules.
+</details>
+
+<details>
+<summary><strong>Phase 4 — RNN Attempt and Architectural Limits</strong></summary>
+
+**Commit:** [b9b8b741](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/b9b8b741c3bdede00d62269d13e417b5c398bcdd)
+
+Designed and implemented a 2-layer LSTM to analyse the temporal sequence of bounding box positions. Three structural problems prevented it from working:
+
+1. **Circular supervision** — training data came from the detector's own CSV outputs, so the RNN learned YOLO's errors, not real behavior.
+2. **Insufficient features** — bbox-only features (`cx, cy, w, h, speed`) carry less information than the spatial rules already in place.
+3. **Class mismatch** — the RNN's output vocabulary (`rat_climbing`, `rat_horizontal`, …) did not include `walking`, `immobile`, `sniffing`.
+
+The RNN never contributed to any detection output. Its code is archived for reference.
+
+![Phase 4 RNN-era detection output](media_original/DemoGit_phase4.gif)
+
+> *resultado_final.mp4 — YOLOv8 bounding box detection with RNN temporal classifier active. Minute 3, 30 s segment.*
+</details>
+
+<details>
+<summary><strong>Phase 5 — YOLOv8-Pose + Keypoint Spatial Logic</strong></summary>
+
+Switched from bounding-box detection to pose estimation. YOLOv8-Pose adds 3 skeletal keypoints (Snout · Spine · Tail) to every detection.
+
+**Impact:** behaviors that previously required learned temporal context can now be derived from geometry:
+- Snout inside hole radius → `head_dipping` (exact rule, no training needed)
+- Snout within 30 px of inner wall → `sniffing`
+- Bbox extending beyond inner limits → `climbing`
+
+Sub-phases 5b–5e covered: sharpness-split evaluation, offline geometric augmentation (×4.4, geometry-only), empirical validation on real video, iterative refinement of speed thresholds and climbing confirmation logic.
+
+**Final dataset:** 1 101 training images from 248 originals. Class imbalance reduced from 5.8:1 to 1.48:1.
+</details>
+
+<details>
+<summary><strong>Phase 5f — RNN Removal and Label Stabilizer</strong></summary>
+
+Formally removed the RNN from the active pipeline. The only genuine value it could have added was **temporal smoothing** — preventing single-frame label flickers.
+
+This is now handled by `_LabelStabilizer`: a deterministic hysteresis filter that requires a new label to appear for ≥ 8 consecutive frames (~0.27 s at 30 fps) before replacing the active label. The 8-frame threshold matches the minimum "behavioral bout" duration defined in Open Field Test ethology literature.
+
+No training data, no model file, no warmup delay. The filter is interpretable and deterministic.
+</details>
+
+<details>
+<summary><strong>Phase 6 — Model Selection and Pipeline v3</strong></summary>
+
+Two candidates: **exp8** (mAP50=0.82, Recall=0.887) and **exp9** (mAP50=0.87, Recall=0.795).
+
+Despite exp9's higher aggregate mAP50, visual validation revealed it lost 10.5 % of climbing detections and 5.7 % of grooming detections compared to exp8 on the same test video. **Aggregate metrics can hide per-class degradation** — visual validation on real video is non-negotiable.
+
+exp8 was selected as the active model. Three post-processing improvements were applied (Pipeline v3):
+- `conf_threshold` lowered 0.25 → 0.18 to recover minority class detections
+- Climbing confirmation changed from snout-based to bbox-based (a rat can climb with its head pointing inward)
+- `_LabelStabilizer` added (8-frame hysteresis)
+
+Result: detection rate 92.1 %, climbing +13.4 pp over exp9 on the same test video.
+
+![Pipeline v3 detection output](media_original/DemoGit_detection.gif)
+
+> *testRata5.mp4 — exp8 model + pipeline v3. Bounding box + behavior label + calibrated zone overlay (inner wall boundary + hole markers). 30 s segment from minute 5: head dipping, walking, sniffing, climbing and grooming.*
+</details>
 
 ---
 
@@ -171,53 +269,6 @@ Overall: the animal shows an **active coping style with strong olfactory focus**
 
 ---
 
-## Project Structure
-
-```text
-Computer-Vision-Mice-Tracking/
-├── datasets/
-│   ├── train/images/        # 1 101 training images (248 original + ×4.4 aug)
-│   ├── valid/images/        # 48 validation images
-│   ├── test/images/         # 23 test images
-│   ├── data.yaml            # YOLO config (kpt_shape=[3,3], nc=5)
-│   └── coords.json          # Calibration: outer wall, inner wall, 4 holes
-├── media_original/
-│   ├── poses.png                  # Reference: 5 training posture classes
-│   ├── trajectory_result.png      # testRata5 — snout trajectory over arena template
-│   ├── heatmap_result.png         # testRata5 — dwell-time heat map (blue→red)
-│   ├── DemoGit_rat.gif            # Phase 2 demo — bounding box detection
-│   ├── DemoGit_phase4.gif         # Phase 4 demo — YOLO + RNN classifier
-│   └── DemoGit_detection.gif      # Phase 6 demo — full pipeline v3 overlay
-├── models/
-│   ├── yolov8s-pose.pt      # Base pretrained model (Ultralytics)
-│   └── yolo_ratas.pt        # Trained model — auto-copied after training
-├── outputs/
-│   ├── detections/          # Per-run results: annotated video + CSV + Excel + trajectory
-│   └── reports/             # Dataset quality report (pre-augmentation)
-├── runs/train/              # YOLO training runs (weights, metrics, plots)
-└── scripts/
-    ├── main_model.py        # Interactive entry point (menu)
-    ├── config/
-    │   ├── config.py        # Central config: Paths, TrainParams, DetectParams
-    │   └── interfaces.py    # BaseModule abstract class
-    ├── calibration/
-    │   ├── calibrator.py        # ZoneCalibrator — interactive video calibration
-    │   └── calibrator_image.py  # ImageCalibrator — static image calibration
-    ├── detection/
-    │   ├── detector.py      # RatDetector — orchestrates YOLO + classifier + writers
-    │   └── trainer.py       # YOLOTrainer — geometric augmentation only
-    ├── spatial/
-    │   └── spatial.py       # SpatialAnalyzer — dipping, sniffing, wall checks
-    ├── behavior/
-    │   └── behavior_classifier.py  # BehaviorClassifier + _LabelStabilizer
-    ├── output/
-    │   └── writers.py       # VideoOutput + CsvOutput — persistence only
-    └── utils/
-        └── stats_generator.py   # Excel report + trajectory image
-```
-
----
-
 ## Installation
 
 ### Prerequisites
@@ -272,98 +323,47 @@ Each run creates a folder `outputs/detections/{stem}_{datetime}/` containing:
 
 ---
 
-## Project Evolution (ADR)
+## Project Structure
 
-The project went through 6 iterative phases. Each phase is linked to the commit where it was implemented.
-
-<details>
-<summary><strong>Phase 1 — Base Detection and Overfitting Control</strong></summary>
-
-**Commit:** [17050d38](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/17050d38f900f684169ed35e07098b993205c43e)
-
-Standard YOLOv8 trained on a large frame-extracted dataset. Immediate overfitting — high visual similarity between frames caused the model to memorise background rather than learn posture. Fixed by drastically reducing dataset size and applying geometric augmentation only (no color changes — the environment is always the same white arena).
-</details>
-
-<details>
-<summary><strong>Phase 2 — Behavior Labeling and CNN Limitations</strong></summary>
-
-**Commit:** [a3c817d7](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/a3c817d7a1edca2046258149519fc6171b413144)
-
-Added 5 behavior classes. Found that Walking and Immobile are visually identical to a CNN — both produce the same horizontal bounding box. A single frame carries no temporal information.
-
-![bounding box demo](media_original/DemoGit_rat.gif)
-</details>
-
-<details>
-<summary><strong>Phase 3 — Centroid Speed and Spatial Heuristics</strong></summary>
-
-**Commit:** [60defaae](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/60defaae6c993f1306cf4d460bde992cbd8418ae)
-
-Introduced centroid displacement speed to separate Walking from Immobile:
-
-$$v = \frac{\sqrt{(cx_t - cx_{t-1})^2 + (cy_t - cy_{t-1})^2}}{\Delta t}$$
-
-Also mapped arena walls and holes as geometric zones. Functional but fragile — subtle posture changes bypassed the rules.
-</details>
-
-<details>
-<summary><strong>Phase 4 — RNN Attempt and Architectural Limits</strong></summary>
-
-**Commit:** [b9b8b741](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/b9b8b741c3bdede00d62269d13e417b5c398bcdd)
-
-Designed and implemented a 2-layer LSTM to analyse the temporal sequence of bounding box positions. Three structural problems prevented it from working:
-
-1. **Circular supervision** — training data came from the detector's own CSV outputs, so the RNN learned YOLO's errors, not real behavior.
-2. **Insufficient features** — bbox-only features (`cx, cy, w, h, speed`) carry less information than the spatial rules already in place.
-3. **Class mismatch** — the RNN's output vocabulary (`rat_climbing`, `rat_horizontal`, …) did not include `walking`, `immobile`, `sniffing`.
-
-The RNN never contributed to any detection output. Its code is archived for reference.
-
-![Phase 4 RNN-era detection output](media_original/DemoGit_phase4.gif)
-
-> *resultado_final.mp4 — YOLOv8 bounding box detection with RNN temporal classifier active. Minute 3, 30 s segment.*
-</details>
-
-<details>
-<summary><strong>Phase 5 — YOLOv8-Pose + Keypoint Spatial Logic</strong></summary>
-
-Switched from bounding-box detection to pose estimation. YOLOv8-Pose adds 3 skeletal keypoints (Snout · Spine · Tail) to every detection.
-
-**Impact:** behaviors that previously required learned temporal context can now be derived from geometry:
-- Snout inside hole radius → `head_dipping` (exact rule, no training needed)
-- Snout within 30 px of inner wall → `sniffing`
-- Bbox extending beyond inner limits → `climbing`
-
-Sub-phases 5b–5e covered: sharpness-split evaluation, offline geometric augmentation (×4.4, geometry-only), empirical validation on real video, iterative refinement of speed thresholds and climbing confirmation logic.
-
-**Final dataset:** 1 101 training images from 248 originals. Class imbalance reduced from 5.8:1 to 1.48:1.
-</details>
-
-<details>
-<summary><strong>Phase 5f — RNN Removal and Label Stabilizer</strong></summary>
-
-Formally removed the RNN from the active pipeline. The only genuine value it could have added was **temporal smoothing** — preventing single-frame label flickers.
-
-This is now handled by `_LabelStabilizer`: a deterministic hysteresis filter that requires a new label to appear for ≥ 8 consecutive frames (~0.27 s at 30 fps) before replacing the active label. The 8-frame threshold matches the minimum "behavioral bout" duration defined in Open Field Test ethology literature.
-
-No training data, no model file, no warmup delay. The filter is interpretable and deterministic.
-</details>
-
-<details>
-<summary><strong>Phase 6 — Model Selection and Pipeline v3</strong></summary>
-
-Two candidates: **exp8** (mAP50=0.82, Recall=0.887) and **exp9** (mAP50=0.87, Recall=0.795).
-
-Despite exp9's higher aggregate mAP50, visual validation revealed it lost 10.5 % of climbing detections and 5.7 % of grooming detections compared to exp8 on the same test video. **Aggregate metrics can hide per-class degradation** — visual validation on real video is non-negotiable.
-
-exp8 was selected as the active model. Three post-processing improvements were applied (Pipeline v3):
-- `conf_threshold` lowered 0.25 → 0.18 to recover minority class detections
-- Climbing confirmation changed from snout-based to bbox-based (a rat can climb with its head pointing inward)
-- `_LabelStabilizer` added (8-frame hysteresis)
-
-Result: detection rate 92.1 %, climbing +13.4 pp over exp9 on the same test video.
-
-![Pipeline v3 detection output](media_original/DemoGit_detection.gif)
-
-> *testRata5.mp4 — exp8 model + pipeline v3. Bounding box + behavior label + calibrated zone overlay (inner wall boundary + hole markers). 30 s segment from minute 5: head dipping, walking, sniffing, climbing and grooming.*
-</details>
+```text
+Computer-Vision-Mice-Tracking/
+├── datasets/
+│   ├── train/images/        # 1 101 training images (248 original + ×4.4 aug)
+│   ├── valid/images/        # 48 validation images
+│   ├── test/images/         # 23 test images
+│   ├── data.yaml            # YOLO config (kpt_shape=[3,3], nc=5)
+│   └── coords.json          # Calibration: outer wall, inner wall, 4 holes
+├── media_original/
+│   ├── poses.png                  # Reference: 5 training posture classes
+│   ├── trajectory_result.png      # testRata5 — snout trajectory over arena template
+│   ├── heatmap_result.png         # testRata5 — dwell-time heat map (blue→red)
+│   ├── DemoGit_rat.gif            # Phase 2 demo — bounding box detection
+│   ├── DemoGit_phase4.gif         # Phase 4 demo — YOLO + RNN classifier
+│   └── DemoGit_detection.gif      # Phase 6 demo — full pipeline v3 overlay
+├── models/
+│   ├── yolov8s-pose.pt      # Base pretrained model (Ultralytics)
+│   └── yolo_ratas.pt        # Trained model — auto-copied after training
+├── outputs/
+│   ├── detections/          # Per-run results: annotated video + CSV + Excel + trajectory
+│   └── reports/             # Dataset quality report (pre-augmentation)
+├── runs/train/              # YOLO training runs (weights, metrics, plots)
+└── scripts/
+    ├── main_model.py        # Interactive entry point (menu)
+    ├── config/
+    │   ├── config.py        # Central config: Paths, TrainParams, DetectParams
+    │   └── interfaces.py    # BaseModule abstract class
+    ├── calibration/
+    │   ├── calibrator.py        # ZoneCalibrator — interactive video calibration
+    │   └── calibrator_image.py  # ImageCalibrator — static image calibration
+    ├── detection/
+    │   ├── detector.py      # RatDetector — orchestrates YOLO + classifier + writers
+    │   └── trainer.py       # YOLOTrainer — geometric augmentation only
+    ├── spatial/
+    │   └── spatial.py       # SpatialAnalyzer — dipping, sniffing, wall checks
+    ├── behavior/
+    │   └── behavior_classifier.py  # BehaviorClassifier + _LabelStabilizer
+    ├── output/
+    │   └── writers.py       # VideoOutput + CsvOutput — persistence only
+    └── utils/
+        └── stats_generator.py   # Excel report + trajectory image
+```
