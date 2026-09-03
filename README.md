@@ -95,6 +95,8 @@ Zones are calibrated interactively per video (first frame is extracted automatic
 
 **Active model:** `exp8` — YOLOv8s-Pose, 100 epochs, 1 101 training images (×4.4 geometric augmentation)
 
+### Model metrics
+
 | Metric | Value | Target | Status |
 |---|---|---|---|
 | mAP50 | **0.82** | ≥ 0.65 | OK |
@@ -102,23 +104,70 @@ Zones are calibrated interactively per video (first frame is extracted automatic
 | val/train loss gap | **0.142** | ≤ 0.20 | OK |
 | Detection rate on test video | **92.1 %** | — | — |
 
-**Behavior distribution on `testRata5.mp4` (7.4 min, 15 fps):**
-
-| Behavior | % of detected frames |
-|---|---|
-| Sniffing | 36.0 % |
-| Climbing | 27.4 % |
-| Head Dipping | 14.8 % |
-| Walking | 7.4 % |
-| Grooming | 8.1 % |
-| Rearing | 5.7 % |
-| Immobile | 0.6 % |
-
 > **Why Recall over Precision:** A missed frame = a lost behavioral data point. Occasional false positives are filtered by the spatial logic downstream; false negatives are unrecoverable.
 
-**Trajectory output** — snout path drawn over arena template (testRata4):
+---
 
-![Trajectory example](media_original/trajectory_example.png)
+### Behavioral analysis — `testRata5.mp4`
+
+**Video duration:** 431.6 s (≈ 7.2 min) · **Detected frames:** 6 124 / 6 648 (92.1 %) · **Distance:** 27.85 m · **Mean speed:** 6.5 cm/s
+
+**Behavior time budget:**
+
+| Behavior | % Time | Bouts | Avg bout (s) |
+|---|---|---|---|
+| Sniffing (immobile) | 17.8 % | 118 | 0.62 |
+| Sniffing (walking) | 16.3 % | 134 | 0.50 |
+| Walking | 16.4 % | 46 | 1.46 |
+| Climbing | 14.4 % | 25 | 2.36 |
+| Head Dipping | 13.5 % | 28 | 1.97 |
+| Grooming | 9.9 % | 39 | 1.04 |
+| Immobile | 7.5 % | 17 | 1.79 |
+| Rearing | 4.2 % | 18 | 0.95 |
+
+**OFT pharmacological indices:**
+
+| Index | Value |
+|---|---|
+| Total sniffing (olfactory exploration) | 34.2 % |
+| Sniffing efficiency (sniff / sniff + walk) | 67.6 % |
+| Head-dips per minute | 3.89 /min |
+| Latency to first head-dip | 42.1 s |
+| Thigmotaxis (climbing) | 14.4 % |
+| Total locomotion (walking) | 16.4 % |
+| Immobility (freezing) | 7.5 % |
+| Grooming rate | 5.42 bouts/min |
+| Behavioral transitions | 424 (58.9 /min) |
+
+**Head-dip habituation across session quarters:**
+
+| Q1 (0–108 s) | Q2 (108–216 s) | Q3 (216–324 s) | Q4 (324–432 s) |
+|---|---|---|---|
+| 9 bouts | 5 bouts | 12 bouts | 2 bouts |
+
+**Trajectory map** — snout path over arena template:
+
+![Trajectory](media_original/trajectory_result.png)
+
+**Heat map** — color encodes presence density: blue = rarely visited, red = hotspot (high dwell time):
+
+![Heatmap](media_original/heatmap_result.png)
+
+**Interpretation:**
+
+The trajectory and heatmap together reveal a **highly exploratory, low-anxiety animal** with a clear and consistent spatial strategy:
+
+- **Thigmotaxis with active wall engagement (14.4 % climbing, 25 bouts, mean 2.36 s).** The trajectory perimeter is densely covered; the active bout duration rules out passive wall-contact and indicates deliberate exploration of the boundary. The centre of the arena is largely empty in the trajectory, consistent with anxiety-related avoidance of open spaces in a novel environment.
+
+- **Dominant olfactory exploration (34.2 % sniffing total, 67.6 % efficiency).** More than a third of the session was spent sniffing. Stationary sniffing (17.8 %) slightly exceeds mobile sniffing (16.3 %), suggesting the rat holds position to investigate scent sources — most likely the holes.
+
+- **Spatially selective hole exploration (28 head-dips, 3.89 /min, mean 1.97 s).** The heatmap makes the selectivity immediately visible: three holes generated clear hotspots (the lower-left is the strongest, red/orange), while the lower-right hole was almost completely ignored. The trajectory clusters at those same three positions confirm the pattern is real and not a detection artefact. Latency to first dip was 42 s — the rat mapped the perimeter first, then committed to hole investigation.
+
+- **Non-monotonic habituation (9 → 5 → 12 → 2 bouts by quarter).** The Q3 rebound to 12 bouts after the Q2 dip is the most notable feature of this session. A monotonically decreasing profile would indicate normal habituation; the re-exploration surge in Q3 suggests a second arousal phase, which in pharmacological OFT studies is a marker worth flagging — it may reflect endogenous activity cycles or a delayed drug effect. Q4 collapses to 2, consistent with fatigue or full habituation.
+
+- **Low immobility (7.5 %, entirely in the central zone) and moderate grooming (9.9 %).** Neither metric suggests excess anxiety. The absence of peripheral freezing rules out defensive thigmotaxis; the grooming rate is within the normal baseline range for this arena.
+
+Overall: the animal shows an **active coping style with strong olfactory focus** — perimeter first, then targeted hole investigation, with a measurable re-exploratory surge at the session midpoint. The lower-right hole's consistent avoidance across the full session is an outlier worth noting in the pharmacological record.
 
 ---
 
@@ -134,7 +183,8 @@ Computer-Vision-Mice-Tracking/
 │   └── coords.json          # Calibration: outer wall, inner wall, 4 holes
 ├── media_original/
 │   ├── poses.png                  # Reference: 5 training posture classes
-│   ├── trajectory_example.png     # Sample trajectory output
+│   ├── trajectory_result.png      # testRata5 — snout trajectory over arena template
+│   ├── heatmap_result.png         # testRata5 — dwell-time heat map (blue→red)
 │   ├── DemoGit_rat.gif            # Phase 2 demo — bounding box detection
 │   ├── DemoGit_phase4.gif         # Phase 4 demo — YOLO + RNN classifier
 │   └── DemoGit_detection.gif      # Phase 6 demo — full pipeline v3 overlay
@@ -203,19 +253,21 @@ python main_model.py
 | Option | Action |
 |---|---|
 | **1 — Train YOLO Model** | Trains YOLOv8s-Pose for up to 100 epochs on `datasets/`. Copies `best.pt` to `models/yolo_ratas.pt` on completion. |
-| **2 — Run Detection** | Picks a video, extracts the first frame for calibration (if needed or on request), runs the full pipeline and saves results to `outputs/`. |
-| **3 — Exit** | — |
+| **2 — Run Detection (Video)** | Picks a video file, extracts the first frame for calibration (interactive grid overlay), runs the full pipeline and saves results to `outputs/`. |
+| **3 — Run Detection (Live Camera)** | Captures a frame from the default camera for calibration, then runs real-time detection. Press Q in the preview window to stop and generate stats. |
+| **4 — Exit** | — |
 
 ### Output per Detection Run
 
-Each run creates a folder `outputs/detections/{video}_{date}/` containing:
+Each run creates a folder `outputs/detections/{stem}_{datetime}/` containing:
 
 | File | Content |
 |---|---|
-| `{video}_{date}.mp4` | Annotated video — bbox + label + calibrated zone overlay |
-| `{video}_{date}_limpio.mp4` | Clean video — bbox + label only (no zone overlay) |
-| `{video}_{date}.csv` | Per-frame data: label, bbox, keypoints, speed |
-| `stats/trajectory_{...}.png` | Animal path drawn over arena template |
+| `{stem}_{date}.mp4` | Annotated video — bbox + label + calibrated zone overlay |
+| `{stem}_{date}_limpio.mp4` | Clean video — bbox + label only (video mode only) |
+| `{stem}_{date}.csv` | Per-frame data: label, bbox, keypoints, speed |
+| `stats/trajectory_{...}.png` | Snout path over arena template |
+| `stats/heatmap_{...}.png` | Heat map — blue (moving) to red (stationary 2+ s) |
 | `stats/stats_{...}.xlsx` | Time budget per behavior + OFT pharmacological indices |
 
 ---

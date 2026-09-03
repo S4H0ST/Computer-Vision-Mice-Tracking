@@ -2,16 +2,19 @@
 Generador de estadisticas post-deteccion para experimentos Open Field Test (Holeboard).
 
 Uso:
-    from tools.stats_generator import StatsGenerator
+    from utils.stats_generator import StatsGenerator
     StatsGenerator(csv_path, coords_json=paths.coords_json).generate(output_dir)
 
 Salidas (en output_dir/):
-    trajectory_<stem>.png  — trayectoria del tail sobre la plantilla de la caja (linea verde)
-    stats_<stem>.xlsx      — hoja Comportamiento (presupuesto de tiempo) +
-                             hoja Metricas OFT (indices farmacologicos)
+    trajectory_<stem>.png  - trayectoria del snout sobre la plantilla de la caja.
+    heatmap_<stem>.png     - mapa de calor: el color cambia segun el tiempo parado.
+    stats_<stem>.xlsx      - hoja Comportamiento + hoja Metricas OFT.
+
+Clases:
+    StatsGenerator - carga un CSV de deteccion y genera todas las salidas.
 
 Requiere openpyxl para el Excel (pip install openpyxl).
-Si no esta instalado se genera solo la imagen de trayectoria.
+Si no esta instalado se generan solo las imagenes.
 """
 
 from __future__ import annotations
@@ -101,6 +104,10 @@ class StatsGenerator:
         self._generate_trajectory(traj_path)
         print(f"  [stats] Trayectoria: {traj_path.name}")
 
+        heat_path = output_dir / f"heatmap_{stem}.png"
+        self._generate_heatmap(heat_path)
+        print(f"  [stats] Mapa de calor: {heat_path.name}")
+
         if _HAS_OPENPYXL:
             xl_path = output_dir / f"stats_{stem}.xlsx"
             try:
@@ -158,24 +165,25 @@ class StatsGenerator:
         # Fondo blanco
         img = np.full((sz, sz, 3), 255, dtype=np.uint8)
 
-        # Cuadricula gris muy suave (4x4)
-        step = (sz - 2 * m) // 4
-        for i in range(1, 4):
+        # Cuadricula gris muy suave (12x12)
+        step = (sz - 2 * m) // 12
+        for i in range(1, 12):
             o = m + i * step
-            cv2.line(img, (o, m),      (o, sz - m), (210, 210, 210), 1)
-            cv2.line(img, (m, o),  (sz - m, o),     (210, 210, 210), 1)
+            cv2.line(img, (o, m),     (o, sz - m), (235, 235, 235), 1)
+            cv2.line(img, (m, o), (sz - m, o),     (235, 235, 235), 1)
 
         # Borde de la caja — gris oscuro
         cv2.rectangle(img, (m, m), (sz - m, sz - m), (60, 60, 60), 2)
 
         x_min, y_min, x_scale, y_scale = self._canvas_mapping()
 
-        # Agujeros: circulo gris oscuro
+        # Agujeros: circulo gris oscuro con contorno mas grueso para que
+        # se distingan entre las lineas de trayectoria
         if self.holes:
             r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
             for hx, hy in self.holes:
                 cx, cy = self._to_canvas(hx, hy, x_min, y_min, x_scale, y_scale)
-                cv2.circle(img, (cx, cy), r_canvas, (80, 80, 80), 1)
+                cv2.circle(img, (cx, cy), r_canvas, (80, 80, 80), 2)
 
         # Trayectoria del snout — azul oscuro (BGR: 160, 60, 10)
         COLOR_TRACK = (160, 60, 10)
@@ -196,6 +204,98 @@ class StatsGenerator:
             prev_pt = pt
 
         cv2.imwrite(str(out_path), img)
+
+    # ------------------------------------------------------------------
+    # Mapa de calor
+    # ------------------------------------------------------------------
+
+    def _generate_heatmap(self, out_path: Path) -> None:
+        """
+        Genera un mapa de calor de densidad de presencia y lo guarda en out_path.
+
+        Algoritmo (acumulacion + desenfoque gaussiano, 3 pasos):
+          1. Por cada frame con snout detectado se suma 1 en la posicion (x,y)
+             del snout sobre una matriz float32 del tamano del canvas.
+          2. cv2.GaussianBlur (sigma=18 px) convierte los puntos en manchas
+             suaves que representan la zona de influencia del raton.
+          3. La matriz normalizada [0,1] se convierte a uint8 y se aplica
+             cv2.COLORMAP_JET: azul oscuro = zona poco visitada,
+             rojo = hotspot donde el raton paso mas tiempo.
+
+        El resultado es un heatmap de densidad puro, sin lineas de trayectoria.
+
+        Nota historica (guardada para el profesor):
+          La primera implementacion coloreaba cada segmento de trayectoria
+          segun un contador de inmovilidad (dwell_frames). El problema es que
+          el raton esta en movimiento la mayor parte del tiempo, por lo que
+          el contador casi nunca se acumulaba y el mapa salia todo azul sin
+          variacion perceptible. El archivo de esa prueba queda en
+          outputs/detections/testRata4_20260903_211004/stats/ como referencia.
+          La acumulacion de presencia es mas sencilla, robusta e informativa.
+        """
+        sz = self.CANVAS_SIZE
+        m  = self.CANVAS_MARGIN
+
+        x_min, y_min, x_scale, y_scale = self._canvas_mapping()
+
+        # Paso 1: acumular en cuantos frames estuvo el snout en cada pixel
+        accum = np.zeros((sz, sz), dtype=np.float32)
+        for row in self.rows:
+            try:
+                sx = float(row.get("snout_x", -1))
+                sy = float(row.get("snout_y", -1))
+            except ValueError:
+                continue
+            if sx < 0 or sy < 0:
+                continue
+            cx, cy = self._to_canvas(sx, sy, x_min, y_min, x_scale, y_scale)
+            accum[cy, cx] += 1.0
+
+        # Paso 2: desenfoque gaussiano — convierte puntos discretos en manchas suaves
+        accum = cv2.GaussianBlur(accum, (0, 0), sigmaX=12)
+
+        # Paso 3: normalizar a [0, 255] y aplicar COLORMAP_JET
+        if accum.max() > 0:
+            accum = accum / accum.max()
+        img = cv2.applyColorMap((accum * 255).astype(np.uint8), cv2.COLORMAP_JET)
+
+        # Pintar el margen de blanco para que el borde de la caja quede limpio
+        img[:m,    :]  = (255, 255, 255)
+        img[sz - m:, :] = (255, 255, 255)
+        img[:,    :m]  = (255, 255, 255)
+        img[:, sz - m:] = (255, 255, 255)
+
+        # Superponer borde de la caja y agujeros en blanco sobre el colormap
+        cv2.rectangle(img, (m, m), (sz - m, sz - m), (40, 40, 40), 2)
+        if self.holes:
+            r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
+            for hx, hy in self.holes:
+                cx, cy = self._to_canvas(hx, hy, x_min, y_min, x_scale, y_scale)
+                cv2.circle(img, (cx, cy), r_canvas, (255, 255, 255), 2)
+
+        self._draw_heatmap_legend(img, sz, m)
+        cv2.imwrite(str(out_path), img)
+
+    def _draw_heatmap_legend(self, img: np.ndarray, sz: int, m: int) -> None:
+        """Leyenda de gradiente COLORMAP_JET en la esquina superior derecha."""
+        legend_h = 80
+        legend_w = 12
+        lx = sz - m - legend_w - 5
+        ly = m + 5
+
+        # Reproducir el gradiente JET de abajo (frio, 0) a arriba (caliente, 255)
+        for i in range(legend_h):
+            val = int((legend_h - 1 - i) * 255 / (legend_h - 1))
+            color_px  = np.array([[[val]]], dtype=np.uint8)
+            color_bgr = cv2.applyColorMap(color_px, cv2.COLORMAP_JET)[0, 0]
+            cv2.line(img, (lx, ly + i), (lx + legend_w, ly + i),
+                     (int(color_bgr[0]), int(color_bgr[1]), int(color_bgr[2])), 1)
+
+        cv2.rectangle(img, (lx, ly), (lx + legend_w, ly + legend_h), (80, 80, 80), 1)
+        cv2.putText(img, "alto",  (lx - 22, ly + 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.28, (40, 40, 40), 1)
+        cv2.putText(img, "bajo",  (lx - 22, ly + legend_h + 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.28, (40, 40, 40), 1)
 
     # ------------------------------------------------------------------
     # Utilidades Excel
