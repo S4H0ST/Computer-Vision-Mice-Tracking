@@ -38,7 +38,7 @@ QFrame#sidebar QPushButton:disabled {
     color: #4a5568;
 }
 QPushButton#btn_video, QPushButton#btn_camera {
-    background-color: #2980b9;
+    background-color: #CB0017;
     color: white;
     border: none;
     padding: 10px 20px;
@@ -47,7 +47,7 @@ QPushButton#btn_video, QPushButton#btn_camera {
     min-height: 36px;
 }
 QPushButton#btn_video:hover, QPushButton#btn_camera:hover {
-    background-color: #3498db;
+    background-color: #E5001C;
 }
 QPushButton#btn_stop {
     background-color: #c0392b;
@@ -171,7 +171,7 @@ QListWidget#list_result_runs {
     font-size: 12px;
 }
 QListWidget#list_result_runs::item:selected {
-    background-color: #2980b9;
+    background-color: #CB0017;
     color: white;
 }
    </string>
