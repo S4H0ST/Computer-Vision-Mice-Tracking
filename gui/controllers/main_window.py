@@ -22,7 +22,7 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 
-from PyQt5.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QListWidgetItem
+from PyQt5.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QListWidgetItem, QSizePolicy
 from PyQt5.QtCore import Qt, QTimer, pyqtSlot
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5 import uic
@@ -81,7 +81,6 @@ _TRANSLATIONS: list[tuple] = [
     ("s_lbl_beh_dipping",     "setText",  "Asomando:",                        "Head-dip:"),
     ("btn_stop",              "setText",  "Cancelar",                         "Cancel"),
     ("lbl_results_title",     "setText",  "Resultados de la Deteccion",       "Detection Results"),
-    ("grp_browse_results",    "setTitle", "Explorar Resultados",              "Browse Results"),
     ("btn_browse_results",    "setText",  "Seleccionar Carpeta",              "Select Folder"),
     ("grp_files",             "setTitle", "Archivos Generados",               "Generated Files"),
     ("lbl_file_excel",        "setText",  "Estadisticas (.xlsx)",             "Statistics (.xlsx)"),
@@ -155,7 +154,12 @@ class MainWindow(QMainWindow):
 
         self._setup_model_status()
         self._connect_signals()
-        self._apply_language()  # default English
+        # Evitar bucle de retroalimentacion donde el pixmap aumenta el sizeHint del label
+        self.lbl_frame_display.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.lbl_trajectory_img.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.lbl_heatmap_img.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.statusbar.setVisible(False)
+        self._apply_language()  # idioma por defecto: ingles
 
     # ------------------------------------------------------------------
     # Configuracion inicial

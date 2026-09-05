@@ -605,16 +605,10 @@ QListWidget#list_result_runs::item:selected {
         <item>
          <layout class="QHBoxLayout" name="calibMainLayout">
           <property name="spacing">
-           <number>12</number>
+           <number>0</number>
           </property>
           <item>
            <widget class="QLabel" name="lbl_frame_display">
-            <property name="minimumSize">
-             <size>
-              <width>540</width>
-              <height>340</height>
-             </size>
-            </property>
             <property name="text">
              <string>Calibration frame</string>
             </property>
@@ -624,10 +618,35 @@ QListWidget#list_result_runs::item:selected {
            </widget>
           </item>
           <item>
-           <layout class="QVBoxLayout" name="calibControlsLayout">
-            <property name="spacing">
-             <number>8</number>
+           <widget class="QWidget" name="calibControlsContainer">
+            <property name="minimumSize">
+             <size>
+              <width>200</width>
+              <height>0</height>
+             </size>
             </property>
+            <property name="maximumSize">
+             <size>
+              <width>215</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <layout class="QVBoxLayout" name="calibControlsLayout">
+             <property name="spacing">
+              <number>5</number>
+             </property>
+             <property name="leftMargin">
+              <number>8</number>
+             </property>
+             <property name="topMargin">
+              <number>6</number>
+             </property>
+             <property name="rightMargin">
+              <number>8</number>
+             </property>
+             <property name="bottomMargin">
+              <number>0</number>
+             </property>
             <item>
              <widget class="QGroupBox" name="grp_exterior">
               <property name="title">
@@ -946,6 +965,7 @@ QListWidget#list_result_runs::item:selected {
              </layout>
             </item>
            </layout>
+          </widget>
           </item>
          </layout>
         </item>
@@ -1231,7 +1251,7 @@ QListWidget#list_result_runs::item:selected {
       <widget class="QWidget" name="page_results">
        <layout class="QVBoxLayout" name="resultsOuterLayout">
         <property name="spacing">
-         <number>10</number>
+         <number>8</number>
         </property>
         <property name="leftMargin">
          <number>20</number>
@@ -1245,8 +1265,12 @@ QListWidget#list_result_runs::item:selected {
         <property name="bottomMargin">
          <number>14</number>
         </property>
+        <!-- Barra superior: titulo + selector de carpeta inline -->
         <item>
          <layout class="QHBoxLayout" name="resultsTitleBar">
+          <property name="spacing">
+           <number>8</number>
+          </property>
           <item>
            <widget class="QLabel" name="lbl_results_title">
             <property name="text">
@@ -1274,61 +1298,42 @@ QListWidget#list_result_runs::item:selected {
             </property>
            </spacer>
           </item>
+          <item>
+           <widget class="QPushButton" name="btn_browse_results">
+            <property name="text">
+             <string>Select Folder</string>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>120</width>
+              <height>16777215</height>
+             </size>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_results_folder_path">
+            <property name="text">
+             <string>No folder selected</string>
+            </property>
+            <property name="maximumSize">
+             <size>
+              <width>220</width>
+              <height>16777215</height>
+             </size>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">color: #7f8c8d; font-size: 11px;</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </item>
-        <item>
-         <widget class="QGroupBox" name="grp_browse_results">
-          <property name="title">
-           <string>Browse Results</string>
-          </property>
-          <layout class="QVBoxLayout" name="browseResultsLayout">
-           <property name="spacing">
-            <number>6</number>
-           </property>
-           <item>
-            <layout class="QHBoxLayout" name="browseFolderBar">
-             <item>
-              <widget class="QPushButton" name="btn_browse_results">
-               <property name="text">
-                <string>Select Folder</string>
-               </property>
-               <property name="maximumSize">
-                <size>
-                 <width>120</width>
-                 <height>16777215</height>
-                </size>
-               </property>
-              </widget>
-             </item>
-             <item>
-              <widget class="QLabel" name="lbl_results_folder_path">
-               <property name="text">
-                <string>No folder selected</string>
-               </property>
-               <property name="styleSheet">
-                <string notr="true">color: #7f8c8d; font-size: 11px;</string>
-               </property>
-              </widget>
-             </item>
-            </layout>
-           </item>
-           <item>
-            <widget class="QListWidget" name="list_result_runs">
-             <property name="maximumSize">
-              <size>
-               <width>16777215</width>
-               <height>110</height>
-              </size>
-             </property>
-            </widget>
-           </item>
-          </layout>
-         </widget>
-        </item>
+        <!-- Area principal: pestanas imagen (izq) + panel control (der) -->
         <item>
          <layout class="QHBoxLayout" name="resultsMainLayout">
           <property name="spacing">
-           <number>20</number>
+           <number>12</number>
           </property>
           <item>
            <widget class="QTabWidget" name="tab_images">
@@ -1398,8 +1403,25 @@ QListWidget#list_result_runs::item:selected {
           <item>
            <layout class="QVBoxLayout" name="resultsPanelLayout">
             <property name="spacing">
-             <number>12</number>
+             <number>8</number>
             </property>
+            <!-- Lista de ejecuciones encontradas en la carpeta -->
+            <item>
+             <widget class="QListWidget" name="list_result_runs">
+              <property name="minimumSize">
+               <size>
+                <width>230</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>250</width>
+                <height>80</height>
+               </size>
+              </property>
+             </widget>
+            </item>
             <item>
              <widget class="QGroupBox" name="grp_files">
               <property name="title">
@@ -1569,31 +1591,14 @@ QListWidget#list_result_runs::item:selected {
               </property>
              </spacer>
             </item>
+            <item>
+             <widget class="QPushButton" name="btn_new_detection">
+              <property name="text">
+               <string>New Detection</string>
+              </property>
+             </widget>
+            </item>
            </layout>
-          </item>
-         </layout>
-        </item>
-        <item>
-         <layout class="QHBoxLayout" name="resultsBottomBar">
-          <item>
-           <spacer name="resultsBottomSpacer">
-            <property name="orientation">
-             <enum>Qt::Horizontal</enum>
-            </property>
-            <property name="sizeHint" stdset="0">
-             <size>
-              <width>40</width>
-              <height>20</height>
-             </size>
-            </property>
-           </spacer>
-          </item>
-          <item>
-           <widget class="QPushButton" name="btn_new_detection">
-            <property name="text">
-             <string>New Detection</string>
-            </property>
-           </widget>
           </item>
          </layout>
         </item>
