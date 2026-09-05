@@ -902,6 +902,19 @@ QListWidget#list_result_runs::item:selected {
              </widget>
             </item>
             <item>
+             <widget class="QLabel" name="lbl_coords_hint">
+              <property name="text">
+               <string>Default: outputs/calibration/</string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">color: #95a5a6; font-size: 9px; padding-left: 2px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QGroupBox" name="grp_output_folder">
               <property name="title">
                <string>Output Folder</string>
