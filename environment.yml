@@ -89,3 +89,4 @@ dependencies:
       - ultralytics==8.4.14
       - ultralytics-thop==2.0.18
       - urllib3==2.5.0
+      - pyqt5==5.15.11
