@@ -1008,6 +1008,16 @@ QListWidget#list_result_runs::item:selected {
           </item>
          </layout>
         </item>
+        <item>
+         <widget class="QLabel" name="lbl_calib_legend">
+          <property name="text">
+           <string/>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font-size: 11px; padding: 2px 4px;</string>
+          </property>
+         </widget>
+        </item>
        </layout>
       </widget>
 

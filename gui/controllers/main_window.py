@@ -333,35 +333,6 @@ class MainWindow(QMainWindow):
             cv2.line(overlay, (0, y), (w, y), gray, 1)
         cv2.addWeighted(overlay, 0.15, frame, 0.85, 0, frame)
 
-    def _draw_legend(self, frame: np.ndarray) -> None:
-        """Leyenda de colores en la esquina inferior izquierda del frame."""
-        if self._lang == "es":
-            items = [
-                ("Borde exterior", (0, 0, 255)),
-                ("Borde interior", (255, 0, 0)),
-                ("Agujeros",       (0, 255, 0)),
-            ]
-        else:
-            items = [
-                ("Exterior border", (0, 0, 255)),
-                ("Interior border", (255, 0, 0)),
-                ("Holes",           (0, 255, 0)),
-            ]
-        h = frame.shape[0]
-        x0 = 10
-        y0 = h - (len(items) * 22 + 6)
-        # Fondo semitransparente para legibilidad
-        overlay = frame.copy()
-        max_w = max(len(t) for t, _ in items) * 7 + 30
-        cv2.rectangle(overlay, (x0 - 4, y0 - 4),
-                      (x0 + max_w, h - 4), (0, 0, 0), -1)
-        cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
-        for idx, (text, color) in enumerate(items):
-            y = y0 + idx * 22
-            cv2.circle(frame, (x0 + 8, y + 7), 6, color, -1)
-            cv2.putText(frame, text, (x0 + 20, y + 12),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
-
     def _display_calib_frame(self) -> None:
         if self._calib_frame is None:
             return
@@ -403,9 +374,6 @@ class MainWindow(QMainWindow):
 
         # 3. Cuadricula sobre el frame ya escalado (lineas de 1px siempre)
         self._draw_grid(resized)
-
-        # 4. Leyenda en la esquina inferior izquierda
-        self._draw_legend(resized)
 
         rgb    = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         qimg   = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
@@ -938,12 +906,30 @@ class MainWindow(QMainWindow):
         self._update_ratio_label()
         self._update_calib_instruction()
         self._update_confirm_state()
-        self._display_calib_frame()  # refresca leyenda en el idioma correcto
+        self._update_calib_legend()
+        self._display_calib_frame()
 
         ph = "Predeterminada: outputs/detections/" if self._lang == "es" else "Default: outputs/detections/"
         self.edit_output_folder.setPlaceholderText(ph)
 
         self._update_behavior_legend()
+
+    def _update_calib_legend(self) -> None:
+        """Leyenda de colores de calibracion debajo de la imagen (fuera del frame)."""
+        if self._lang == "es":
+            items = [
+                ("#ff0000", "Borde exterior"),
+                ("#0000ff", "Borde interior"),
+                ("#00ff00", "Agujeros"),
+            ]
+        else:
+            items = [
+                ("#ff0000", "Exterior border"),
+                ("#0000ff", "Interior border"),
+                ("#00ff00", "Holes"),
+            ]
+        parts = [f'<font color="{c}">■</font> {t}' for c, t in items]
+        self.lbl_calib_legend.setText(" &nbsp;&nbsp; ".join(parts))
 
     def _update_behavior_legend(self) -> None:
         """Construye la leyenda de colores de comportamiento en el idioma activo."""
