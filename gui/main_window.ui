@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1100</width>
-    <height>700</height>
+    <width>1200</width>
+    <height>620</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -611,8 +611,8 @@ QListWidget#list_result_runs::item:selected {
            <widget class="QLabel" name="lbl_frame_display">
             <property name="minimumSize">
              <size>
-              <width>520</width>
-              <height>380</height>
+              <width>540</width>
+              <height>340</height>
              </size>
             </property>
             <property name="text">
@@ -1031,7 +1031,7 @@ QListWidget#list_result_runs::item:selected {
             <property name="minimumSize">
              <size>
               <width>560</width>
-              <height>400</height>
+              <height>360</height>
              </size>
             </property>
             <property name="text">
@@ -1611,7 +1611,7 @@ QListWidget#list_result_runs::item:selected {
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1100</width>
+     <width>1200</width>
      <height>21</height>
     </rect>
    </property>

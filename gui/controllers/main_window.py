@@ -224,6 +224,9 @@ class MainWindow(QMainWindow):
         self._reset_calib_state()
         self._load_calib_frame_from_video()
         self.stackedWidget.setCurrentIndex(1)
+        # Renderizar DESPUES de que el layout asigne el tamano final al label
+        # (evita el drift del primer clic cuando el widget aun no esta pintado)
+        QTimer.singleShot(60, self._display_calib_frame)
 
     def _on_select_camera(self) -> None:
         cap = cv2.VideoCapture(0)
@@ -238,8 +241,8 @@ class MainWindow(QMainWindow):
         self._video_source = 0
         self._reset_calib_state()
         self._calib_frame = frame
-        self._display_calib_frame()
         self.stackedWidget.setCurrentIndex(1)
+        QTimer.singleShot(60, self._display_calib_frame)
 
     # ------------------------------------------------------------------
     # Calibracion
@@ -274,38 +277,78 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Error", "Could not read the first frame of the video.")
             return
         self._calib_frame = frame
-        self._display_calib_frame()
+
+    def _draw_grid(self, frame: np.ndarray, divisions: int = 12) -> None:
+        """Cuadricula semitransparente sobre el frame para facilitar la alineacion de puntos."""
+        h, w = frame.shape[:2]
+        overlay = frame.copy()
+        gray = (210, 210, 210)
+        for i in range(1, divisions):
+            x = int(w * i / divisions)
+            cv2.line(overlay, (x, 0), (x, h), gray, 1)
+        for j in range(1, divisions):
+            y = int(h * j / divisions)
+            cv2.line(overlay, (0, y), (w, y), gray, 1)
+        cv2.addWeighted(overlay, 0.15, frame, 0.85, 0, frame)
+
+    def _draw_legend(self, frame: np.ndarray) -> None:
+        """Leyenda de colores en la esquina inferior izquierda del frame."""
+        if self._lang == "es":
+            items = [
+                ("Borde exterior", (0, 0, 255)),
+                ("Borde interior", (255, 0, 0)),
+                ("Agujeros",       (0, 255, 0)),
+            ]
+        else:
+            items = [
+                ("Exterior border", (0, 0, 255)),
+                ("Interior border", (255, 0, 0)),
+                ("Holes",           (0, 255, 0)),
+            ]
+        h = frame.shape[0]
+        x0 = 10
+        y0 = h - (len(items) * 22 + 6)
+        # Fondo semitransparente para legibilidad
+        overlay = frame.copy()
+        max_w = max(len(t) for t, _ in items) * 7 + 30
+        cv2.rectangle(overlay, (x0 - 4, y0 - 4),
+                      (x0 + max_w, h - 4), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.5, frame, 0.5, 0, frame)
+        for idx, (text, color) in enumerate(items):
+            y = y0 + idx * 22
+            cv2.circle(frame, (x0 + 8, y + 7), 6, color, -1)
+            cv2.putText(frame, text, (x0 + 20, y + 12),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.42, color, 1, cv2.LINE_AA)
 
     def _display_calib_frame(self) -> None:
         if self._calib_frame is None:
             return
         frame = self._calib_frame.copy()
 
-        # Draw exterior (red)
+        # 1. Dibujar puntos sobre el frame en coordenadas originales
+        # Exterior (rojo)
         for pt in self._calib_exterior:
             cv2.circle(frame, pt, 8, (0, 0, 255), -1)
         if len(self._calib_exterior) == 2:
             xs = [p[0] for p in self._calib_exterior]
             ys = [p[1] for p in self._calib_exterior]
             cv2.rectangle(frame, (min(xs), min(ys)), (max(xs), max(ys)), (0, 0, 255), 2)
-
-        # Draw interior (blue)
+        # Interior (azul)
         for pt in self._calib_interior:
             cv2.circle(frame, pt, 8, (255, 0, 0), -1)
         if len(self._calib_interior) == 2:
             xs = [p[0] for p in self._calib_interior]
             ys = [p[1] for p in self._calib_interior]
             cv2.rectangle(frame, (min(xs), min(ys)), (max(xs), max(ys)), (255, 0, 0), 2)
-
-        # Draw holes (green)
+        # Agujeros (verde)
         for pt in self._calib_holes:
             cv2.circle(frame, pt, HOLE_RADIUS, (0, 255, 0), 2)
             cv2.circle(frame, pt, 5, (0, 255, 0), -1)
 
+        # 2. Escalar al tamano del label
         label = self.lbl_frame_display
         lw, lh = label.width(), label.height()
         oh, ow = frame.shape[:2]
-
         scale = min(lw / ow, lh / oh)
         dw = int(ow * scale)
         dh = int(oh * scale)
@@ -315,9 +358,16 @@ class MainWindow(QMainWindow):
         self._calib_offset_y = (lh - dh) // 2
 
         resized = cv2.resize(frame, (dw, dh))
-        rgb     = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        qimg    = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
-        pixmap  = QPixmap.fromImage(qimg)
+
+        # 3. Cuadricula sobre el frame ya escalado (lineas de 1px siempre)
+        self._draw_grid(resized)
+
+        # 4. Leyenda en la esquina inferior izquierda
+        self._draw_legend(resized)
+
+        rgb    = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        qimg   = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
+        pixmap = QPixmap.fromImage(qimg)
 
         canvas = QPixmap(lw, lh)
         canvas.fill(Qt.black)
@@ -777,6 +827,7 @@ class MainWindow(QMainWindow):
         # Actualiza etiquetas dinamicas segun idioma activo
         self._update_ratio_label()
         self._update_calib_instruction()
+        self._display_calib_frame()  # refresca leyenda en el idioma correcto
 
         ph = "Predeterminada: outputs/detections/" if self._lang == "es" else "Default: outputs/detections/"
         self.edit_output_folder.setPlaceholderText(ph)
