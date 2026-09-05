@@ -934,6 +934,19 @@ QListWidget#list_result_runs::item:selected {
              </widget>
             </item>
             <item>
+             <widget class="QLabel" name="lbl_warn_output">
+              <property name="text">
+               <string>Select an output folder to continue</string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">color: #e74c3c; font-size: 10px;</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <spacer name="calibCtrlSpacer">
               <property name="orientation">
                <enum>Qt::Vertical</enum>
@@ -945,6 +958,19 @@ QListWidget#list_result_runs::item:selected {
                </size>
               </property>
              </spacer>
+            </item>
+            <item>
+             <widget class="QLabel" name="lbl_warn_coords">
+              <property name="text">
+               <string>Set all 8 calibration points to continue</string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">color: #e74c3c; font-size: 10px;</string>
+              </property>
+             </widget>
             </item>
             <item>
              <layout class="QHBoxLayout" name="calibBtnsLayout">
@@ -1115,6 +1141,20 @@ QListWidget#list_result_runs::item:selected {
                  </property>
                 </widget>
                </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="s_lbl_time">
+                 <property name="text">
+                  <string>Video time:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QLabel" name="lbl_time_count">
+                 <property name="text">
+                  <string>—</string>
+                 </property>
+                </widget>
+               </item>
               </layout>
              </widget>
             </item>
@@ -1209,6 +1249,19 @@ QListWidget#list_result_runs::item:selected {
                 </widget>
                </item>
               </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lbl_behavior_legend">
+              <property name="text">
+               <string/>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 11px; padding: 2px 0px;</string>
+              </property>
              </widget>
             </item>
             <item>

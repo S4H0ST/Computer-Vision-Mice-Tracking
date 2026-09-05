@@ -73,6 +73,7 @@ _TRANSLATIONS: list[tuple] = [
     ("grp_behaviors",         "setTitle", "Comportamientos",                  "Behaviours"),
     ("s_lbl_frames",          "setText",  "Frames:",                          "Frames:"),
     ("s_lbl_fps",             "setText",  "FPS:",                             "FPS:"),
+    ("s_lbl_time",            "setText",  "Tiempo de video:",                 "Video time:"),
     ("s_lbl_beh_idle",        "setText",  "Inactivo:",                        "Idle:"),
     ("s_lbl_beh_walking",     "setText",  "Caminando:",                       "Walking:"),
     ("s_lbl_beh_sniffing",    "setText",  "Olisqueando:",                     "Sniffing:"),
@@ -97,7 +98,20 @@ _TRANSLATIONS: list[tuple] = [
     ("btn_open_folder",       "setText",  "Abrir",                            "Open"),
     ("btn_new_detection",     "setText",  "Nueva Deteccion",                  "New Detection"),
     ("tab_images",            None,       None,                               None),
+    # Avisos de validacion (el texto lo gestiona _update_confirm_state directamente)
+    ("lbl_warn_output",       None,       None,                               None),
+    ("lbl_warn_coords",       None,       None,                               None),
 ]
+
+# Textos de aviso de validacion por idioma
+_WARN_OUTPUT = {
+    "es": "Selecciona una carpeta de salida para continuar.",
+    "en": "Select an output folder to continue.",
+}
+_WARN_COORDS = {
+    "es": "Completa los {done}/8 puntos de calibracion para continuar.",
+    "en": "Set all {done}/8 calibration points to continue.",
+}
 
 _TAB_LABELS = {
     "es": ["Recorrido", "Mapa de Calor"],
@@ -146,6 +160,8 @@ class MainWindow(QMainWindow):
         self._worker: DetectionWorker | None = None
         self._output_paths: dict = {}
         self._result_runs: dict[str, Path] = {}
+        self._detect_fps: float = 0.0
+        self._detect_total_s: float = 0.0
 
         # Timer for elapsed time display
         self._timer = QTimer(self)
@@ -160,6 +176,17 @@ class MainWindow(QMainWindow):
         self.lbl_heatmap_img.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.statusbar.setVisible(False)
         self._apply_language()  # idioma por defecto: ingles
+        self._update_confirm_state()
+
+    # ------------------------------------------------------------------
+    # Eventos del sistema
+    # ------------------------------------------------------------------
+
+    def resizeEvent(self, event) -> None:
+        """Vuelve a renderizar el frame de calibracion al cambiar el tamano de ventana."""
+        super().resizeEvent(event)
+        if self.stackedWidget.currentIndex() == 1 and self._calib_frame is not None:
+            self._display_calib_frame()
 
     # ------------------------------------------------------------------
     # Configuracion inicial
@@ -410,6 +437,7 @@ class MainWindow(QMainWindow):
         self._update_calib_fields()
         self._update_calib_instruction()
         self._display_calib_frame()
+        self._update_confirm_state()
 
     def _update_calib_fields(self) -> None:
         def fmt(pts, idx):
@@ -457,9 +485,24 @@ class MainWindow(QMainWindow):
             prefix = "Relacion" if self._lang == "es" else "Ratio"
             self.lbl_px_cm_ratio.setText(f"{prefix}: {ratio:.1f} px/cm")
 
+    def _update_confirm_state(self) -> None:
+        """Habilita/deshabilita Siguiente y muestra avisos de lo que falta."""
+        coords_ok = self._calib_done()
+        folder_ok = self._custom_output_dir is not None
+
+        done = len(self._calib_exterior) + len(self._calib_interior) + len(self._calib_holes)
+        self.lbl_warn_coords.setText(_WARN_COORDS[self._lang].format(done=done))
+        self.lbl_warn_coords.setVisible(not coords_ok)
+
+        self.lbl_warn_output.setText(_WARN_OUTPUT[self._lang])
+        self.lbl_warn_output.setVisible(not folder_ok)
+
+        self.btn_confirm_calib.setEnabled(coords_ok and folder_ok)
+
     def _on_clear_calib(self) -> None:
         self._reset_calib_state()
         self._display_calib_frame()
+        self._update_confirm_state()
 
     def _on_import_coords(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -495,6 +538,7 @@ class MainWindow(QMainWindow):
             fname = Path(path).name
             self.lbl_import_status.setText(f"✓ {fname}")
             self.lbl_import_status.setStyleSheet("color: #27ae60; font-size: 11px;")
+            self._update_confirm_state()
         except Exception as e:
             self.lbl_import_status.setText(f"Error: {e}")
             self.lbl_import_status.setStyleSheet("color: #e74c3c; font-size: 11px;")
@@ -505,18 +549,9 @@ class MainWindow(QMainWindow):
         if folder:
             self._custom_output_dir = Path(folder)
             self.edit_output_folder.setText(str(self._custom_output_dir))
+            self._update_confirm_state()
 
     def _on_confirm_calib(self) -> None:
-        if not self._calib_done():
-            total = len(self._calib_exterior) + len(self._calib_interior) + len(self._calib_holes)
-            remaining = 8 - total
-            if self._lang == "es":
-                msg = f"Faltan {remaining} punto(s) de calibracion."
-            else:
-                msg = f"Missing {remaining} calibration point(s)."
-            QMessageBox.warning(self, "Calibration", msg)
-            return
-
         e = [[p[0], p[1]] for p in self._calib_exterior]
         i = [[p[0], p[1]] for p in self._calib_interior]
         h = [[p[0], p[1]] for p in self._calib_holes]
@@ -577,16 +612,33 @@ class MainWindow(QMainWindow):
     # Deteccion
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _fmt_time(seconds: float) -> str:
+        s = int(seconds)
+        return f"{s // 60}:{s % 60:02d}"
+
     def _start_detection(self) -> None:
         is_camera = isinstance(self._video_source, int)
         source_name = f"Camera [{self._video_source}]" if is_camera else Path(self._video_source).name
         self.lbl_source.setText(f"Source: {source_name}")
+
+        # Calcula duracion total del video antes de iniciar el worker
+        if not is_camera:
+            cap = cv2.VideoCapture(str(self._video_source))
+            self._detect_fps     = cap.get(cv2.CAP_PROP_FPS) or 30.0
+            n_frames             = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+            self._detect_total_s = n_frames / self._detect_fps if self._detect_fps > 0 else 0.0
+            cap.release()
+        else:
+            self._detect_fps     = 30.0
+            self._detect_total_s = 0.0
 
         for lbl in (self.lbl_beh_idle, self.lbl_beh_walking, self.lbl_beh_sniffing,
                     self.lbl_beh_climbing, self.lbl_beh_rearing, self.lbl_beh_dipping):
             lbl.setText("0 s")
         self.lbl_frames_count.setText("0")
         self.lbl_fps_count.setText("—")
+        self.lbl_time_count.setText("—")
         self.lbl_elapsed_time.setText("00:00")
         self.log_detection.clear()
         self.lbl_video_feed.setText("Starting..." if self._lang == "en" else "Iniciando...")
@@ -623,7 +675,17 @@ class MainWindow(QMainWindow):
         self.lbl_frames_count.setText(str(frame_idx))
         self.lbl_fps_count.setText(f"{fps_est:.1f}")
 
-        fps_approx = 30.0
+        # Tiempo de video procesado / duracion total
+        if self._detect_fps > 0:
+            elapsed_video = frame_idx / self._detect_fps
+            elapsed_str = self._fmt_time(elapsed_video)
+            if self._detect_total_s > 0:
+                total_str = self._fmt_time(self._detect_total_s)
+                self.lbl_time_count.setText(f"{elapsed_str} / {total_str}")
+            else:
+                self.lbl_time_count.setText(elapsed_str)
+
+        fps_approx = self._detect_fps if self._detect_fps > 0 else 30.0
         self.lbl_beh_idle.setText(f"{stats.get('immobile', 0) / fps_approx:.1f} s")
         self.lbl_beh_walking.setText(f"{stats.get('walking', 0) / fps_approx:.1f} s")
         self.lbl_beh_sniffing.setText(f"{stats.get('sniffing', 0) / fps_approx:.1f} s")
@@ -831,13 +893,44 @@ class MainWindow(QMainWindow):
         # Actualiza etiquetas dinamicas segun idioma activo
         self._update_ratio_label()
         self._update_calib_instruction()
+        self._update_confirm_state()
         self._display_calib_frame()  # refresca leyenda en el idioma correcto
 
         ph = "Predeterminada: outputs/detections/" if self._lang == "es" else "Default: outputs/detections/"
         self.edit_output_folder.setPlaceholderText(ph)
 
-        if not self.edit_output_folder.text():
-            pass  # placeholder already updated above
+        self._update_behavior_legend()
+
+    def _update_behavior_legend(self) -> None:
+        """Construye la leyenda de colores de comportamiento en el idioma activo."""
+        # Colores en formato RGB (despues de conversion BGR->RGB al mostrar en Qt)
+        if self._lang == "es":
+            items = [
+                ("#b4b4b4", "Inmovil"),
+                ("#ffff00", "Caminando"),
+                ("#ffc800", "Olfateando"),
+                ("#ff00ff", "Escalando"),
+                ("#00ff00", "Erguido"),
+                ("#ffa500", "Asomando"),
+            ]
+        else:
+            items = [
+                ("#b4b4b4", "Idle"),
+                ("#ffff00", "Walking"),
+                ("#ffc800", "Sniffing"),
+                ("#ff00ff", "Climbing"),
+                ("#00ff00", "Rearing"),
+                ("#ffa500", "Head-dip"),
+            ]
+        lines = []
+        for i in range(0, len(items), 2):
+            c1, t1 = items[i]
+            c2, t2 = items[i + 1] if i + 1 < len(items) else (None, None)
+            row = f'<font color="{c1}">■</font> {t1}'
+            if c2:
+                row += f' &nbsp;&nbsp; <font color="{c2}">■</font> {t2}'
+            lines.append(row)
+        self.lbl_behavior_legend.setText("<br>".join(lines))
 
     # ------------------------------------------------------------------
     # Cierre de ventana
