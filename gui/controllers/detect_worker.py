@@ -40,7 +40,7 @@ class _SpeedTracker:
         self._history.clear()
 
 
-BEHAVIOR_KEYS = ("immobile", "walking", "sniffing", "climbing", "rearing", "dipping")
+BEHAVIOR_KEYS = ("immobile", "walking", "sniffing", "climbing", "rearing", "dipping", "grooming")
 
 LABEL_COLOR: dict[str, tuple] = {
     "sniffing_immobile": (200, 100, 180),
@@ -50,6 +50,7 @@ LABEL_COLOR: dict[str, tuple] = {
     "rat_climbing":      (255,   0, 255),
     "rat_head_dipping":  (0,   165, 255),
     "rat_rearing":       (0,   255,   0),
+    "rat_grooming":      (180, 255, 180),
 }
 
 
@@ -73,6 +74,8 @@ def _label_to_stat_key(label: str) -> str:
         return "rearing"
     if "head_dipping" in label:
         return "dipping"
+    if "grooming" in label:
+        return "grooming"
     return ""
 
 

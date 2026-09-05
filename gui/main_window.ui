@@ -1261,6 +1261,20 @@ QListWidget#list_result_runs::item:selected {
                  </property>
                 </widget>
                </item>
+               <item row="6" column="0">
+                <widget class="QLabel" name="s_lbl_beh_grooming">
+                 <property name="text">
+                  <string>Aseo:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="6" column="1">
+                <widget class="QLabel" name="lbl_beh_grooming">
+                 <property name="text">
+                  <string>0 s</string>
+                 </property>
+                </widget>
+               </item>
               </layout>
              </widget>
             </item>

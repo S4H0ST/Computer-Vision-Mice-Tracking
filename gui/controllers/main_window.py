@@ -82,6 +82,7 @@ _TRANSLATIONS: list[tuple] = [
     ("s_lbl_beh_climbing",    "setText",  "Escalando:",                       "Climbing:"),
     ("s_lbl_beh_rearing",     "setText",  "Erguido:",                         "Rearing:"),
     ("s_lbl_beh_dipping",     "setText",  "Asomando:",                        "Head-dip:"),
+    ("s_lbl_beh_grooming",    "setText",  "Aseo:",                            "Grooming:"),
     ("btn_stop",              "setText",  "Cancelar",                         "Cancel"),
     ("lbl_results_title",     "setText",  "Resultados de la Deteccion",       "Detection Results"),
     ("btn_browse_results",    "setText",  "Seleccionar Carpeta",              "Select Folder"),
@@ -653,7 +654,8 @@ class MainWindow(QMainWindow):
             self._detect_total_s = 0.0
 
         for lbl in (self.lbl_beh_idle, self.lbl_beh_walking, self.lbl_beh_sniffing,
-                    self.lbl_beh_climbing, self.lbl_beh_rearing, self.lbl_beh_dipping):
+                    self.lbl_beh_climbing, self.lbl_beh_rearing, self.lbl_beh_dipping,
+                    self.lbl_beh_grooming):
             lbl.setText("0 s")
         self.lbl_frames_count.setText("0")
         self.lbl_fps_count.setText("—")
@@ -711,6 +713,7 @@ class MainWindow(QMainWindow):
         self.lbl_beh_climbing.setText(f"{stats.get('climbing', 0) / fps_approx:.1f} s")
         self.lbl_beh_rearing.setText(f"{stats.get('rearing', 0) / fps_approx:.1f} s")
         self.lbl_beh_dipping.setText(f"{stats.get('dipping', 0) / fps_approx:.1f} s")
+        self.lbl_beh_grooming.setText(f"{stats.get('grooming', 0) / fps_approx:.1f} s")
 
     @pyqtSlot(str)
     def _on_log_msg(self, msg: str) -> None:
@@ -731,11 +734,33 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "Detection error", msg)
 
     def _on_cancel_detection(self) -> None:
-        """Detiene la deteccion en curso y desbloquea el boton de volver a calibracion."""
+        """Pide confirmacion antes de detener la deteccion en curso."""
         if self._worker and self._worker.isRunning():
+            if self._lang == "es":
+                title = "¿Cancelar deteccion?"
+                msg = (
+                    "Si cancelas ahora, el analisis quedara incompleto.\n\n"
+                    "• El mapa de calor y el recorrido solo mostraran los frames ya procesados.\n"
+                    "• Las estadisticas no reflejaran el comportamiento completo del animal.\n\n"
+                    "¿Seguro que quieres cancelar?"
+                )
+            else:
+                title = "Cancel detection?"
+                msg = (
+                    "If you cancel now, the analysis will be incomplete.\n\n"
+                    "• The heatmap and trajectory will only show frames processed so far.\n"
+                    "• Statistics will not reflect the animal's full behaviour.\n\n"
+                    "Are you sure you want to cancel?"
+                )
+            reply = QMessageBox.question(
+                self, title, msg,
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            if reply != QMessageBox.Yes:
+                return
             self._worker.request_stop()
         self._timer.stop()
-        # Muestra el boton volver para que pueda regresar a calibracion
         self.btn_back_detection.setVisible(True)
         self.btn_stop.setEnabled(False)
 
@@ -931,6 +956,7 @@ class MainWindow(QMainWindow):
                 ("#ff00ff", "Escalando"),
                 ("#00ff00", "Erguido"),
                 ("#ffa500", "Asomando"),
+                ("#b4ffb4", "Aseo"),
             ]
         else:
             items = [
@@ -940,6 +966,7 @@ class MainWindow(QMainWindow):
                 ("#ff00ff", "Climbing"),
                 ("#00ff00", "Rearing"),
                 ("#ffa500", "Head-dip"),
+                ("#b4ffb4", "Grooming"),
             ]
         lines = []
         for i in range(0, len(items), 2):
