@@ -173,6 +173,7 @@ class MainWindow(QMainWindow):
         self._result_runs: dict[str, Path] = {}
         self._detect_fps: float = 0.0
         self._detect_total_s: float = 0.0
+        self._result_img_paths: dict[str, Path | None] = {}  # label name -> image path
 
         # Timer for elapsed time display
         self._timer = QTimer(self)
@@ -194,10 +195,12 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def resizeEvent(self, event) -> None:
-        """Vuelve a renderizar el frame de calibracion al cambiar el tamano de ventana."""
         super().resizeEvent(event)
         if self.stackedWidget.currentIndex() == 1 and self._calib_frame is not None:
             self._display_calib_frame()
+        elif self.stackedWidget.currentIndex() == 3:
+            self._rescale_result_image(self.lbl_trajectory_img)
+            self._rescale_result_image(self.lbl_heatmap_img)
 
     # ------------------------------------------------------------------
     # Configuracion inicial
@@ -243,6 +246,7 @@ class MainWindow(QMainWindow):
         self.btn_open_video2.clicked.connect(lambda: self._open_path(self._output_paths.get("video_clean")))
         self.btn_open_folder.clicked.connect(lambda: self._open_path(self._output_paths.get("folder")))
         self.btn_new_detection.clicked.connect(self._on_new_detection)
+        self.tab_images.currentChanged.connect(self._on_result_tab_changed)
 
         # Language
         self.btn_lang.clicked.connect(self._toggle_language)
@@ -835,21 +839,36 @@ class MainWindow(QMainWindow):
 
     def _load_result_image(self, label, img_path) -> None:
         na = "No disponible" if self._lang == "es" else "Not available"
+        key = label.objectName()
         if not img_path or not Path(img_path).exists():
             label.setText(na)
+            self._result_img_paths.pop(key, None)
             return
-        img = cv2.imread(str(img_path))
+        self._result_img_paths[key] = Path(img_path)
+        self._rescale_result_image(label)
+
+    def _rescale_result_image(self, label) -> None:
+        path = self._result_img_paths.get(label.objectName())
+        if not path:
+            return
+        img = cv2.imread(str(path))
         if img is None:
-            label.setText(na)
             return
         lw, lh = label.width(), label.height()
-        h, w   = img.shape[:2]
-        scale  = min(lw / w, lh / h)
+        if lw < 10 or lh < 10:
+            return
+        h, w  = img.shape[:2]
+        scale = min(lw / w, lh / h)
         dw, dh = int(w * scale), int(h * scale)
         resized = cv2.resize(img, (dw, dh))
         rgb     = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         qimg    = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
         label.setPixmap(QPixmap.fromImage(qimg))
+
+    def _on_result_tab_changed(self) -> None:
+        idx = self.tab_images.currentIndex()
+        lbl = self.lbl_trajectory_img if idx == 0 else self.lbl_heatmap_img
+        QTimer.singleShot(30, lambda: self._rescale_result_image(lbl))
 
     def _open_path(self, path) -> None:
         if not path:
