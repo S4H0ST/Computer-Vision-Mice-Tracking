@@ -1488,22 +1488,45 @@ QListWidget#list_result_runs::item:selected {
               </property>
               <layout class="QVBoxLayout" name="filesLayout">
                <property name="spacing">
-                <number>10</number>
+                <number>8</number>
                </property>
                <item>
                 <layout class="QHBoxLayout" name="excelRow">
+                 <property name="spacing">
+                  <number>6</number>
+                 </property>
                  <item>
-                  <widget class="QLabel" name="lbl_file_excel">
-                   <property name="text">
-                    <string>Estadisticas (.xlsx)</string>
+                  <layout class="QVBoxLayout" name="excelLabelCol">
+                   <property name="spacing">
+                    <number>1</number>
                    </property>
-                   <property name="wordWrap">
-                    <bool>true</bool>
-                   </property>
-                   <property name="styleSheet">
-                    <string notr="true">font-size: 12px;</string>
-                   </property>
-                  </widget>
+                   <item>
+                    <widget class="QLabel" name="lbl_file_excel">
+                     <property name="text">
+                      <string>Estadisticas (.xlsx)</string>
+                     </property>
+                     <property name="wordWrap">
+                      <bool>true</bool>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">font-size: 12px; font-weight: bold;</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="lbl_desc_excel">
+                     <property name="text">
+                      <string>Tabla por frame con comportamientos, posicion y velocidad</string>
+                     </property>
+                     <property name="wordWrap">
+                      <bool>true</bool>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">color: #7f8c8d; font-size: 10px;</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
                  </item>
                  <item>
                   <widget class="QPushButton" name="btn_open_excel">
@@ -1516,15 +1539,38 @@ QListWidget#list_result_runs::item:selected {
                </item>
                <item>
                 <layout class="QHBoxLayout" name="video1Row">
+                 <property name="spacing">
+                  <number>6</number>
+                 </property>
                  <item>
-                  <widget class="QLabel" name="lbl_file_video1">
-                   <property name="text">
-                    <string>Video anotado</string>
+                  <layout class="QVBoxLayout" name="video1LabelCol">
+                   <property name="spacing">
+                    <number>1</number>
                    </property>
-                   <property name="styleSheet">
-                    <string notr="true">font-size: 12px;</string>
-                   </property>
-                  </widget>
+                   <item>
+                    <widget class="QLabel" name="lbl_file_video1">
+                     <property name="text">
+                      <string>Video anotado</string>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">font-size: 12px; font-weight: bold;</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="lbl_desc_video1">
+                     <property name="text">
+                      <string>Video con etiquetas y zonas calibradas superpuestas</string>
+                     </property>
+                     <property name="wordWrap">
+                      <bool>true</bool>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">color: #7f8c8d; font-size: 10px;</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
                  </item>
                  <item>
                   <widget class="QPushButton" name="btn_open_video1">
@@ -1537,15 +1583,38 @@ QListWidget#list_result_runs::item:selected {
                </item>
                <item>
                 <layout class="QHBoxLayout" name="video2Row">
+                 <property name="spacing">
+                  <number>6</number>
+                 </property>
                  <item>
-                  <widget class="QLabel" name="lbl_file_video2">
-                   <property name="text">
-                    <string>Video de recorrido</string>
+                  <layout class="QVBoxLayout" name="video2LabelCol">
+                   <property name="spacing">
+                    <number>1</number>
                    </property>
-                   <property name="styleSheet">
-                    <string notr="true">font-size: 12px;</string>
-                   </property>
-                  </widget>
+                   <item>
+                    <widget class="QLabel" name="lbl_file_video2">
+                     <property name="text">
+                      <string>Video de recorrido</string>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">font-size: 12px; font-weight: bold;</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="lbl_desc_video2">
+                     <property name="text">
+                      <string>Video solo con etiquetas, sin zonas de fondo</string>
+                     </property>
+                     <property name="wordWrap">
+                      <bool>true</bool>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">color: #7f8c8d; font-size: 10px;</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
                  </item>
                  <item>
                   <widget class="QPushButton" name="btn_open_video2">
@@ -1558,15 +1627,38 @@ QListWidget#list_result_runs::item:selected {
                </item>
                <item>
                 <layout class="QHBoxLayout" name="folderRow">
+                 <property name="spacing">
+                  <number>6</number>
+                 </property>
                  <item>
-                  <widget class="QLabel" name="lbl_file_folder">
-                   <property name="text">
-                    <string>Carpeta de salida</string>
+                  <layout class="QVBoxLayout" name="folderLabelCol">
+                   <property name="spacing">
+                    <number>1</number>
                    </property>
-                   <property name="styleSheet">
-                    <string notr="true">font-size: 12px;</string>
-                   </property>
-                  </widget>
+                   <item>
+                    <widget class="QLabel" name="lbl_file_folder">
+                     <property name="text">
+                      <string>Carpeta de salida</string>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">font-size: 12px; font-weight: bold;</string>
+                     </property>
+                    </widget>
+                   </item>
+                   <item>
+                    <widget class="QLabel" name="lbl_desc_folder">
+                     <property name="text">
+                      <string>Contiene todos los archivos de esta ejecucion</string>
+                     </property>
+                     <property name="wordWrap">
+                      <bool>true</bool>
+                     </property>
+                     <property name="styleSheet">
+                      <string notr="true">color: #7f8c8d; font-size: 10px;</string>
+                     </property>
+                    </widget>
+                   </item>
+                  </layout>
                  </item>
                  <item>
                   <widget class="QPushButton" name="btn_open_folder">
