@@ -1,0 +1,1662 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>MainWindow</class>
+ <widget class="QMainWindow" name="MainWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1100</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Mouse Tracker</string>
+  </property>
+  <property name="styleSheet">
+   <string notr="true">
+QFrame#sidebar {
+    background-color: #2c3e50;
+}
+QFrame#sidebar QLabel {
+    color: #ecf0f1;
+    padding-left: 8px;
+}
+QFrame#sidebar QPushButton {
+    background-color: transparent;
+    color: #bdc3c7;
+    border: none;
+    text-align: left;
+    padding: 12px 20px;
+    font-size: 13px;
+}
+QFrame#sidebar QPushButton:hover {
+    background-color: #34495e;
+    color: white;
+}
+QFrame#sidebar QPushButton:disabled {
+    color: #4a5568;
+}
+QPushButton#btn_video, QPushButton#btn_camera {
+    background-color: #2980b9;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    font-size: 13px;
+    border-radius: 4px;
+    min-height: 36px;
+}
+QPushButton#btn_video:hover, QPushButton#btn_camera:hover {
+    background-color: #3498db;
+}
+QPushButton#btn_stop {
+    background-color: #c0392b;
+    color: white;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+QPushButton#btn_stop:hover {
+    background-color: #e74c3c;
+}
+QPushButton#btn_new_detection {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 10px 28px;
+    font-size: 13px;
+    border-radius: 4px;
+}
+QPushButton#btn_new_detection:hover {
+    background-color: #2ecc71;
+}
+QPushButton#btn_confirm_calib {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+}
+QPushButton#btn_confirm_calib:hover {
+    background-color: #2ecc71;
+}
+QPushButton#btn_open_excel, QPushButton#btn_open_video1,
+QPushButton#btn_open_video2, QPushButton#btn_open_folder {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+    padding: 4px 10px;
+    border-radius: 3px;
+    min-width: 56px;
+}
+QPushButton#btn_open_excel:hover, QPushButton#btn_open_video1:hover,
+QPushButton#btn_open_video2:hover, QPushButton#btn_open_folder:hover {
+    background-color: #d5dbdb;
+}
+QLabel#lbl_video_feed, QLabel#lbl_frame_display,
+QLabel#lbl_trajectory_img, QLabel#lbl_heatmap_img {
+    background-color: #1a1a2e;
+    color: #636e72;
+    border: 2px solid #2c3e50;
+    border-radius: 4px;
+}
+QLabel#lbl_app_title {
+    font-size: 15px;
+    font-weight: bold;
+    padding: 18px 8px 4px 12px;
+    color: white;
+}
+QLabel#lbl_model_status {
+    font-size: 10px;
+    color: #2ecc71;
+    padding: 0px 8px 14px 12px;
+}
+QLabel#lbl_version {
+    font-size: 10px;
+    color: #636e72;
+    padding: 4px 8px;
+}
+QLabel#lbl_px_cm_ratio {
+    font-weight: bold;
+    color: #2980b9;
+    font-size: 12px;
+}
+QLabel#lbl_elapsed_time {
+    font-size: 15px;
+    font-weight: bold;
+    color: #2c3e50;
+    padding: 0px 8px;
+}
+QTextEdit#log_detection {
+    background-color: #1e272e;
+    color: #dfe6e9;
+    font-family: Consolas, monospace;
+    font-size: 11px;
+    border: none;
+}
+QLabel#lbl_calib_instructions {
+    color: #935116;
+    background-color: #fef9e7;
+    padding: 8px 12px;
+    border-left: 4px solid #e67e22;
+    border-radius: 2px;
+    font-size: 12px;
+}
+QPushButton#btn_back_calib, QPushButton#btn_back_detection {
+    background-color: transparent;
+    color: #7f8c8d;
+    border: 1px solid #bdc3c7;
+    padding: 4px 12px;
+    border-radius: 3px;
+    font-size: 12px;
+}
+QPushButton#btn_back_calib:hover, QPushButton#btn_back_detection:hover {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+}
+QPushButton#btn_import_coords, QPushButton#btn_select_output, QPushButton#btn_browse_results {
+    background-color: #ecf0f1;
+    color: #2c3e50;
+    border: 1px solid #bdc3c7;
+    padding: 4px 10px;
+    border-radius: 3px;
+}
+QPushButton#btn_import_coords:hover, QPushButton#btn_select_output:hover, QPushButton#btn_browse_results:hover {
+    background-color: #d5dbdb;
+}
+QListWidget#list_result_runs {
+    border: 1px solid #bdc3c7;
+    border-radius: 3px;
+    font-size: 12px;
+}
+QListWidget#list_result_runs::item:selected {
+    background-color: #2980b9;
+    color: white;
+}
+   </string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QHBoxLayout" name="mainLayout">
+    <property name="spacing">
+     <number>0</number>
+    </property>
+    <property name="leftMargin">
+     <number>0</number>
+    </property>
+    <property name="topMargin">
+     <number>0</number>
+    </property>
+    <property name="rightMargin">
+     <number>0</number>
+    </property>
+    <property name="bottomMargin">
+     <number>0</number>
+    </property>
+
+    <!-- ==================== SIDEBAR ==================== -->
+    <item>
+     <widget class="QFrame" name="sidebar">
+      <property name="minimumSize">
+       <size>
+        <width>210</width>
+        <height>0</height>
+       </size>
+      </property>
+      <property name="maximumSize">
+       <size>
+        <width>210</width>
+        <height>16777215</height>
+       </size>
+      </property>
+      <property name="sizePolicy">
+       <sizepolicy hsizetype="Fixed" vsizetype="Expanding">
+        <horstretch>0</horstretch>
+        <verstretch>0</verstretch>
+       </sizepolicy>
+      </property>
+      <property name="frameShape">
+       <enum>QFrame::NoFrame</enum>
+      </property>
+      <layout class="QVBoxLayout" name="sidebarLayout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="QLabel" name="lbl_app_title">
+         <property name="text">
+          <string>Mouse Tracker</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_model_status">
+         <property name="text">
+          <string>Modelo: cargando...</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QFrame" name="sidebar_line">
+         <property name="styleSheet">
+          <string notr="true">background-color: #34495e; max-height: 1px;</string>
+         </property>
+         <property name="frameShape">
+          <enum>QFrame::HLine</enum>
+         </property>
+         <property name="frameShadow">
+          <enum>QFrame::Plain</enum>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="nav_home">
+         <property name="text">
+          <string>  Home</string>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="nav_results">
+         <property name="text">
+          <string>  Results</string>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <spacer name="sidebarSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+       <item>
+        <widget class="QPushButton" name="btn_lang">
+         <property name="text">
+          <string>ES</string>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+         <property name="styleSheet">
+          <string notr="true">QPushButton { background-color: #34495e; color: #bdc3c7; border: 1px solid #4a6278; border-radius: 3px; padding: 4px 12px; margin: 0px 20px 8px 20px; font-size: 11px; font-weight: bold; } QPushButton:hover { background-color: #4a6278; color: white; }</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="lbl_version">
+         <property name="text">
+          <string>  v1.0</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+
+    <!-- ==================== CONTENT AREA ==================== -->
+    <item>
+     <widget class="QStackedWidget" name="stackedWidget">
+      <property name="currentIndex">
+       <number>0</number>
+      </property>
+
+      <!-- ===== PAGE 0: HOME ===== -->
+      <widget class="QWidget" name="page_home">
+       <layout class="QVBoxLayout" name="homeLayout">
+        <property name="spacing">
+         <number>16</number>
+        </property>
+        <property name="leftMargin">
+         <number>48</number>
+        </property>
+        <property name="topMargin">
+         <number>48</number>
+        </property>
+        <property name="rightMargin">
+         <number>48</number>
+        </property>
+        <property name="bottomMargin">
+         <number>40</number>
+        </property>
+        <item>
+         <widget class="QLabel" name="lbl_welcome">
+          <property name="text">
+           <string>Sistema de Seguimiento de Ratones</string>
+          </property>
+          <property name="font">
+           <font>
+            <pointsize>22</pointsize>
+            <weight>75</weight>
+            <bold>true</bold>
+           </font>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_subtitle">
+          <property name="text">
+           <string>Analisis de comportamiento mediante vision por computador</string>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">color: #7f8c8d; font-size: 13px;</string>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QFrame" name="home_separator">
+          <property name="frameShape">
+           <enum>QFrame::HLine</enum>
+          </property>
+          <property name="frameShadow">
+           <enum>QFrame::Sunken</enum>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <spacer name="homeSpacer1">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeType">
+           <enum>QSizePolicy::Fixed</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>16</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="cardsLayout">
+          <property name="spacing">
+           <number>32</number>
+          </property>
+          <item>
+           <widget class="QGroupBox" name="grp_video">
+            <property name="title">
+             <string>Deteccion desde Video</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QGroupBox { font-size: 14px; font-weight: bold; padding-top: 20px; border: 1px solid #bdc3c7; border-radius: 6px; } QGroupBox::title { padding: 0 6px; }</string>
+            </property>
+            <layout class="QVBoxLayout" name="grpVideoLayout">
+             <property name="spacing">
+              <number>16</number>
+             </property>
+             <property name="leftMargin">
+              <number>20</number>
+             </property>
+             <property name="topMargin">
+              <number>20</number>
+             </property>
+             <property name="rightMargin">
+              <number>20</number>
+             </property>
+             <property name="bottomMargin">
+              <number>20</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_video_desc">
+               <property name="text">
+                <string>Carga un fichero de video (.mp4, .avi, .mov) para analizar el comportamiento del raton fuera de linea. El modelo procesara cada frame automaticamente.</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #555; font-size: 12px; font-weight: normal;</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="videoCardSpacer">
+               <property name="orientation">
+                <enum>Qt::Vertical</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>40</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btn_video">
+               <property name="text">
+                <string>Seleccionar Video</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+          <item>
+           <widget class="QGroupBox" name="grp_camera">
+            <property name="title">
+             <string>Deteccion en Vivo (Camara)</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">QGroupBox { font-size: 14px; font-weight: bold; padding-top: 20px; border: 1px solid #bdc3c7; border-radius: 6px; } QGroupBox::title { padding: 0 6px; }</string>
+            </property>
+            <layout class="QVBoxLayout" name="grpCameraLayout">
+             <property name="spacing">
+              <number>16</number>
+             </property>
+             <property name="leftMargin">
+              <number>20</number>
+             </property>
+             <property name="topMargin">
+              <number>20</number>
+             </property>
+             <property name="rightMargin">
+              <number>20</number>
+             </property>
+             <property name="bottomMargin">
+              <number>20</number>
+             </property>
+             <item>
+              <widget class="QLabel" name="lbl_camera_desc">
+               <property name="text">
+                <string>Conecta una camara para analizar el comportamiento del raton en tiempo real. Requiere calibracion previa de la arena.</string>
+               </property>
+               <property name="wordWrap">
+                <bool>true</bool>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #555; font-size: 12px; font-weight: normal;</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="cameraCardSpacer">
+               <property name="orientation">
+                <enum>Qt::Vertical</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>20</width>
+                 <height>40</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+             <item>
+              <widget class="QPushButton" name="btn_camera">
+               <property name="text">
+                <string>Iniciar Camara</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <spacer name="homeSpacer2">
+          <property name="orientation">
+           <enum>Qt::Vertical</enum>
+          </property>
+          <property name="sizeHint" stdset="0">
+           <size>
+            <width>20</width>
+            <height>40</height>
+           </size>
+          </property>
+         </spacer>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- ===== PAGE 1: CALIBRATION ===== -->
+      <widget class="QWidget" name="page_calibration">
+       <layout class="QVBoxLayout" name="calibOuterLayout">
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <property name="leftMargin">
+         <number>20</number>
+        </property>
+        <property name="topMargin">
+         <number>12</number>
+        </property>
+        <property name="rightMargin">
+         <number>20</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <layout class="QHBoxLayout" name="calibTopBar">
+          <item>
+           <widget class="QPushButton" name="btn_back_calib">
+            <property name="text">
+             <string>← Back</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_calib_title">
+            <property name="text">
+             <string>Arena Calibration</string>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>15</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="calibTopSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QLabel" name="lbl_calib_instructions">
+          <property name="text">
+           <string>Step 1/3 — Click EXTERIOR border: 2 opposite corners of the outer wall (0/2)</string>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="calibMainLayout">
+          <property name="spacing">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_frame_display">
+            <property name="minimumSize">
+             <size>
+              <width>520</width>
+              <height>380</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Calibration frame</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="calibControlsLayout">
+            <property name="spacing">
+             <number>8</number>
+            </property>
+            <item>
+             <widget class="QGroupBox" name="grp_exterior">
+              <property name="title">
+               <string>Exterior Border (px)</string>
+              </property>
+              <layout class="QFormLayout" name="exteriorFormLayout">
+               <item row="0" column="0">
+                <widget class="QLabel" name="s_lbl_ext1">
+                 <property name="text">
+                  <string>Point 1:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLineEdit" name="edit_ext_p1">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>not set</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="s_lbl_ext2">
+                 <property name="text">
+                  <string>Point 2:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="edit_ext_p2">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>not set</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="grp_interior">
+              <property name="title">
+               <string>Interior Border (px)</string>
+              </property>
+              <layout class="QFormLayout" name="interiorFormLayout">
+               <item row="0" column="0">
+                <widget class="QLabel" name="s_lbl_int1">
+                 <property name="text">
+                  <string>Point 1:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLineEdit" name="edit_int_p1">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>not set</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="s_lbl_int2">
+                 <property name="text">
+                  <string>Point 2:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="edit_int_p2">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>not set</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="grp_holes">
+              <property name="title">
+               <string>Hole Centers (px)</string>
+              </property>
+              <layout class="QFormLayout" name="holesFormLayout">
+               <item row="0" column="0">
+                <widget class="QLabel" name="s_lbl_h1">
+                 <property name="text">
+                  <string>Hole 1:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLineEdit" name="edit_hole_1">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>not set</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="s_lbl_h2">
+                 <property name="text">
+                  <string>Hole 2:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLineEdit" name="edit_hole_2">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>not set</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="s_lbl_h3">
+                 <property name="text">
+                  <string>Hole 3:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QLineEdit" name="edit_hole_3">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>not set</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="0">
+                <widget class="QLabel" name="s_lbl_h4">
+                 <property name="text">
+                  <string>Hole 4:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QLineEdit" name="edit_hole_4">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>not set</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="grp_dimensions">
+              <property name="title">
+               <string>Real Box Dimensions</string>
+              </property>
+              <layout class="QFormLayout" name="dimensionsFormLayout">
+               <item row="0" column="0">
+                <widget class="QLabel" name="s_lbl_width">
+                 <property name="text">
+                  <string>Width (cm):</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QDoubleSpinBox" name="spin_width_cm">
+                 <property name="minimum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>500.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>40.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="s_lbl_height">
+                 <property name="text">
+                  <string>Height (cm):</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QDoubleSpinBox" name="spin_height_cm">
+                 <property name="minimum">
+                  <double>1.000000000000000</double>
+                 </property>
+                 <property name="maximum">
+                  <double>500.000000000000000</double>
+                 </property>
+                 <property name="value">
+                  <double>40.000000000000000</double>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lbl_px_cm_ratio">
+              <property name="text">
+               <string>Ratio: — px/cm</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="grp_import_coords">
+              <property name="title">
+               <string>Import Coordinates</string>
+              </property>
+              <layout class="QHBoxLayout" name="importCoordsLayout">
+               <item>
+                <widget class="QPushButton" name="btn_import_coords">
+                 <property name="text">
+                  <string>Browse...</string>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>90</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QLabel" name="lbl_import_status">
+                 <property name="text">
+                  <string>No file loaded</string>
+                 </property>
+                 <property name="wordWrap">
+                  <bool>true</bool>
+                 </property>
+                 <property name="styleSheet">
+                  <string notr="true">color: #7f8c8d; font-size: 11px;</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="grp_output_folder">
+              <property name="title">
+               <string>Output Folder</string>
+              </property>
+              <layout class="QHBoxLayout" name="outputFolderLayout">
+               <item>
+                <widget class="QLineEdit" name="edit_output_folder">
+                 <property name="readOnly">
+                  <bool>true</bool>
+                 </property>
+                 <property name="placeholderText">
+                  <string>Default: outputs/detections/</string>
+                 </property>
+                </widget>
+               </item>
+               <item>
+                <widget class="QPushButton" name="btn_select_output">
+                 <property name="text">
+                  <string>Browse...</string>
+                 </property>
+                 <property name="maximumSize">
+                  <size>
+                   <width>80</width>
+                   <height>16777215</height>
+                  </size>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <spacer name="calibCtrlSpacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <layout class="QHBoxLayout" name="calibBtnsLayout">
+              <item>
+               <widget class="QPushButton" name="btn_clear_calib">
+                <property name="text">
+                 <string>Clear</string>
+                </property>
+               </widget>
+              </item>
+              <item>
+               <widget class="QPushButton" name="btn_confirm_calib">
+                <property name="text">
+                 <string>Next →</string>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- ===== PAGE 2: DETECTION ===== -->
+      <widget class="QWidget" name="page_detection">
+       <layout class="QVBoxLayout" name="detectionOuterLayout">
+        <property name="spacing">
+         <number>8</number>
+        </property>
+        <property name="leftMargin">
+         <number>16</number>
+        </property>
+        <property name="topMargin">
+         <number>16</number>
+        </property>
+        <property name="rightMargin">
+         <number>16</number>
+        </property>
+        <property name="bottomMargin">
+         <number>12</number>
+        </property>
+        <item>
+         <layout class="QHBoxLayout" name="detectionTopBar">
+          <property name="spacing">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QPushButton" name="btn_back_detection">
+            <property name="text">
+             <string>← Back</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_source">
+            <property name="text">
+             <string>Fuente: —</string>
+            </property>
+            <property name="styleSheet">
+             <string notr="true">font-weight: bold; font-size: 13px;</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="topBarHSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QLabel" name="lbl_elapsed_time">
+            <property name="text">
+             <string>00:00</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_stop">
+            <property name="text">
+             <string>Cancel</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="detectionMainArea">
+          <property name="spacing">
+           <number>12</number>
+          </property>
+          <item>
+           <widget class="QLabel" name="lbl_video_feed">
+            <property name="minimumSize">
+             <size>
+              <width>560</width>
+              <height>400</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>Iniciando deteccion...</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignCenter</set>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="statsLayout">
+            <property name="spacing">
+             <number>10</number>
+            </property>
+            <item>
+             <widget class="QLabel" name="lbl_stats_title">
+              <property name="text">
+               <string>Estadisticas en Vivo</string>
+              </property>
+              <property name="font">
+               <font>
+                <pointsize>12</pointsize>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="grp_progress">
+              <property name="title">
+               <string>Progreso</string>
+              </property>
+              <layout class="QFormLayout" name="progressFormLayout">
+               <item row="0" column="0">
+                <widget class="QLabel" name="s_lbl_frames">
+                 <property name="text">
+                  <string>Frames:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLabel" name="lbl_frames_count">
+                 <property name="text">
+                  <string>0</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="s_lbl_fps">
+                 <property name="text">
+                  <string>FPS:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLabel" name="lbl_fps_count">
+                 <property name="text">
+                  <string>—</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="grp_behaviors">
+              <property name="title">
+               <string>Comportamientos</string>
+              </property>
+              <layout class="QFormLayout" name="behaviorsFormLayout">
+               <item row="0" column="0">
+                <widget class="QLabel" name="s_lbl_beh_idle">
+                 <property name="text">
+                  <string>Inactivo:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLabel" name="lbl_beh_idle">
+                 <property name="text">
+                  <string>0 s</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="s_lbl_beh_walking">
+                 <property name="text">
+                  <string>Caminando:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLabel" name="lbl_beh_walking">
+                 <property name="text">
+                  <string>0 s</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="s_lbl_beh_sniffing">
+                 <property name="text">
+                  <string>Olisqueando:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QLabel" name="lbl_beh_sniffing">
+                 <property name="text">
+                  <string>0 s</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="0">
+                <widget class="QLabel" name="s_lbl_beh_climbing">
+                 <property name="text">
+                  <string>Escalando:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QLabel" name="lbl_beh_climbing">
+                 <property name="text">
+                  <string>0 s</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="0">
+                <widget class="QLabel" name="s_lbl_beh_rearing">
+                 <property name="text">
+                  <string>Erguido:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QLabel" name="lbl_beh_rearing">
+                 <property name="text">
+                  <string>0 s</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="0">
+                <widget class="QLabel" name="s_lbl_beh_dipping">
+                 <property name="text">
+                  <string>Asomando:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="5" column="1">
+                <widget class="QLabel" name="lbl_beh_dipping">
+                 <property name="text">
+                  <string>0 s</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <spacer name="statsSpacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QTextEdit" name="log_detection">
+          <property name="maximumSize">
+           <size>
+            <width>16777215</width>
+            <height>90</height>
+           </size>
+          </property>
+          <property name="readOnly">
+           <bool>true</bool>
+          </property>
+          <property name="placeholderText">
+           <string>Log de deteccion...</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- ===== PAGE 3: RESULTS ===== -->
+      <widget class="QWidget" name="page_results">
+       <layout class="QVBoxLayout" name="resultsOuterLayout">
+        <property name="spacing">
+         <number>10</number>
+        </property>
+        <property name="leftMargin">
+         <number>20</number>
+        </property>
+        <property name="topMargin">
+         <number>14</number>
+        </property>
+        <property name="rightMargin">
+         <number>20</number>
+        </property>
+        <property name="bottomMargin">
+         <number>14</number>
+        </property>
+        <item>
+         <layout class="QHBoxLayout" name="resultsTitleBar">
+          <item>
+           <widget class="QLabel" name="lbl_results_title">
+            <property name="text">
+             <string>Detection Results</string>
+            </property>
+            <property name="font">
+             <font>
+              <pointsize>15</pointsize>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="resultsTitleSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QGroupBox" name="grp_browse_results">
+          <property name="title">
+           <string>Browse Results</string>
+          </property>
+          <layout class="QVBoxLayout" name="browseResultsLayout">
+           <property name="spacing">
+            <number>6</number>
+           </property>
+           <item>
+            <layout class="QHBoxLayout" name="browseFolderBar">
+             <item>
+              <widget class="QPushButton" name="btn_browse_results">
+               <property name="text">
+                <string>Select Folder</string>
+               </property>
+               <property name="maximumSize">
+                <size>
+                 <width>120</width>
+                 <height>16777215</height>
+                </size>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <widget class="QLabel" name="lbl_results_folder_path">
+               <property name="text">
+                <string>No folder selected</string>
+               </property>
+               <property name="styleSheet">
+                <string notr="true">color: #7f8c8d; font-size: 11px;</string>
+               </property>
+              </widget>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QListWidget" name="list_result_runs">
+             <property name="maximumSize">
+              <size>
+               <width>16777215</width>
+               <height>110</height>
+              </size>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="resultsMainLayout">
+          <property name="spacing">
+           <number>20</number>
+          </property>
+          <item>
+           <widget class="QTabWidget" name="tab_images">
+            <property name="currentIndex">
+             <number>0</number>
+            </property>
+            <widget class="QWidget" name="tab_trajectory">
+             <attribute name="title">
+              <string>Recorrido</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="trajectoryTabLayout">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="lbl_trajectory_img">
+                <property name="text">
+                 <string>Imagen de recorrido no disponible</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+            <widget class="QWidget" name="tab_heatmap">
+             <attribute name="title">
+              <string>Mapa de Calor</string>
+             </attribute>
+             <layout class="QVBoxLayout" name="heatmapTabLayout">
+              <property name="leftMargin">
+               <number>0</number>
+              </property>
+              <property name="topMargin">
+               <number>0</number>
+              </property>
+              <property name="rightMargin">
+               <number>0</number>
+              </property>
+              <property name="bottomMargin">
+               <number>0</number>
+              </property>
+              <item>
+               <widget class="QLabel" name="lbl_heatmap_img">
+                <property name="text">
+                 <string>Mapa de calor no disponible</string>
+                </property>
+                <property name="alignment">
+                 <set>Qt::AlignCenter</set>
+                </property>
+               </widget>
+              </item>
+             </layout>
+            </widget>
+           </widget>
+          </item>
+          <item>
+           <layout class="QVBoxLayout" name="resultsPanelLayout">
+            <property name="spacing">
+             <number>12</number>
+            </property>
+            <item>
+             <widget class="QGroupBox" name="grp_files">
+              <property name="title">
+               <string>Archivos Generados</string>
+              </property>
+              <property name="minimumSize">
+               <size>
+                <width>230</width>
+                <height>0</height>
+               </size>
+              </property>
+              <layout class="QVBoxLayout" name="filesLayout">
+               <property name="spacing">
+                <number>10</number>
+               </property>
+               <item>
+                <layout class="QHBoxLayout" name="excelRow">
+                 <item>
+                  <widget class="QLabel" name="lbl_file_excel">
+                   <property name="text">
+                    <string>Estadisticas (.xlsx)</string>
+                   </property>
+                   <property name="wordWrap">
+                    <bool>true</bool>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">font-size: 12px;</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_open_excel">
+                   <property name="text">
+                    <string>Abrir</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="video1Row">
+                 <item>
+                  <widget class="QLabel" name="lbl_file_video1">
+                   <property name="text">
+                    <string>Video anotado</string>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">font-size: 12px;</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_open_video1">
+                   <property name="text">
+                    <string>Abrir</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="video2Row">
+                 <item>
+                  <widget class="QLabel" name="lbl_file_video2">
+                   <property name="text">
+                    <string>Video de recorrido</string>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">font-size: 12px;</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_open_video2">
+                   <property name="text">
+                    <string>Abrir</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+               <item>
+                <layout class="QHBoxLayout" name="folderRow">
+                 <item>
+                  <widget class="QLabel" name="lbl_file_folder">
+                   <property name="text">
+                    <string>Carpeta de salida</string>
+                   </property>
+                   <property name="styleSheet">
+                    <string notr="true">font-size: 12px;</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item>
+                  <widget class="QPushButton" name="btn_open_folder">
+                   <property name="text">
+                    <string>Abrir</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QGroupBox" name="grp_summary">
+              <property name="title">
+               <string>Resumen</string>
+              </property>
+              <layout class="QFormLayout" name="summaryFormLayout">
+               <item row="0" column="0">
+                <widget class="QLabel" name="s_lbl_duration">
+                 <property name="text">
+                  <string>Duracion:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="0" column="1">
+                <widget class="QLabel" name="lbl_res_duration">
+                 <property name="text">
+                  <string>—</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="0">
+                <widget class="QLabel" name="s_lbl_res_frames">
+                 <property name="text">
+                  <string>Frames totales:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="1" column="1">
+                <widget class="QLabel" name="lbl_res_frames">
+                 <property name="text">
+                  <string>—</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="0">
+                <widget class="QLabel" name="s_lbl_res_model">
+                 <property name="text">
+                  <string>Modelo:</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="2" column="1">
+                <widget class="QLabel" name="lbl_res_model">
+                 <property name="text">
+                  <string>—</string>
+                 </property>
+                </widget>
+               </item>
+              </layout>
+             </widget>
+            </item>
+            <item>
+             <spacer name="resultsPanelSpacer">
+              <property name="orientation">
+               <enum>Qt::Vertical</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>20</width>
+                <height>40</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <layout class="QHBoxLayout" name="resultsBottomBar">
+          <item>
+           <spacer name="resultsBottomSpacer">
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+          <item>
+           <widget class="QPushButton" name="btn_new_detection">
+            <property name="text">
+             <string>New Detection</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+       </layout>
+      </widget>
+
+     </widget>
+    </item>
+   </layout>
+  </widget>
+
+  <!-- MENUBAR -->
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1100</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuArchivo">
+    <property name="title">
+     <string>Archivo</string>
+    </property>
+    <addaction name="action_nueva_deteccion"/>
+    <addaction name="separator"/>
+    <addaction name="action_salir"/>
+   </widget>
+   <widget class="QMenu" name="menuAyuda">
+    <property name="title">
+     <string>Ayuda</string>
+    </property>
+    <addaction name="action_acerca_de"/>
+   </widget>
+   <addaction name="menuArchivo"/>
+   <addaction name="menuAyuda"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+
+  <action name="action_nueva_deteccion">
+   <property name="text">
+    <string>Nueva Deteccion</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+N</string>
+   </property>
+  </action>
+  <action name="action_salir">
+   <property name="text">
+    <string>Salir</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Q</string>
+   </property>
+  </action>
+  <action name="action_acerca_de">
+   <property name="text">
+    <string>Acerca de</string>
+   </property>
+  </action>
+
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
