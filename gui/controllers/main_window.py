@@ -64,6 +64,8 @@ _TRANSLATIONS: list[tuple] = [
     ("s_lbl_height",          "setText",  "Alto (cm):",                       "Height (cm):"),
     ("grp_import_coords",     "setTitle", "Importar Coordenadas",             "Import Coordinates"),
     ("btn_import_coords",     "setText",  "Examinar...",                      "Browse..."),
+    ("lbl_coords_hint",       "setText",  "Guardado en: outputs/calibration/coords_camera.json o coords_video.json",
+                                          "Saved to: outputs/calibration/coords_camera.json or coords_video.json"),
     ("grp_output_folder",     "setTitle", "Carpeta de Salida",                "Output Folder"),
     ("btn_select_output",     "setText",  "Examinar...",                      "Browse..."),
     ("btn_clear_calib",       "setText",  "Limpiar",                          "Clear"),
@@ -586,15 +588,24 @@ class MainWindow(QMainWindow):
         is_camera = isinstance(self._video_source, int)
         stem = "camara" if is_camera else Path(self._video_source).stem
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        coords_name = "coords_camera.json" if is_camera else "coords_video.json"
 
         base = self._custom_output_dir if self._custom_output_dir else paths.detect_dir
         self._output_dir = base / f"{stem}_{timestamp}"
         self._output_dir.mkdir(parents=True, exist_ok=True)
 
-        self._coords_json = self._output_dir / "coords.json"
+        # Copia por ejecucion (dentro de la carpeta de salida del run)
+        self._coords_json = self._output_dir / coords_name
         with open(self._coords_json, "w") as f:
             json.dump(coords_data, f, indent=4)
-        paths.coords_json.parent.mkdir(parents=True, exist_ok=True)
+
+        # Copias de referencia en outputs/calibration/
+        calib_dir = paths.coords_json.parent
+        calib_dir.mkdir(parents=True, exist_ok=True)
+        # Archivo con nombre especifico segun fuente (camara o video)
+        with open(calib_dir / coords_name, "w") as f:
+            json.dump(coords_data, f, indent=4)
+        # Alias generico coords.json para compatibilidad con scripts CLI
         with open(paths.coords_json, "w") as f:
             json.dump(coords_data, f, indent=4)
 

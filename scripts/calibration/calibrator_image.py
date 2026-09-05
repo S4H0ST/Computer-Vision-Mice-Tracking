@@ -6,7 +6,7 @@ Permite marcar manualmente:
   2. BORDE INTERIOR - 2 esquinas opuestas (rectangulo azul)
   3. AGUJEROS       - 4 centros (circulos verdes)
 
-Guarda coords.json en datasets/ con: exterior, interior, holes,
+Guarda coords.json en outputs/calibration/ con: exterior, interior, holes,
 hole_radius, limits_inner y limits_outer.
 
 Clases:
@@ -31,7 +31,7 @@ PROJECT_ROOT = _THIS.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
 IMAGE_PATH  = PROJECT_ROOT / "media_original" / "cajaBordes.jpg"
-OUTPUT_JSON = PROJECT_ROOT / "datasets" / "coords.json"
+OUTPUT_JSON = PROJECT_ROOT / "outputs" / "calibration" / "coords.json"
 
 HOLE_RADIUS:   int = 15
 DISPLAY_WIDTH: int = 1000   # ancho de la imagen mostrada en pantalla (px)
