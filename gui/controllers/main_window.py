@@ -22,7 +22,9 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 
-from PyQt5.QtWidgets import QMainWindow, QFileDialog, QMessageBox, QListWidgetItem, QSizePolicy
+from PyQt5.QtWidgets import (QMainWindow, QFileDialog, QMessageBox, QListWidgetItem,
+                             QSizePolicy, QDialog, QVBoxLayout, QTabWidget,
+                             QTextBrowser, QDialogButtonBox, QStyle)
 from PyQt5.QtCore import Qt, QTimer, pyqtSlot
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5 import uic
@@ -145,6 +147,120 @@ _CALIB_INSTRUCTIONS = {
 }
 
 
+_HELP_CSS = """
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; font-size: 13px; color: #2c3e50; margin: 12px; }
+  h2   { color: #CB0017; margin-top: 18px; margin-bottom: 4px; }
+  h3   { color: #34495e; margin-top: 14px; margin-bottom: 2px; }
+  p    { margin: 4px 0 10px 0; line-height: 1.5; }
+  ul   { margin: 4px 0 10px 16px; line-height: 1.6; }
+  .step { background: #f4f6f7; border-left: 4px solid #CB0017;
+          padding: 8px 12px; margin: 8px 0; border-radius: 2px; }
+  .tip  { background: #eafaf1; border-left: 4px solid #27ae60;
+          padding: 6px 12px; margin: 6px 0; border-radius: 2px; font-size: 12px; }
+  kbd  { background: #ecf0f1; border: 1px solid #bdc3c7; border-radius: 3px;
+         padding: 1px 5px; font-family: Consolas, monospace; font-size: 11px; }
+</style>
+"""
+
+_HELP_NAV_HTML = _HELP_CSS + """
+<h2>Application Overview</h2>
+<p>Mouse Tracker analyses mouse behaviour in a Barnes maze arena using computer vision.
+The workflow has four pages: <b>Home → Calibration → Detection → Results</b>.</p>
+
+<h2>Home</h2>
+<div class="step">
+  <b>Select Video</b> — load an offline video file (.mp4, .avi, .mov, .mkv).<br>
+  <b>Start Camera</b> — open the default webcam for real-time analysis.
+</div>
+<p>Either button proceeds to the <b>Calibration</b> page automatically.</p>
+
+<h2>Calibration</h2>
+<p>Click 8 points on the arena image to define its geometry:</p>
+<ul>
+  <li><b style="color:#cc0000">Step 1</b> — 2 clicks on opposite corners of the <b>exterior wall</b> (red rectangle).</li>
+  <li><b style="color:#0000cc">Step 2</b> — 2 clicks on opposite corners of the <b>interior floor</b> (blue rectangle).</li>
+  <li><b style="color:#007700">Step 3</b> — 4 clicks on the <b>centre of each hole</b> (green circles).</li>
+</ul>
+<p>Set the real-world box dimensions (cm) and choose an <b>Output Folder</b> before clicking <b>Next →</b>.</p>
+<div class="tip">Tip: you can reuse a previous calibration via <b>Import Coordinates → Browse…</b>
+and selecting a <code>coords_*.json</code> file.</div>
+<div class="tip">Tip: <b>Clear</b> resets all 8 points so you can start over.</div>
+
+<h2>Detection</h2>
+<p>The model processes each frame and shows:</p>
+<ul>
+  <li>Live video feed with behaviour label overlaid.</li>
+  <li>Frame count, FPS and video time elapsed.</li>
+  <li>Running totals (seconds) per behaviour: Idle, Walking, Sniffing, Climbing, Rearing, Head-dip, Grooming.</li>
+</ul>
+<p>Press <b>Cancel</b> to stop early — partial results will still be saved.<br>
+Use <b>← Back</b> (visible after cancelling) to correct the calibration and re-run.</p>
+
+<h2>Results</h2>
+<p>Displayed automatically after detection finishes, or navigate here via the sidebar to
+browse a previous run folder.</p>
+<ul>
+  <li><b>Trajectory</b> tab — colour-coded path of the mouse across the arena.</li>
+  <li><b>Heatmap</b> tab — density map showing where the mouse spent most time.</li>
+  <li><b>Generated Files</b> panel — open the stats spreadsheet (.xlsx), annotated video,
+      clean trajectory video, or the output folder directly.</li>
+</ul>
+<div class="tip">Tip: click <b>Select Folder</b> in the top-right to load results from any previous run.</div>
+
+<h2>Keyboard Shortcuts</h2>
+<ul>
+  <li><kbd>Ctrl+N</kbd> — New Detection (from any page)</li>
+  <li><kbd>Ctrl+Q</kbd> — Exit the application</li>
+  <li><kbd>F1</kbd> — Open this guide</li>
+</ul>
+"""
+
+_HELP_FAQ_HTML = _HELP_CSS + """
+<h2>Frequently Asked Questions</h2>
+
+<h3>What video formats are supported?</h3>
+<p>MP4, AVI, MOV and MKV. Any format that OpenCV can decode on your system will work.</p>
+
+<h3>Do I need to calibrate every time?</h3>
+<p>No. Save the generated <code>coords_*.json</code> file from the output folder and
+re-import it next session via <b>Import Coordinates → Browse…</b>.</p>
+
+<h3>Where are the output files saved?</h3>
+<p>In the folder you selected during calibration, inside a timestamped sub-folder
+(e.g. <code>myvideo_20250101_120000/</code>). A copy of the calibration JSON is also
+written to <code>outputs/calibration/</code> for convenience.</p>
+
+<h3>What behaviours does the model detect?</h3>
+<ul>
+  <li><b>Idle</b> — mouse is stationary.</li>
+  <li><b>Walking</b> — moving across the arena floor.</li>
+  <li><b>Sniffing</b> — nose-down exploration.</li>
+  <li><b>Climbing</b> — moving along the arena wall.</li>
+  <li><b>Rearing</b> — standing on hind legs.</li>
+  <li><b>Head-dip</b> — head extended into a hole.</li>
+  <li><b>Grooming</b> — self-grooming posture.</li>
+</ul>
+
+<h3>Can I analyse a video without a connected camera?</h3>
+<p>Yes — use <b>Select Video</b> on the Home page to load any recorded video file.</p>
+
+<h3>The model is shown as "NOT FOUND" in the sidebar. What do I do?</h3>
+<p>Place the YOLO weights file (<code>.pt</code>) in the path shown in
+<code>scripts/config/config.py</code> under <code>yolo_model</code>.
+Detection will not work until the model file is present.</p>
+
+<h3>Can I stop detection mid-way and still get results?</h3>
+<p>Yes. Press <b>Cancel</b>, confirm the prompt, and the app will save whatever has
+been processed so far — trajectory image, heatmap, annotated video and stats spreadsheet
+will all reflect the partial run.</p>
+
+<h3>How do I switch the interface language?</h3>
+<p>Click the <b>ES / EN</b> button at the bottom of the left sidebar to toggle between
+Spanish and English.</p>
+"""
+
+
 class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
@@ -254,6 +370,51 @@ class MainWindow(QMainWindow):
         # Menu
         self.action_salir.triggered.connect(self.close)
         self.action_nueva_deteccion.triggered.connect(self._on_new_detection)
+        self.action_help.triggered.connect(self._show_help_dialog)
+        self.action_acerca_de.triggered.connect(self._show_about_dialog)
+        self._setup_menu_icons()
+
+    def _setup_menu_icons(self) -> None:
+        s = self.style()
+        self.action_nueva_deteccion.setIcon(s.standardIcon(QStyle.SP_MediaPlay))
+        self.action_salir.setIcon(s.standardIcon(QStyle.SP_DialogCloseButton))
+        self.action_help.setIcon(s.standardIcon(QStyle.SP_DialogHelpButton))
+        self.action_acerca_de.setIcon(s.standardIcon(QStyle.SP_MessageBoxInformation))
+
+    def _show_help_dialog(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        dlg.setWindowTitle("User Guide — Mouse Tracker")
+        dlg.setMinimumSize(680, 520)
+
+        tabs = QTabWidget()
+
+        nav = QTextBrowser()
+        nav.setHtml(_HELP_NAV_HTML)
+        nav.setOpenExternalLinks(False)
+        tabs.addTab(nav, self.style().standardIcon(QStyle.SP_DialogHelpButton), "Navigation")
+
+        faq = QTextBrowser()
+        faq.setHtml(_HELP_FAQ_HTML)
+        faq.setOpenExternalLinks(False)
+        tabs.addTab(faq, self.style().standardIcon(QStyle.SP_MessageBoxQuestion), "FAQ")
+
+        btn_box = QDialogButtonBox(QDialogButtonBox.Close)
+        btn_box.rejected.connect(dlg.accept)
+
+        layout = QVBoxLayout(dlg)
+        layout.addWidget(tabs)
+        layout.addWidget(btn_box)
+        dlg.exec_()
+
+    def _show_about_dialog(self) -> None:
+        QMessageBox.about(
+            self,
+            "About Mouse Tracker",
+            "<b>Mouse Tracker v1.0</b><br><br>"
+            "Automated mouse behaviour analysis using computer vision.<br><br>"
+            "<small style='color:#7f8c8d;'>Universidad Rey Juan Carlos, 2026</small>",
+        )
 
     # ------------------------------------------------------------------
     # Pagina inicio
