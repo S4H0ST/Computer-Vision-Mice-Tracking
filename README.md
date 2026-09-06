@@ -6,13 +6,14 @@
 ![YOLOv8](https://img.shields.io/badge/AI-YOLOv8_Pose-magenta.svg)
 ![PyTorch](https://img.shields.io/badge/Framework-PyTorch-ee4c2c.svg)
 ![OpenCV](https://img.shields.io/badge/Vision-OpenCV-green.svg)
-![Status](https://img.shields.io/badge/Status-In%20Development-yellow)
+![PyQt5](https://img.shields.io/badge/GUI-PyQt5-41cd52.svg)
+![Status](https://img.shields.io/badge/Status-Complete-brightgreen)
 
 **Automated behavioral analysis of rodents in Open Field Test experiments using Deep Learning (Pose Estimation + Spatial Logic).**
 
 ---
 
-![Pipeline v3 detection output](media_original/DemoGit_detection.gif)
+![Pipeline v3 detection output](docs/DemoGit_detection.gif)
 
 ---
 
@@ -60,7 +61,7 @@ Standard YOLOv8 trained on a large frame-extracted dataset. Immediate overfittin
 
 Added 5 behavior classes. Found that Walking and Immobile are visually identical to a CNN — both produce the same horizontal bounding box. A single frame carries no temporal information.
 
-![bounding box demo](media_original/DemoGit_rat.gif)
+![bounding box demo](docs/DemoGit_rat.gif)
 </details>
 
 <details>
@@ -88,7 +89,7 @@ Designed and implemented a 2-layer LSTM to analyse the temporal sequence of boun
 
 The RNN never contributed to any detection output. Its code is archived for reference.
 
-![Phase 4 RNN-era detection output](media_original/DemoGit_phase4.gif)
+![Phase 4 RNN-era detection output](docs/DemoGit_phase4.gif)
 
 > *resultado_final.mp4 — YOLOv8 bounding box detection with RNN temporal classifier active. Minute 3, 30 s segment.*
 </details>
@@ -132,7 +133,7 @@ exp8 was selected as the active model. Three post-processing improvements were a
 
 Result: detection rate 92.1 %, climbing +13.4 pp over exp9 on the same test video.
 
-![Pipeline v3 detection output](media_original/DemoGit_detection.gif)
+![Pipeline v3 detection output](docs/DemoGit_detection.gif)
 
 > *testRata5.mp4 — exp8 model + pipeline v3. Bounding box + behavior label + calibrated zone overlay (inner wall boundary + hole markers). 30 s segment from minute 5: head dipping, walking, sniffing, climbing and grooming.*
 </details>
@@ -245,11 +246,11 @@ Zones are calibrated interactively per video (first frame is extracted automatic
 
 **Trajectory map** — snout path over arena template:
 
-![Trajectory](media_original/trajectory_result.png)
+![Trajectory](docs/trajectory_result.png)
 
 **Heat map** — color encodes presence density: blue = rarely visited, red = hotspot (high dwell time):
 
-![Heatmap](media_original/heatmap_result.png)
+![Heatmap](docs/heatmap_result.png)
 
 **Interpretation:**
 
@@ -287,26 +288,29 @@ cd Computer-Vision-Mice-Tracking
 **2. Install dependencies:**
 ```bash
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
-pip install ultralytics opencv-python pandas openpyxl pyyaml
+pip install ultralytics opencv-python pandas openpyxl pyyaml PyQt5
 ```
 
 ---
 
 ## Usage
 
+### Graphical Interface (recommended)
+
 ```bash
-cd scripts
-python main_model.py
+python -m gui.app
 ```
 
-### Menu Options
+The GUI guides you through the full workflow in four pages:
 
-| Option | Action |
+| Page | What you do |
 |---|---|
-| **1 — Train YOLO Model** | Trains YOLOv8s-Pose for up to 100 epochs on `datasets/`. Copies `best.pt` to `models/yolo_ratas.pt` on completion. |
-| **2 — Run Detection (Video)** | Picks a video file, extracts the first frame for calibration (interactive grid overlay), runs the full pipeline and saves results to `outputs/`. |
-| **3 — Run Detection (Live Camera)** | Captures a frame from the default camera for calibration, then runs real-time detection. Press Q in the preview window to stop and generate stats. |
-| **4 — Exit** | — |
+| **Home** | Choose a video file or start the live camera |
+| **Calibration** | Click 8 points on the arena image (2 exterior corners, 2 interior corners, 4 hole centres). Set real dimensions and output folder. |
+| **Detection** | Processing runs automatically. Live feed, FPS, and per-behaviour counters are shown in real time. Cancel at any point — partial results are saved. |
+| **Results** | Trajectory and heatmap tabs. Open the Excel report, annotated video or output folder directly from the UI. |
+
+Press `F1` at any time to open the built-in user guide.
 
 ### Output per Detection Run
 
@@ -327,43 +331,54 @@ Each run creates a folder `outputs/detections/{stem}_{datetime}/` containing:
 
 ```text
 Computer-Vision-Mice-Tracking/
-├── datasets/
-│   ├── train/images/        # 1 101 training images (248 original + ×4.4 aug)
-│   ├── valid/images/        # 48 validation images
-│   ├── test/images/         # 23 test images
-│   ├── data.yaml            # YOLO config (kpt_shape=[3,3], nc=5)
-│   └── coords.json          # Calibration: outer wall, inner wall, 4 holes
-├── media_original/
-│   ├── poses.png                  # Reference: 5 training posture classes
-│   ├── trajectory_result.png      # testRata5 — snout trajectory over arena template
-│   ├── heatmap_result.png         # testRata5 — dwell-time heat map (blue→red)
-│   ├── DemoGit_rat.gif            # Phase 2 demo — bounding box detection
-│   ├── DemoGit_phase4.gif         # Phase 4 demo — YOLO + RNN classifier
-│   └── DemoGit_detection.gif      # Phase 6 demo — full pipeline v3 overlay
-├── models/
-│   ├── yolov8s-pose.pt      # Base pretrained model (Ultralytics)
-│   └── yolo_ratas.pt        # Trained model — auto-copied after training
+│
+│  ── APP (packaged for end users) ─────────────────────────────────────
+├── gui/
+│   ├── app.py                  # Entry point: python -m gui.app
+│   ├── main_window.ui          # Qt Designer layout (XML)
+│   ├── assets/icons/
+│   │   └── app_icon.ico        # App icon (all sizes)
+│   └── controllers/
+│       ├── main_window.py      # MainWindow — navigation, calibration, language
+│       └── detect_worker.py    # DetectionWorker(QThread) — runs pipeline off UI thread
+│
+├── scripts/
+│   ├── main_model.py           # CLI entry point (admin / headless mode)
+│   ├── config/
+│   │   ├── config.py           # Central config: Paths, TrainParams, DetectParams
+│   │   └── interfaces.py       # BaseModule abstract class
+│   ├── calibration/
+│   │   ├── calibrator.py       # ZoneCalibrator — interactive video calibration
+│   │   └── calibrator_image.py # ImageCalibrator — static image calibration
+│   ├── detection/
+│   │   ├── detector.py         # RatDetector — YOLO + classifier + writers
+│   │   └── trainer.py          # YOLOTrainer — training with geometric augmentation
+│   ├── spatial/
+│   │   └── spatial.py          # SpatialAnalyzer — dipping, sniffing, wall checks
+│   ├── behavior/
+│   │   └── behavior_classifier.py  # BehaviorClassifier + _LabelStabilizer
+│   ├── output/
+│   │   └── writers.py          # VideoOutput + CsvOutput — persistence only
+│   └── utils/
+│       └── stats_generator.py  # Excel report + trajectory + heatmap images
+│
+├── models/                     # Model weights (not committed — download separately)
+│   └── yolo_ratas.pt           # Active model: exp8 YOLOv8s-Pose
+│
 ├── outputs/
-│   ├── detections/          # Per-run results: annotated video + CSV + Excel + trajectory
-│   └── reports/             # Dataset quality report (pre-augmentation)
-├── runs/train/              # YOLO training runs (weights, metrics, plots)
-└── scripts/
-    ├── main_model.py        # Interactive entry point (menu)
-    ├── config/
-    │   ├── config.py        # Central config: Paths, TrainParams, DetectParams
-    │   └── interfaces.py    # BaseModule abstract class
-    ├── calibration/
-    │   ├── calibrator.py        # ZoneCalibrator — interactive video calibration
-    │   └── calibrator_image.py  # ImageCalibrator — static image calibration
-    ├── detection/
-    │   ├── detector.py      # RatDetector — orchestrates YOLO + classifier + writers
-    │   └── trainer.py       # YOLOTrainer — geometric augmentation only
-    ├── spatial/
-    │   └── spatial.py       # SpatialAnalyzer — dipping, sniffing, wall checks
-    ├── behavior/
-    │   └── behavior_classifier.py  # BehaviorClassifier + _LabelStabilizer
-    ├── output/
-    │   └── writers.py       # VideoOutput + CsvOutput — persistence only
-    └── utils/
-        └── stats_generator.py   # Excel report + trajectory image
+│   ├── calibration/            # coords JSON files saved here after calibration
+│   └── detections/             # Per-run output folders (generated at runtime)
+│
+│  ── DEVELOPMENT / TRAINING (not packaged) ────────────────────────────
+├── datasets/                   # Training data — not committed (gitignored)
+│   ├── train/ valid/ test/     # 1 101 / 48 / 23 images
+│   └── data.yaml               # YOLO config (kpt_shape=[3,3], nc=5)
+│
+├── docs/                       # README assets (gifs, result images)
+│
+├── media_original/             # Raw development media (gitignored)
+│   ├── frames_original/        # Source frames used for annotation
+│   └── videos/                 # Original experiment videos
+│
+└── adminScripts/               # TFG documentation (decisions, theory, AnyMaze gaps)
 ```
