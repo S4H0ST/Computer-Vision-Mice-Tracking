@@ -15,10 +15,8 @@ datasets/test/
 datasets/data.yaml
 datasets/coords.json
 
-# Media de desarrollo (videos y frames originales sin procesar)
-media_original/frames_original/
-media_original/videos/
-media_original/*.mp4
+# Media de desarrollo (no se empaqueta)
+media_original/
 
 # Pesos del modelo (binarios grandes, no van al repo)
 models/*.pt
@@ -29,12 +27,12 @@ gui/assets/crear_icono.py
 gui/assets/*.png
 
 # Outputs en tiempo de ejecución (generados por la app)
-outputs/detections/
-outputs/reports/
-outputs/calibration/*.json
+outputs/
 
-# ── Archivos de planificación / borrador ─────────────────────────────
+# ── Archivos de planificación / borrador (solo local) ────────────────
 PROYECTO.md
+Orden_codigo_y_teoria.md
+adminScripts/
 
 # ── Otros ────────────────────────────────────────────────────────────
 scripts/guia/
