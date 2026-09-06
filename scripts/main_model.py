@@ -29,6 +29,32 @@ from utils.stats_generator import StatsGenerator
 VIDEO_EXTS: set[str] = {".mp4", ".avi", ".mov", ".mkv"}
 
 
+def _select_device() -> None:
+    """Detecta GPU/CPU al arrancar y permite elegir el dispositivo de inferencia."""
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            print(f"\n[HW] GPU detectada: {gpu_name}")
+            choice = input("[?] Usar GPU (Enter) o CPU? [G/c]: ").strip().lower()
+            if choice == "c":
+                detect_cfg.device = "cpu"
+                train_cfg.device  = "cpu"
+                print("[HW] Dispositivo seleccionado: CPU")
+            else:
+                detect_cfg.device = "0"
+                train_cfg.device  = "0"
+                print("[HW] Dispositivo seleccionado: GPU")
+        else:
+            detect_cfg.device = "cpu"
+            train_cfg.device  = "cpu"
+            print("\n[HW] Sin GPU CUDA disponible — usando CPU.")
+    except ImportError:
+        detect_cfg.device = "cpu"
+        train_cfg.device  = "cpu"
+        print("\n[HW] PyTorch no encontrado — usando CPU.")
+
+
 def _ask_box_size(coords_path: Path) -> None:
     """
     Pregunta al usuario el tamano fisico de la caja y lo guarda en coords_path.
@@ -168,6 +194,7 @@ def _run_detection(frame_for_calib, source_label: str,
 def main() -> None:
     """Bucle principal del menu. Orquesta las opciones del pipeline."""
     paths.check_dirs()
+    _select_device()
 
     while True:
         print("\n" + "=" * 45)
