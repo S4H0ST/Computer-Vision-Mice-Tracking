@@ -2,37 +2,43 @@
 __pycache__/
 *.py[codz]
 *$py.class
-README_HELPS/
-runs/
-OldTest/
-output/
-videos/
-config/
-data/
+
+# ── Entorno y herramientas IDE ───────────────────────────────────────
 .idea/
+runs/
+
+# ── Partes NO empaquetadas (solo desarrollo / entrenamiento) ─────────
+# Dataset de entrenamiento
+datasets/train/
+datasets/valid/
+datasets/test/
+datasets/data.yaml
+datasets/coords.json
+
+# Media de desarrollo (videos y frames originales sin procesar)
+media_original/frames_original/
+media_original/videos/
+media_original/*.mp4
+
+# Pesos del modelo (binarios grandes, no van al repo)
 models/*.pt
 models/*.pth
-media/*.mp4
-media/*.gif
-models/
-datasets/test
-datasets/train
-datasets/valid
-anotaciones/
-dicProyect.md
+
+# Herramientas de desarrollo de assets (no parte de la app)
+gui/assets/crear_icono.py
+gui/assets/*.png
+
+# Outputs en tiempo de ejecución (generados por la app)
+outputs/detections/
+outputs/reports/
+outputs/calibration/*.json
+
+# ── Archivos de planificación / borrador ─────────────────────────────
 PROYECTO.md
-DECISIONES_TFG.md
-Orden_codigo_y_teoria.md
-adminScripts/
-media_original/frames_original
-media_original/videos
-media_original/*.gif
-!media_original/DemoGit_rat.gif
-!media_original/DemoGit_detection.gif
-!media_original/DemoGit_phase4.gif
-datasets/coords.json
-outputs/
+
+# ── Otros ────────────────────────────────────────────────────────────
 scripts/guia/
+OldTest/
 # C extensions
 *.so
 
