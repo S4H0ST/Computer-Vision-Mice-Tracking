@@ -376,9 +376,7 @@ Computer-Vision-Mice-Tracking/
 │
 ├── docs/                       # README assets (gifs, result images)
 │
-├── media_original/             # Raw development media (gitignored)
-│   ├── frames_original/        # Source frames used for annotation
-│   └── videos/                 # Original experiment videos
-│
-└── adminScripts/               # TFG documentation (decisions, theory, AnyMaze gaps)
+└── media_original/             # Raw development media (gitignored)
+    ├── frames_original/        # Source frames used for annotation
+    └── videos/                 # Original experiment videos
 ```
