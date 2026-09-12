@@ -22,7 +22,8 @@ from PyQt5.QtWidgets import (
     QComboBox, QDialog, QDialogButtonBox, QListWidget, QListWidgetItem,
     QFileDialog, QMessageBox, QProgressDialog, QFormLayout,
     QGroupBox, QSizePolicy, QFrame, QAbstractItemView,
-    QInputDialog, QSpinBox,
+    QInputDialog, QSpinBox, QTableWidget, QTableWidgetItem, QHeaderView,
+    QColorDialog, QStyle,
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
@@ -36,35 +37,75 @@ DATASETS_DIR = PROJECT_ROOT / "datasets"
 MODELS_DIR   = PROJECT_ROOT / "models"
 HOLE_RADIUS  = 15
 
-# Nombres de visualizacion de etiquetas por idioma
-_KEY_DISPLAY = {
-    "climbing":     {"es": "1: Escalando",      "en": "1: Climbing"},
-    "grooming":     {"es": "2: Acicalamiento",  "en": "2: Grooming"},
-    "head_dipping": {"es": "3: Agujero",        "en": "3: Head-dip"},
-    "horizontal":   {"es": "4: Horizontal",     "en": "4: Horizontal"},
-    "rearing":      {"es": "5: Erguido",        "en": "5: Rearing"},
-    "sniffing":     {"es": "6: Olfateando",     "en": "6: Sniffing"},
-    "immobile":     {"es": "7: Inmovil",        "en": "7: Immobile"},
-}
+_LABEL_CONFIG_PATH = PROJECT_ROOT / "scripts" / "config" / "labels.json"
 
-# (Qt.Key, internal_name, display_name_es, hex_color, bgr_color_tuple)
-PRELABEL_KEYS = [
-    (Qt.Key_1, "climbing",     "1: Escalando",      "#ff00ff", (255,   0, 255)),
-    (Qt.Key_2, "grooming",     "2: Acicalamiento",  "#b4ffb4", (180, 255, 180)),
-    (Qt.Key_3, "head_dipping", "3: Agujero",        "#ffa500", (0,   165, 255)),
-    (Qt.Key_4, "horizontal",   "4: Horizontal",     "#ffff00", (0,   255, 255)),
-    (Qt.Key_5, "rearing",      "5: Erguido",        "#00ff00", (0,   255,   0)),
-    (Qt.Key_6, "sniffing",     "6: Olfateando",     "#00c8ff", (255, 200,   0)),
-    (Qt.Key_7, "immobile",     "7: Inmovil",        "#b4b4b4", (180, 180, 180)),
+_DEFAULT_LABEL_CONFIG: list[dict] = [
+    {"key_char": "1", "name": "climbing",     "display_es": "1: Escalando",     "display_en": "1: Climbing",   "hex_color": "#ff00ff", "bgr_color": [255,   0, 255]},
+    {"key_char": "2", "name": "grooming",     "display_es": "2: Acicalamiento", "display_en": "2: Grooming",   "hex_color": "#b4ffb4", "bgr_color": [180, 255, 180]},
+    {"key_char": "3", "name": "head_dipping", "display_es": "3: Agujero",       "display_en": "3: Head-dip",   "hex_color": "#ffa500", "bgr_color": [  0, 165, 255]},
+    {"key_char": "4", "name": "horizontal",   "display_es": "4: Horizontal",    "display_en": "4: Horizontal", "hex_color": "#ffff00", "bgr_color": [  0, 255, 255]},
+    {"key_char": "5", "name": "rearing",      "display_es": "5: Erguido",       "display_en": "5: Rearing",    "hex_color": "#00ff00", "bgr_color": [  0, 255,   0]},
+    {"key_char": "6", "name": "sniffing",     "display_es": "6: Olfateando",    "display_en": "6: Sniffing",   "hex_color": "#00c8ff", "bgr_color": [255, 200,   0]},
+    {"key_char": "7", "name": "immobile",     "display_es": "7: Inmovil",       "display_en": "7: Immobile",   "hex_color": "#b4b4b4", "bgr_color": [180, 180, 180]},
 ]
-CLASS_NAMES = [k[1] for k in PRELABEL_KEYS]
+
+
+def _load_label_config() -> list[dict]:
+    if _LABEL_CONFIG_PATH.exists():
+        try:
+            import json as _j
+            with open(_LABEL_CONFIG_PATH, "r", encoding="utf-8") as f:
+                data = _j.load(f)
+            if isinstance(data, list) and data:
+                return data
+        except Exception:
+            pass
+    return [dict(d) for d in _DEFAULT_LABEL_CONFIG]
+
+
+def _save_label_config(config: list[dict]) -> None:
+    import json as _j
+    _LABEL_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(_LABEL_CONFIG_PATH, "w", encoding="utf-8") as f:
+        _j.dump(config, f, indent=4, ensure_ascii=False)
+
+
+_KEY_DISPLAY: dict = {}
+PRELABEL_KEYS: list = []
+CLASS_NAMES:   list = []
+
+
+def reload_prelabel_config() -> None:
+    """Rebuilds module-level PRELABEL_KEYS / CLASS_NAMES / _KEY_DISPLAY from JSON."""
+    config = _load_label_config()
+    new_keys: list = []
+    new_display: dict = {}
+    for entry in config:
+        key_char = entry.get("key_char", "1").upper()
+        qt_key = getattr(Qt, f"Key_{key_char}", Qt.Key_1)
+        name = entry["name"]
+        disp_es = entry.get("display_es", f"{key_char}: {name}")
+        hex_c   = entry.get("hex_color", "#888888")
+        bgr     = tuple(entry.get("bgr_color", [128, 128, 128]))
+        new_keys.append((qt_key, name, disp_es, hex_c, bgr))
+        new_display[name] = {
+            "es": disp_es,
+            "en": entry.get("display_en", disp_es),
+        }
+    PRELABEL_KEYS[:] = new_keys
+    CLASS_NAMES[:] = [k[1] for k in new_keys]
+    _KEY_DISPLAY.clear()
+    _KEY_DISPLAY.update(new_display)
+
+
+reload_prelabel_config()
 
 # Textos traducibles
 _PL_T = {
-    "step0_title":     {"es": "Pre-Etiquetado — Paso 1: Seleccion de Video",
-                        "en": "Pre-Labeling — Step 1: Video Selection"},
-    "step1_title":     {"es": "Pre-Etiquetado — Paso 2: Procesando Video",
-                        "en": "Pre-Labeling — Step 2: Processing Video"},
+    "step0_title":     {"es": "Pre-Etiquetado — Seleccion de Video",
+                        "en": "Pre-Labeling — Video Selection"},
+    "step1_title":     {"es": "Pre-Etiquetado — Procesando Video",
+                        "en": "Pre-Labeling — Processing Video"},
     "no_video":        {"es": "Selecciona un video para mostrar el primer frame",
                         "en": "Select a video to display the first frame"},
     "browse_video":    {"es": "Seleccionar Video...",    "en": "Browse Video..."},
@@ -105,6 +146,72 @@ _PL_T = {
     "output_folder_grp":  {"es": "Carpeta dataset",      "en": "Dataset folder"},
     "output_default":     {"es": "Predeterminada: datasets/", "en": "Default: datasets/"},
     "browse_btn":         {"es": "Cambiar...",            "en": "Browse..."},
+    "warn_video":         {"es": "Selecciona un video.",
+                           "en": "Select a video."},
+    "warn_calib":         {"es": "Completa la calibracion (o marca 'Omitir calibracion').",
+                           "en": "Complete calibration (or check 'Skip calibration')."},
+    "warn_output":        {"es": "Selecciona una carpeta de salida.",
+                           "en": "Select an output folder."},
+    "no_video_path":      {"es": "Ningun video seleccionado",
+                           "en": "No video selected"},
+    "err_read_frame":     {"es": "No se pudo leer el primer frame del video.",
+                           "en": "Could not read the first frame of the video."},
+    "err_preprocess_t":   {"es": "Error de pre-procesado",    "en": "Pre-processing error"},
+    "no_data_t":          {"es": "Sin datos",                 "en": "No data"},
+    "no_valid_frames":    {"es": "No hay frames con etiqueta y deteccion valida.",
+                           "en": "No frames with a valid label and detection."},
+    "gen_progress":       {"es": "Generando dataset...",      "en": "Generating dataset..."},
+    "gen_title":          {"es": "Generando dataset",         "en": "Generating dataset"},
+    "err_gen_t":          {"es": "Error generando dataset",   "en": "Dataset generation error"},
+    "gen_done_t":         {"es": "Dataset generado",          "en": "Dataset generated"},
+    "gen_done_msg":       {"es": "Dataset guardado en:\n{path}\n\nFrames etiquetados: {n}\nPuedes etiquetar otro video o ir a Entrenar.",
+                           "en": "Dataset saved to:\n{path}\n\nLabelled frames: {n}\nYou can label another video or go to Train."},
+    "lsd_title":          {"es": "Configurar Etiquetas",      "en": "Label Settings"},
+    "lsd_desc":           {"es": "Define las etiquetas disponibles durante el Pre-Etiquetado. Haz clic en la celda de <b>Color</b> para cambiar el color.",
+                           "en": "Define the labels available during Pre-Labeling. Click the <b>Colour</b> cell to change it."},
+    "lsd_col_key":        {"es": "Tecla",                     "en": "Key"},
+    "lsd_col_name":       {"es": "Nombre interno",            "en": "Internal name"},
+    "lsd_col_es":         {"es": "Pantalla ES",               "en": "Display ES"},
+    "lsd_col_en":         {"es": "Pantalla EN",               "en": "Display EN"},
+    "lsd_col_color":      {"es": "Color",                     "en": "Colour"},
+    "lsd_add":            {"es": "+ Anadir fila",             "en": "+ Add row"},
+    "lsd_del":            {"es": "- Eliminar fila",           "en": "- Remove row"},
+    "lsd_hint":           {"es": "Los cambios se aplican al reabrir Pre-Etiquetado.",
+                           "en": "Changes take effect the next time you open Pre-Labeling."},
+    "lsd_save":           {"es": "Guardar",                   "en": "Save"},
+    "lsd_cancel":         {"es": "Cancelar",                  "en": "Cancel"},
+    "lsd_color_dlg":      {"es": "Seleccionar color",         "en": "Select colour"},
+    "lsd_err_empty_t":    {"es": "Dato faltante",             "en": "Missing data"},
+    "lsd_err_empty":      {"es": "La fila {n} tiene la tecla o el nombre vacios.",
+                           "en": "Row {n} has an empty key or name."},
+    "lsd_err_key_t":      {"es": "Tecla invalida",            "en": "Invalid key"},
+    "lsd_err_key":        {"es": "La fila {n}: la tecla debe ser un unico caracter.",
+                           "en": "Row {n}: the key must be a single character."},
+    "lsd_err_dup_key_t":  {"es": "Tecla duplicada",           "en": "Duplicate key"},
+    "lsd_err_dup_key":    {"es": "La tecla '{k}' aparece mas de una vez.",
+                           "en": "Key '{k}' appears more than once."},
+    "lsd_err_dup_name_t": {"es": "Nombre duplicado",          "en": "Duplicate name"},
+    "lsd_err_dup_name":   {"es": "El nombre '{n}' aparece mas de una vez.",
+                           "en": "Name '{n}' appears more than once."},
+    "lsd_err_none_t":     {"es": "Sin etiquetas",             "en": "No labels"},
+    "lsd_err_none":       {"es": "Debe haber al menos una etiqueta.",
+                           "en": "There must be at least one label."},
+    "eld_title":          {"es": "Editar Etiquetas / Clases", "en": "Edit Labels / Classes"},
+    "eld_lbl":            {"es": "Clases del dataset (una por linea):", "en": "Dataset classes (one per line):"},
+    "eld_add":            {"es": "Agregar",                   "en": "Add"},
+    "eld_rename":         {"es": "Renombrar",                 "en": "Rename"},
+    "eld_remove":         {"es": "Eliminar",                  "en": "Remove"},
+    "eld_dlg_add":        {"es": "Agregar clase",             "en": "Add class"},
+    "eld_dlg_add_ph":     {"es": "Nombre de la nueva clase:", "en": "New class name:"},
+    "eld_dlg_ren":        {"es": "Renombrar clase",           "en": "Rename class"},
+    "eld_dlg_ren_ph":     {"es": "Nuevo nombre:",             "en": "New name:"},
+    "eld_err_yaml_t":     {"es": "Error",                     "en": "Error"},
+    "eld_err_yaml":       {"es": "No se pudo guardar data.yaml:\n{e}", "en": "Could not save data.yaml:\n{e}"},
+    "eld_changed_t":      {"es": "Clases modificadas",        "en": "Classes modified"},
+    "eld_changed":        {"es": "Al anadir o eliminar clases se creara un modelo nuevo.",
+                           "en": "Adding or removing classes will require a new model."},
+    "eld_no_change_t":    {"es": "Sin cambios",               "en": "No changes"},
+    "eld_no_change":      {"es": "Las clases no han cambiado.", "en": "Classes have not changed."},
 }
 
 
@@ -113,6 +220,19 @@ def _fmt_time(s: float) -> str:
     m = int(s) // 60
     sec = int(s) % 60
     return f"{m}:{sec:02d}"
+
+
+def _draw_grid(frame: np.ndarray, divisions: int = 12) -> None:
+    h, w = frame.shape[:2]
+    overlay = frame.copy()
+    gray = (210, 210, 210)
+    for i in range(1, divisions):
+        x = int(w * i / divisions)
+        cv2.line(overlay, (x, 0), (x, h), gray, 1)
+    for j in range(1, divisions):
+        y = int(h * j / divisions)
+        cv2.line(overlay, (0, y), (w, y), gray, 1)
+    cv2.addWeighted(overlay, 0.15, frame, 0.85, 0, frame)
 
 
 # ---------------------------------------------------------------------------
@@ -260,14 +380,19 @@ class PreprocessWorker(QThread):
 # ---------------------------------------------------------------------------
 
 class EditLabelsDialog(QDialog):
-    def __init__(self, parent=None) -> None:
+    def __init__(self, parent=None, lang: str = "es") -> None:
         super().__init__(parent)
-        self.setWindowTitle("Editar Etiquetas / Clases")
+        self._lang = lang
+        self.setWindowTitle(_PL_T["eld_title"][lang])
         self.setMinimumSize(360, 400)
         self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         self._original_classes: list[str] = []
         self._load_classes()
         self._build_ui()
+
+    def _t(self, key: str) -> str:
+        e = _PL_T.get(key, {})
+        return e.get(self._lang, e.get("es", key))
 
     def _load_classes(self) -> None:
         yaml_path = DATASETS_DIR / "data.yaml"
@@ -285,7 +410,7 @@ class EditLabelsDialog(QDialog):
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setSpacing(8)
-        lbl = QLabel("Clases del dataset (una por linea):")
+        lbl = QLabel(self._t("eld_lbl"))
         lbl.setStyleSheet("font-weight: bold;")
         layout.addWidget(lbl)
         self._list = QListWidget()
@@ -294,8 +419,8 @@ class EditLabelsDialog(QDialog):
             self._list.addItem(QListWidgetItem(name))
         layout.addWidget(self._list)
         btn_row = QHBoxLayout()
-        for text, slot in [("Agregar", self._on_add), ("Renombrar", self._on_rename), ("Eliminar", self._on_remove)]:
-            b = QPushButton(text)
+        for key, slot in [("eld_add", self._on_add), ("eld_rename", self._on_rename), ("eld_remove", self._on_remove)]:
+            b = QPushButton(self._t(key))
             b.clicked.connect(slot)
             btn_row.addWidget(b)
         layout.addLayout(btn_row)
@@ -305,7 +430,7 @@ class EditLabelsDialog(QDialog):
         layout.addWidget(box)
 
     def _on_add(self) -> None:
-        name, ok = QInputDialog.getText(self, "Agregar clase", "Nombre de la nueva clase:")
+        name, ok = QInputDialog.getText(self, self._t("eld_dlg_add"), self._t("eld_dlg_add_ph"))
         if ok and name.strip():
             self._list.addItem(QListWidgetItem(name.strip()))
 
@@ -313,7 +438,7 @@ class EditLabelsDialog(QDialog):
         items = self._list.selectedItems()
         if not items:
             return
-        new, ok = QInputDialog.getText(self, "Renombrar clase", "Nuevo nombre:", text=items[0].text())
+        new, ok = QInputDialog.getText(self, self._t("eld_dlg_ren"), self._t("eld_dlg_ren_ph"), text=items[0].text())
         if ok and new.strip():
             items[0].setText(new.strip())
 
@@ -329,13 +454,186 @@ class EditLabelsDialog(QDialog):
             DATASETS_DIR.mkdir(parents=True, exist_ok=True)
             _write_data_yaml(new_classes, DATASETS_DIR / "data.yaml")
         except Exception as exc:
-            QMessageBox.critical(self, "Error", f"No se pudo guardar data.yaml:\n{exc}")
+            QMessageBox.critical(self, self._t("eld_err_yaml_t"),
+                                 self._t("eld_err_yaml").format(e=exc))
             return
         if changed:
-            QMessageBox.warning(self, "Clases modificadas",
-                                "Al anadir o eliminar clases se creara un modelo nuevo.")
+            QMessageBox.warning(self, self._t("eld_changed_t"), self._t("eld_changed"))
         else:
-            QMessageBox.information(self, "Sin cambios", "Las clases no han cambiado.")
+            QMessageBox.information(self, self._t("eld_no_change_t"), self._t("eld_no_change"))
+        self.accept()
+
+
+# ---------------------------------------------------------------------------
+# LabelSettingsDialog
+# ---------------------------------------------------------------------------
+
+class LabelSettingsDialog(QDialog):
+    """Dialogo para añadir, eliminar y modificar etiquetas (tecla, nombre, color)."""
+
+    def __init__(self, parent=None, lang: str = "es") -> None:
+        super().__init__(parent)
+        self._lang = lang
+        self.setWindowTitle(_PL_T["lsd_title"][lang])
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+        self.setMinimumSize(700, 440)
+        self._hex_colors: list[str] = []
+        self._build_ui()
+        self._populate()
+
+    def _t(self, key: str) -> str:
+        e = _PL_T.get(key, {})
+        return e.get(self._lang, e.get("es", key))
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setSpacing(10)
+
+        desc = QLabel(self._t("lsd_desc"))
+        desc.setWordWrap(True)
+        desc.setStyleSheet("font-size: 12px; color: #555;")
+        layout.addWidget(desc)
+
+        self._table = QTableWidget(0, 5)
+        self._table.setHorizontalHeaderLabels([
+            self._t("lsd_col_key"), self._t("lsd_col_name"),
+            self._t("lsd_col_es"),  self._t("lsd_col_en"),
+            self._t("lsd_col_color"),
+        ])
+        hdr = self._table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(3, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked)
+        self._table.cellClicked.connect(self._on_cell_clicked)
+        layout.addWidget(self._table)
+
+        btn_row = QHBoxLayout()
+        btn_add = QPushButton(self._t("lsd_add"))
+        btn_add.clicked.connect(self._on_add_row)
+        btn_row.addWidget(btn_add)
+        btn_del = QPushButton(self._t("lsd_del"))
+        btn_del.clicked.connect(self._on_del_row)
+        btn_row.addWidget(btn_del)
+        btn_row.addStretch()
+        btn_row.addWidget(QLabel(f"<small>{self._t('lsd_hint')}</small>"))
+        layout.addLayout(btn_row)
+
+        box = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        box.button(QDialogButtonBox.Save).setText(self._t("lsd_save"))
+        box.button(QDialogButtonBox.Cancel).setText(self._t("lsd_cancel"))
+        box.accepted.connect(self._on_save)
+        box.rejected.connect(self.reject)
+        layout.addWidget(box)
+
+    def _populate(self) -> None:
+        config = _load_label_config()
+        self._hex_colors = []
+        for entry in config:
+            self._append_row(entry)
+
+    def _append_row(self, entry: dict) -> None:
+        row = self._table.rowCount()
+        self._table.insertRow(row)
+        hex_c = entry.get("hex_color", "#888888")
+        self._hex_colors.append(hex_c)
+
+        self._table.setItem(row, 0, QTableWidgetItem(entry.get("key_char", "")))
+        self._table.setItem(row, 1, QTableWidgetItem(entry.get("name", "")))
+        self._table.setItem(row, 2, QTableWidgetItem(entry.get("display_es", "")))
+        self._table.setItem(row, 3, QTableWidgetItem(entry.get("display_en", "")))
+
+        color_item = QTableWidgetItem(hex_c)
+        from PyQt5.QtGui import QColor as _QColor
+        color_item.setBackground(_QColor(hex_c))
+        color_item.setFlags(color_item.flags() & ~Qt.ItemIsEditable)
+        self._table.setItem(row, 4, color_item)
+
+    def _on_cell_clicked(self, row: int, col: int) -> None:
+        if col != 4:
+            return
+        from PyQt5.QtGui import QColor as _QColor
+        current = _QColor(self._hex_colors[row] if row < len(self._hex_colors) else "#ffffff")
+        color = QColorDialog.getColor(current, self, self._t("lsd_color_dlg"))
+        if color.isValid():
+            hex_c = color.name()
+            self._hex_colors[row] = hex_c
+            item = self._table.item(row, 4)
+            if item:
+                item.setText(hex_c)
+                item.setBackground(color)
+
+    def _on_add_row(self) -> None:
+        self._append_row({"key_char": "", "name": "", "display_es": "", "display_en": "", "hex_color": "#888888"})
+
+    def _on_del_row(self) -> None:
+        row = self._table.currentRow()
+        if row >= 0:
+            self._table.removeRow(row)
+            if row < len(self._hex_colors):
+                self._hex_colors.pop(row)
+
+    def _on_save(self) -> None:
+        config: list[dict] = []
+        seen_keys: set = set()
+        seen_names: set = set()
+
+        for row in range(self._table.rowCount()):
+            def _cell(c: int) -> str:
+                it = self._table.item(row, c)
+                return it.text().strip() if it else ""
+
+            key_char = _cell(0).upper()
+            name     = _cell(1)
+            disp_es  = _cell(2)
+            disp_en  = _cell(3)
+            hex_c    = self._hex_colors[row] if row < len(self._hex_colors) else "#888888"
+
+            if not key_char or not name:
+                QMessageBox.warning(self, self._t("lsd_err_empty_t"),
+                    self._t("lsd_err_empty").format(n=row + 1))
+                return
+            if len(key_char) != 1:
+                QMessageBox.warning(self, self._t("lsd_err_key_t"),
+                    self._t("lsd_err_key").format(n=row + 1))
+                return
+            if key_char in seen_keys:
+                QMessageBox.warning(self, self._t("lsd_err_dup_key_t"),
+                    self._t("lsd_err_dup_key").format(k=key_char))
+                return
+            if name in seen_names:
+                QMessageBox.warning(self, self._t("lsd_err_dup_name_t"),
+                    self._t("lsd_err_dup_name").format(n=name))
+                return
+            seen_keys.add(key_char)
+            seen_names.add(name)
+
+            try:
+                r = int(hex_c[1:3], 16)
+                g = int(hex_c[3:5], 16)
+                b = int(hex_c[5:7], 16)
+            except Exception:
+                r, g, b = 128, 128, 128
+                hex_c = "#808080"
+
+            config.append({
+                "key_char":   key_char,
+                "name":       name,
+                "display_es": disp_es or f"{key_char}: {name}",
+                "display_en": disp_en or f"{key_char}: {name}",
+                "hex_color":  hex_c,
+                "bgr_color":  [b, g, r],
+            })
+
+        if not config:
+            QMessageBox.warning(self, self._t("lsd_err_none_t"), self._t("lsd_err_none"))
+            return
+
+        _save_label_config(config)
+        reload_prelabel_config()
         self.accept()
 
 
@@ -343,12 +641,13 @@ class EditLabelsDialog(QDialog):
 # Helpers de escritura
 # ---------------------------------------------------------------------------
 
-def _write_data_yaml(class_names: list[str], yaml_path: Path) -> None:
+def _write_data_yaml(class_names: list[str], yaml_path: Path,
+                     out_dir: Path = DATASETS_DIR) -> None:
     lines = [
-        f"path: {str(DATASETS_DIR)}",
-        "train: images/train",
-        "val: images/valid",
-        "test: images/test",
+        f"path: {str(out_dir)}",
+        "train: train/images",
+        "val: valid/images",
+        "test: test/images",
         f"nc: {len(class_names)}",
         f"names: {class_names!r}",
         "kpt_shape: [3, 3]",
@@ -404,6 +703,7 @@ class PrelabelPage(QWidget):
 
         # Reproduccion
         self._cap: cv2.VideoCapture | None = None
+        self._cap_pos: int = -1   # siguiente frame esperado; evita seeks innecesarios
         self._frame_idx: int = 0
         self._total_frames: int = 0
         self._fps: float = 25.0
@@ -415,8 +715,8 @@ class PrelabelPage(QWidget):
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._on_timer_tick)
 
-        # Keypoints ocultos: frame_idx -> coords (x,y) o None para usar deteccion
-        self._occluded_snout: set[int] = set()
+        # Modo oclusión de hocico: toggle global — True = snout oculto en todos los frames
+        self._occlude_mode: bool = False
 
         # Widget refs para traduccion
         self._stat_labels:   dict[str, QLabel] = {}
@@ -461,7 +761,7 @@ class PrelabelPage(QWidget):
 
         # Seleccion de video
         vid_row = QHBoxLayout()
-        self._lbl_video_path = QLabel("Ningun video seleccionado")
+        self._lbl_video_path = QLabel(_PL_T["no_video_path"][self._lang])
         self._lbl_video_path.setStyleSheet("color: #666; font-size: 11px;")
         self._lbl_video_path.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         vid_row.addWidget(self._lbl_video_path)
@@ -571,6 +871,15 @@ class PrelabelPage(QWidget):
         self._chk_skip_calib.stateChanged.connect(self._update_step0_next)
         layout.addWidget(self._chk_skip_calib)
 
+        self._lbl_step0_warn = QLabel()
+        self._lbl_step0_warn.setWordWrap(True)
+        self._lbl_step0_warn.setStyleSheet(
+            "color: #c0392b; font-size: 11px; padding: 4px 6px; "
+            "background-color: #fdf2f2; border: 1px solid #e8b4b4; border-radius: 3px;"
+        )
+        self._lbl_step0_warn.setVisible(False)
+        layout.addWidget(self._lbl_step0_warn)
+
         self._btn_step0_next = QPushButton(_PL_T["next_btn"][self._lang])
         self._btn_step0_next.setEnabled(False)
         self._btn_step0_next.setFixedHeight(36)
@@ -668,11 +977,13 @@ class PrelabelPage(QWidget):
         ctrl = QHBoxLayout()
         ctrl.setSpacing(6)
 
-        def _ctrl_btn(text: str, tip: str = "") -> QPushButton:
-            b = QPushButton(text)
+        _sp = self.style().standardIcon
+
+        def _ctrl_btn(sp_icon, tip: str = "") -> QPushButton:
+            b = QPushButton()
             b.setFixedSize(52, 34)
+            b.setIcon(_sp(sp_icon))
             b.setToolTip(tip)
-            b.setStyleSheet("font-size: 12px; font-weight: bold;")
             return b
 
         # Frame counter (izquierda)
@@ -683,11 +994,11 @@ class PrelabelPage(QWidget):
         ctrl.addStretch()
 
         # Botones (centro)
-        self._btn_rev   = _ctrl_btn("<<",  _PL_T["tt_rev"][self._lang])
-        self._btn_prev  = _ctrl_btn("< 1", _PL_T["tt_prev"][self._lang])
-        self._btn_pause = _ctrl_btn("||",  _PL_T["tt_pause"][self._lang])
-        self._btn_next  = _ctrl_btn("1 >", _PL_T["tt_next"][self._lang])
-        self._btn_fwd   = _ctrl_btn(">>",  _PL_T["tt_fwd"][self._lang])
+        self._btn_rev   = _ctrl_btn(QStyle.SP_MediaSeekBackward,  _PL_T["tt_rev"][self._lang])
+        self._btn_prev  = _ctrl_btn(QStyle.SP_MediaSkipBackward,  _PL_T["tt_prev"][self._lang])
+        self._btn_pause = _ctrl_btn(QStyle.SP_MediaPause,         _PL_T["tt_pause"][self._lang])
+        self._btn_next  = _ctrl_btn(QStyle.SP_MediaSkipForward,   _PL_T["tt_next"][self._lang])
+        self._btn_fwd   = _ctrl_btn(QStyle.SP_MediaSeekForward,   _PL_T["tt_fwd"][self._lang])
 
         self._btn_rev.clicked.connect(self._on_play_rev)
         self._btn_prev.clicked.connect(self._on_step_prev)
@@ -819,7 +1130,7 @@ class PrelabelPage(QWidget):
             QTimer.singleShot(120, self._pl_display_calib_frame)
             self._update_pl_calib_instruction()
         else:
-            QMessageBox.warning(self, "Error", "No se pudo leer el primer frame del video.")
+            QMessageBox.warning(self, "Error", _PL_T["err_read_frame"][self._lang])
 
         self._update_step0_next()
 
@@ -881,6 +1192,7 @@ class PrelabelPage(QWidget):
             self._output_dir_override = Path(folder)
             self._edit_pl_output.setText(str(self._output_dir_override))
             self._edit_pl_output.setStyleSheet("color: #2c3e50; font-size: 10px;")
+            self._update_step0_next()
 
     def _pl_calib_phase(self) -> int:
         if len(self._pl_calib_exterior) < 2:
@@ -1060,6 +1372,7 @@ class PrelabelPage(QWidget):
         self._pl_calib_offset_y = (lh - dh) // 2
 
         resized = cv2.resize(frame, (dw, dh))
+        _draw_grid(resized)
         rgb     = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         qimg    = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
         pixmap  = QPixmap.fromImage(qimg)
@@ -1091,9 +1404,26 @@ class PrelabelPage(QWidget):
         self._lbl_pl_calib_instr.setText(txt)
 
     def _update_step0_next(self) -> None:
-        video_ok = self._video_path is not None
-        calib_ok = self._pl_calib_done() or self._chk_skip_calib.isChecked()
-        self._btn_step0_next.setEnabled(video_ok and calib_ok)
+        video_ok  = self._video_path is not None
+        calib_ok  = self._pl_calib_done() or self._chk_skip_calib.isChecked()
+        output_ok = self._output_dir_override is not None
+        ok = video_ok and calib_ok and output_ok
+        self._btn_step0_next.setEnabled(ok)
+
+        t = _PL_T
+        missing = []
+        if not video_ok:
+            missing.append(t["warn_video"][self._lang])
+        if not calib_ok:
+            missing.append(t["warn_calib"][self._lang])
+        if not output_ok:
+            missing.append(t["warn_output"][self._lang])
+
+        if missing:
+            self._lbl_step0_warn.setText("\n".join(f"• {m}" for m in missing))
+            self._lbl_step0_warn.setVisible(True)
+        else:
+            self._lbl_step0_warn.setVisible(False)
 
     def _on_step0_next(self) -> None:
         if self._video_path is None:
@@ -1107,7 +1437,7 @@ class PrelabelPage(QWidget):
 
     def _start_preprocess(self) -> None:
         self._progress_bar.setValue(0)
-        self._lbl_preprocess_status.setText("Iniciando YOLO...")
+        self._lbl_preprocess_status.setText("Analizando video...")
         self._preproc_worker = PreprocessWorker(self._video_path, parent=self)
         self._preproc_worker.progress.connect(self._on_preprocess_progress)
         self._preproc_worker.finished.connect(self._on_preprocess_finished)
@@ -1117,7 +1447,7 @@ class PrelabelPage(QWidget):
     def _on_preprocess_progress(self, current: int, total: int) -> None:
         if total > 0:
             self._progress_bar.setValue(int(current / total * 100))
-            self._lbl_preprocess_status.setText(f"Procesando frame {current} / {total} con YOLO...")
+            self._lbl_preprocess_status.setText(f"Procesando frame {current} / {total}...")
         else:
             self._lbl_preprocess_status.setText(f"Procesando frame {current}...")
 
@@ -1138,7 +1468,7 @@ class PrelabelPage(QWidget):
         self._inner_stack.setCurrentIndex(0)
 
     def _on_preprocess_error(self, msg: str) -> None:
-        QMessageBox.critical(self, "Error de pre-procesado", msg)
+        QMessageBox.critical(self, _PL_T["err_preprocess_t"][self._lang], msg)
         self._inner_stack.setCurrentIndex(0)
 
     # ------------------------------------------------------------------
@@ -1149,6 +1479,7 @@ class PrelabelPage(QWidget):
         if self._cap is not None:
             self._cap.release()
         self._cap = cv2.VideoCapture(str(self._video_path))
+        self._cap_pos = 0
         self._total_frames = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 25.0
         self._frame_idx = 0
@@ -1157,7 +1488,7 @@ class PrelabelPage(QWidget):
         self._speed = 1.0
         self._label_map = {}
         self._current_label = None
-        self._occluded_snout = set()
+        self._occlude_mode = False
 
         for btn in self._label_buttons.values():
             btn.setChecked(False)
@@ -1190,13 +1521,14 @@ class PrelabelPage(QWidget):
         self._timer.start(self._timer_interval_ms())
 
     def _on_toggle_pause(self) -> None:
+        _sp = self.style().standardIcon
         if self._playing:
             self._playing = False
             self._timer.stop()
-            self._btn_pause.setText("> ")
+            self._btn_pause.setIcon(_sp(QStyle.SP_MediaPlay))
         else:
             self._playing = True
-            self._btn_pause.setText("||")
+            self._btn_pause.setIcon(_sp(QStyle.SP_MediaPause))
             self._timer.start(self._timer_interval_ms())
 
     def _on_step_prev(self) -> None:
@@ -1230,7 +1562,7 @@ class PrelabelPage(QWidget):
         if new_idx < 0 or new_idx >= self._total_frames:
             self._playing = False
             self._timer.stop()
-            self._btn_pause.setText("> ")
+            self._btn_pause.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
             return
         self._frame_idx = new_idx
         self._show_frame(self._frame_idx)
@@ -1246,9 +1578,12 @@ class PrelabelPage(QWidget):
         if self._cap is None:
             return
         try:
-            self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            if self._cap_pos != frame_idx:
+                self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, raw = self._cap.read()
+            self._cap_pos = frame_idx + 1 if ret else -1
         except Exception:
+            self._cap_pos = -1
             return
         if not ret:
             return
@@ -1290,7 +1625,7 @@ class PrelabelPage(QWidget):
                             kpy = int(kp[1]) - y_off
                             is_vis = c >= 0.3 and not (kp[0] < 1 and kp[1] < 1)
                             # Keypoint 0 = snout: puede estar oculto
-                            if i == 0 and frame_idx in self._occluded_snout:
+                            if i == 0 and self._occlude_mode:
                                 visible.append(True)
                                 cv2.circle(img, (kpx, kpy), 9, (255, 255, 255), -1)
                                 cv2.circle(img, (kpx, kpy), 9, (0, 80, 220), 2)
@@ -1300,7 +1635,7 @@ class PrelabelPage(QWidget):
                                          (0, 60, 200), 2, cv2.LINE_AA)
                             elif is_vis:
                                 visible.append(True)
-                                cv2.circle(img, (kpx, kpy), 3, color, -1)
+                                cv2.circle(img, (kpx, kpy), 5, color, -1)
                             else:
                                 visible.append(False)
                         for a, b in [(0, 1), (1, 2)]:
@@ -1311,7 +1646,7 @@ class PrelabelPage(QWidget):
                                 kpay = int(kps[a][1]) - y_off
                                 kpbx = int(kps[b][0]) - x_off
                                 kpby = int(kps[b][1]) - y_off
-                                cv2.line(img, (kpax, kpay), (kpbx, kpby), (120, 120, 120), 1)
+                                cv2.line(img, (kpax, kpay), (kpbx, kpby), (0, 220, 255), 2)
                     except Exception:
                         pass
 
@@ -1328,7 +1663,7 @@ class PrelabelPage(QWidget):
         qimg = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
         label.setPixmap(QPixmap.fromImage(qimg))
 
-        self._refresh_occlude_btn(frame_idx in self._occluded_snout)
+        self._refresh_occlude_btn(self._occlude_mode)
 
     # ------------------------------------------------------------------
     # Timeline, stats y contador
@@ -1407,16 +1742,13 @@ class PrelabelPage(QWidget):
             )
 
     def _on_toggle_occlude(self) -> None:
-        """Alterna el estado de hocico oculto para el frame actual."""
-        if self._frame_idx in self._occluded_snout:
-            self._occluded_snout.discard(self._frame_idx)
-        else:
-            self._occluded_snout.add(self._frame_idx)
-        self._refresh_occlude_btn(self._frame_idx in self._occluded_snout)
+        """Activa/desactiva el modo hocico oculto (global, persiste entre frames)."""
+        self._occlude_mode = not self._occlude_mode
+        self._refresh_occlude_btn(self._occlude_mode)
         self._show_frame(self._frame_idx)
 
     def _on_edit_labels(self) -> None:
-        dlg = EditLabelsDialog(self)
+        dlg = EditLabelsDialog(self, lang=self._lang)
         dlg.exec_()
 
     # ------------------------------------------------------------------
@@ -1426,7 +1758,7 @@ class PrelabelPage(QWidget):
     def _on_finish(self) -> None:
         self._playing = False
         self._timer.stop()
-        self._btn_pause.setText("> ")
+        self._btn_pause.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
 
         valid_frames = [
             f for f in self._label_map
@@ -1435,13 +1767,14 @@ class PrelabelPage(QWidget):
             and self._detections[f][0] is not None
         ]
 
+        t = _PL_T
+        L = self._lang
         if not valid_frames:
-            QMessageBox.warning(self, "Sin datos",
-                                "No hay frames con etiqueta y deteccion valida.")
+            QMessageBox.warning(self, t["no_data_t"][L], t["no_valid_frames"][L])
             return
 
-        dlg = QProgressDialog("Generando dataset...", None, 0, len(valid_frames), self)
-        dlg.setWindowTitle("Generando dataset")
+        dlg = QProgressDialog(t["gen_progress"][L], None, 0, len(valid_frames), self)
+        dlg.setWindowTitle(t["gen_title"][L])
         dlg.setWindowModality(Qt.WindowModal)
         dlg.setMinimumDuration(0)
         dlg.setValue(0)
@@ -1450,26 +1783,61 @@ class PrelabelPage(QWidget):
             output_path = self._generate_dataset(valid_frames, dlg)
         except Exception as exc:
             dlg.close()
-            QMessageBox.critical(self, "Error generando dataset", str(exc))
+            QMessageBox.critical(self, t["err_gen_t"][L], str(exc))
             return
 
         dlg.close()
         QMessageBox.information(
-            self, "Dataset generado",
-            f"Dataset guardado en:\n{output_path}\n\n"
-            f"Frames totales: {len(valid_frames)}\n"
-            "Ahora puedes ir a la pestana Entrenar para crear el modelo.",
+            self, t["gen_done_t"][L],
+            t["gen_done_msg"][L].format(path=output_path, n=len(valid_frames)),
         )
+        self._reset_for_new_video()
+
+    def _reset_for_new_video(self) -> None:
+        """Vuelve al paso 0 limpio para etiquetar otro video."""
+        self._timer.stop()
+        if self._cap is not None:
+            self._cap.release()
+            self._cap = None
+        self._cap_pos = -1
+        self._video_path = None
+        self._detections = {}
+        self._label_map = {}
+        self._current_label = None
+        self._occlude_mode = False
+        self._pl_calib_exterior = []
+        self._pl_calib_interior = []
+        self._pl_calib_holes    = []
+        self._pl_calib_center   = []
+        self._pl_calib_frame    = None
+        self._pl_calib_edit_zone = None
+        for btn in self._pl_calib_zone_btns:
+            btn.setChecked(False)
+        self._output_dir_override = None
+        self._lbl_video_path.setText("Ningun video seleccionado")
+        self._lbl_pl_import_status.setText("")
+        self._edit_pl_output.setText(_PL_T["output_default"][self._lang])
+        self._edit_pl_output.setStyleSheet("color: #7f8c8d; font-size: 10px;")
+        self._lbl_pl_frame.clear()
+        self._lbl_pl_frame.setText(_PL_T["no_video"][self._lang])
+        for btn in self._label_buttons.values():
+            btn.setChecked(False)
+        self._lbl_current_label.setText(_PL_T["no_label"][self._lang])
+        self._lbl_current_label.setStyleSheet(
+            "font-size: 13px; font-weight: bold; padding: 6px; "
+            "background-color: #eee; border-radius: 4px;"
+        )
+        self._refresh_occlude_btn(False)
+        self._update_pl_calib_instruction()
+        self._update_step0_next()
+        self._inner_stack.setCurrentIndex(0)
 
     def _generate_dataset(self, valid_frames: list, progress_dlg: QProgressDialog) -> Path:
         random.shuffle(valid_frames)
         n = len(valid_frames)
-        if n >= 3:
-            n_train = max(1, int(n * 0.70))
-            n_valid = max(1, int(n * 0.20))
-            n_test  = max(1, n - n_train - n_valid)
-        else:
-            n_train, n_valid, n_test = n, 0, 0
+        n_train = max(1, int(n * 0.70))
+        n_valid = max(0, min(int(n * 0.20), n - n_train))
+        n_test  = max(0, n - n_train - n_valid)
 
         splits = {
             "train": valid_frames[:n_train],
@@ -1478,8 +1846,8 @@ class PrelabelPage(QWidget):
         }
         out_dir = self._output_dir_override or DATASETS_DIR
         for split in ["train", "valid", "test"]:
-            (out_dir / "images" / split).mkdir(parents=True, exist_ok=True)
-            (out_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
+            (out_dir / split / "images").mkdir(parents=True, exist_ok=True)
+            (out_dir / split / "labels").mkdir(parents=True, exist_ok=True)
 
         step = 0
         for split, frame_list in splits.items():
@@ -1488,7 +1856,7 @@ class PrelabelPage(QWidget):
                 step += 1
                 progress_dlg.setValue(step)
 
-        _write_data_yaml(CLASS_NAMES, out_dir / "data.yaml")
+        _write_data_yaml(CLASS_NAMES, out_dir / "data.yaml", out_dir)
         return out_dir
 
     def _save_frame_annotation(self, frame_idx: int, split: str, out_dir: Path | None = None) -> None:
@@ -1505,7 +1873,7 @@ class PrelabelPage(QWidget):
         base = out_dir or DATASETS_DIR
         H, W = frame.shape[:2]
         img_name = f"frame_{frame_idx:06d}.jpg"
-        img_path = base / "images" / split / img_name
+        img_path = base / split / "images" / img_name
         cv2.imwrite(str(img_path), frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
 
         det = self._detections.get(frame_idx)
@@ -1538,7 +1906,7 @@ class PrelabelPage(QWidget):
                         kpx = float(kps[i][0]) / W
                         kpy = float(kps[i][1]) / H
                         c = float(conf_arr[i]) if conf_arr is not None else 1.0
-                        if i == 0 and frame_idx in self._occluded_snout:
+                        if i == 0 and self._occlude_mode:
                             vis = 1   # occluded
                         elif c >= 0.3 and not (kps[i][0] < 1 and kps[i][1] < 1):
                             vis = 2   # visible
@@ -1553,9 +1921,55 @@ class PrelabelPage(QWidget):
             kp_parts = ["0.000000", "0.000000", "0"] * 3
 
         line = f"{class_id} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f} " + " ".join(kp_parts)
-        lbl_path = base / "labels" / split / f"frame_{frame_idx:06d}.txt"
+        lbl_path = base / split / "labels" / f"frame_{frame_idx:06d}.txt"
         with open(lbl_path, "w", encoding="utf-8") as f:
             f.write(line + "\n")
+
+    # ------------------------------------------------------------------
+    # Reconstruccion de UI de etiquetas tras cambio de config
+    # ------------------------------------------------------------------
+
+    def rebuild_label_ui(self) -> None:
+        """Reconstruye los botones de etiqueta y la tabla de stats tras un cambio de config."""
+        # Limpiar y reconstruir panel de teclas
+        self._label_buttons = {}
+        keys_layout = self._grp_keys.layout()
+        while keys_layout.count():
+            item = keys_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        for qt_key, name, display, hex_c, bgr_c in PRELABEL_KEYS:
+            btn = QPushButton(_KEY_DISPLAY[name][self._lang])
+            btn.setCheckable(True)
+            r, g, b = int(hex_c[1:3], 16), int(hex_c[3:5], 16), int(hex_c[5:7], 16)
+            lum = 0.299 * r + 0.587 * g + 0.114 * b
+            fg = "#000" if lum > 128 else "#fff"
+            btn.setStyleSheet(
+                f"QPushButton {{ background-color: {hex_c}; color: {fg}; "
+                f"font-size: 11px; padding: 3px; border-radius: 3px; border: 2px solid transparent; }}"
+                f"QPushButton:checked {{ border: 2px solid #000; }}"
+            )
+            btn.clicked.connect(lambda checked, n=name: self._select_label(n))
+            self._label_buttons[name] = btn
+            keys_layout.addWidget(btn)
+
+        self._btn_occlude = QPushButton("O: " + _PL_T["tt_occlude"][self._lang])
+        self._btn_occlude.setToolTip(_PL_T["tt_occlude"][self._lang])
+        self._btn_occlude.clicked.connect(self._on_toggle_occlude)
+        keys_layout.addWidget(self._btn_occlude)
+        self._refresh_occlude_btn(self._occlude_mode)
+
+        # Limpiar y reconstruir stats
+        stats_layout = self._grp_stats.layout()
+        while stats_layout.rowCount() > 0:
+            stats_layout.removeRow(0)
+        self._stat_labels = {}
+        for _, name, _, _, _ in PRELABEL_KEYS:
+            lbl_val = QLabel("0 bouts | 0.0 s")
+            lbl_val.setStyleSheet("font-size: 10px;")
+            stats_layout.addRow(_KEY_DISPLAY[name][self._lang] + ":", lbl_val)
+            self._stat_labels[name] = lbl_val
 
     # ------------------------------------------------------------------
     # Traduccion
@@ -1569,8 +1983,11 @@ class PrelabelPage(QWidget):
         # Step 0
         self._lbl_step0_title.setText(t["step0_title"][lang])
         self._btn_browse_vid.setText(t["browse_video"][lang])
+        if self._video_path is None:
+            self._lbl_video_path.setText(t["no_video_path"][lang])
         self._chk_skip_calib.setText(t["skip_calib"][lang])
         self._btn_step0_next.setText(t["next_btn"][lang])
+        self._update_step0_next()
         self._grp_hole_size.setTitle(t["hole_size_grp"][lang])
         self._lbl_hole_radius.setText(t["radius_lbl"][lang])
         if self._pl_calib_frame is None:
@@ -1587,7 +2004,7 @@ class PrelabelPage(QWidget):
         self._btn_edit_labels.setText(t["edit_labels_btn"][lang])
         self._lbl_speed.setText(t["vel_lbl"][lang])
         self._btn_occlude.setText("O: " + t["tt_occlude"][lang])
-        self._refresh_occlude_btn(self._frame_idx in self._occluded_snout)
+        self._refresh_occlude_btn(self._occlude_mode)
         self._btn_rev.setToolTip(t["tt_rev"][lang])
         self._btn_prev.setToolTip(t["tt_prev"][lang])
         self._btn_pause.setToolTip(t["tt_pause"][lang])
