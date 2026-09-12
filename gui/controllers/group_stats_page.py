@@ -20,6 +20,18 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
+_TRANS_PATH = PROJECT_ROOT / "scripts" / "config" / "translations.json"
+
+def _load_t() -> dict:
+    try:
+        import json as _j
+        with open(_TRANS_PATH, "r", encoding="utf-8") as f:
+            return _j.load(f).get("group_stats_page", {})
+    except Exception:
+        return {}
+
+_T: dict = _load_t()
+
 
 # ------------------------------------------------------------------
 # Worker
@@ -56,38 +68,41 @@ class GroupStatsPage(QWidget):
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
         self._worker: _Worker | None = None
+        self._lang: str = "es"
         self._build_ui()
 
     # ------------------------------------------------------------------
     # Construccion del interfaz
     # ------------------------------------------------------------------
 
+    def _t(self, key: str) -> str:
+        entry = _T.get(key, {})
+        return entry.get(self._lang, entry.get("es", key))
+
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
         root.setContentsMargins(22, 18, 22, 14)
         root.setSpacing(10)
 
-        # Titulo
-        lbl_title = QLabel("Comparar Grupos")
-        lbl_title.setStyleSheet("font-size:18px; font-weight:bold; color:#2c3e50;")
-        root.addWidget(lbl_title)
+        self._lbl_title = QLabel(self._t("title"))
+        self._lbl_title.setStyleSheet("font-size:18px; font-weight:bold; color:#2c3e50;")
+        root.addWidget(self._lbl_title)
 
-        lbl_sub = QLabel(
-            "Carga archivos Excel (stats_*.xlsx) de detecciones individuales, "
-            "asigna grupo y sesion, y genera graficas de barras con media ± SEM."
-        )
-        lbl_sub.setWordWrap(True)
-        lbl_sub.setStyleSheet("color:#555; font-size:11px;")
-        root.addWidget(lbl_sub)
+        self._lbl_sub = QLabel(self._t("subtitle"))
+        self._lbl_sub.setWordWrap(True)
+        self._lbl_sub.setStyleSheet("color:#555; font-size:11px;")
+        root.addWidget(self._lbl_sub)
 
         # ---- Tabla de archivos ----
-        grp_files = QGroupBox("Archivos de sesion")
-        grp_files.setStyleSheet("QGroupBox{font-weight:bold;}")
-        ly_files  = QVBoxLayout(grp_files)
+        self._grp_files = QGroupBox(self._t("grp_files"))
+        self._grp_files.setStyleSheet("QGroupBox{font-weight:bold;}")
+        ly_files = QVBoxLayout(self._grp_files)
         ly_files.setSpacing(6)
 
         self._table = QTableWidget(0, 3)
-        self._table.setHorizontalHeaderLabels(["Archivo", "Grupo", "Sesion"])
+        self._table.setHorizontalHeaderLabels(
+            [self._t("col_file"), self._t("col_group"), self._t("col_session")]
+        )
         self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self._table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self._table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
@@ -99,11 +114,11 @@ class GroupStatsPage(QWidget):
         ly_files.addWidget(self._table)
 
         btn_row = QHBoxLayout()
-        self._btn_add = QPushButton("+ Añadir archivos")
+        self._btn_add = QPushButton(self._t("btn_add"))
         self._btn_add.setStyleSheet(
             "background:#2980b9; color:white; padding:5px 16px; border-radius:3px;"
         )
-        self._btn_rem = QPushButton("Eliminar seleccion")
+        self._btn_rem = QPushButton(self._t("btn_remove"))
         self._btn_rem.setStyleSheet(
             "background:#c0392b; color:white; padding:5px 16px; border-radius:3px;"
         )
@@ -111,40 +126,42 @@ class GroupStatsPage(QWidget):
         btn_row.addWidget(self._btn_rem)
         btn_row.addStretch()
         ly_files.addLayout(btn_row)
-        root.addWidget(grp_files)
+        root.addWidget(self._grp_files)
 
         # ---- Nombres de grupo ----
-        grp_names = QGroupBox("Nombres de grupo")
-        grp_names.setStyleSheet("QGroupBox{font-weight:bold;}")
-        ly_names  = QHBoxLayout(grp_names)
-        ly_names.addWidget(QLabel("Grupo control:"))
+        self._grp_names = QGroupBox(self._t("grp_names"))
+        self._grp_names.setStyleSheet("QGroupBox{font-weight:bold;}")
+        ly_names = QHBoxLayout(self._grp_names)
+        self._lbl_ctrl = QLabel(self._t("lbl_ctrl"))
+        ly_names.addWidget(self._lbl_ctrl)
         self._ctrl_name = QLineEdit("Control")
         self._ctrl_name.setMaximumWidth(150)
         self._ctrl_name.setPlaceholderText("Control")
         ly_names.addWidget(self._ctrl_name)
         ly_names.addSpacing(24)
-        ly_names.addWidget(QLabel("Grupo tratamiento:"))
+        self._lbl_treat = QLabel(self._t("lbl_treat"))
+        ly_names.addWidget(self._lbl_treat)
         self._treat_name = QLineEdit("FOLFOX")
         self._treat_name.setMaximumWidth(150)
         self._treat_name.setPlaceholderText("FOLFOX")
         ly_names.addWidget(self._treat_name)
         ly_names.addStretch()
-        root.addWidget(grp_names)
+        root.addWidget(self._grp_names)
 
         # ---- Carpeta de salida ----
-        grp_out = QGroupBox("Carpeta de salida")
-        grp_out.setStyleSheet("QGroupBox{font-weight:bold;}")
-        ly_out  = QHBoxLayout(grp_out)
+        self._grp_out = QGroupBox(self._t("grp_out"))
+        self._grp_out.setStyleSheet("QGroupBox{font-weight:bold;}")
+        ly_out = QHBoxLayout(self._grp_out)
         self._out_edit = QLineEdit()
-        self._out_edit.setPlaceholderText("Por defecto: carpeta del primer archivo / comparacion_grupos")
-        self._btn_browse = QPushButton("Examinar...")
+        self._out_edit.setPlaceholderText(self._t("ph_out"))
+        self._btn_browse = QPushButton(self._t("browse_btn"))
         ly_out.addWidget(self._out_edit)
         ly_out.addWidget(self._btn_browse)
-        root.addWidget(grp_out)
+        root.addWidget(self._grp_out)
 
         # ---- Boton generar ----
         gen_row = QHBoxLayout()
-        self._btn_gen = QPushButton("Generar Graficas y Excel")
+        self._btn_gen = QPushButton(self._t("gen_btn"))
         self._btn_gen.setStyleSheet(
             "QPushButton{"
             "  background:#27ae60; color:white; font-size:14px; font-weight:bold;"
@@ -180,7 +197,7 @@ class GroupStatsPage(QWidget):
 
     def _on_add(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
-            self, "Seleccionar archivos Excel de estadisticas", "",
+            self, self._t("dlg_add"), "",
             "Excel (*.xlsx);;Todos (*.*)"
         )
         if not paths:
@@ -197,7 +214,7 @@ class GroupStatsPage(QWidget):
             self._table.setItem(row, 0, item_file)
 
             self._table.setItem(row, 1, QTableWidgetItem(ctrl))
-            self._table.setItem(row, 2, QTableWidgetItem("Semana 1"))
+            self._table.setItem(row, 2, QTableWidgetItem(self._t("week_default")))
 
     def _on_remove(self) -> None:
         rows = sorted({idx.row() for idx in self._table.selectedIndexes()}, reverse=True)
@@ -205,13 +222,13 @@ class GroupStatsPage(QWidget):
             self._table.removeRow(r)
 
     def _on_browse_out(self) -> None:
-        path = QFileDialog.getExistingDirectory(self, "Carpeta de salida", "")
+        path = QFileDialog.getExistingDirectory(self, self._t("dlg_out"), "")
         if path:
             self._out_edit.setText(path)
 
     def _on_generate(self) -> None:
         if self._table.rowCount() == 0:
-            QMessageBox.warning(self, "Sin archivos", "Añade al menos un archivo Excel.")
+            QMessageBox.warning(self, self._t("err_no_files"), self._t("err_no_files_m"))
             return
 
         entries: list[dict] = []
@@ -234,7 +251,7 @@ class GroupStatsPage(QWidget):
 
         self._log.clear()
         self._btn_gen.setEnabled(False)
-        self._btn_gen.setText("Generando...")
+        self._btn_gen.setText(self._t("gen_btn_busy"))
 
         self._worker = _Worker(entries, output_dir, group_names)
         self._worker.log_msg.connect(self._log.append)
@@ -244,22 +261,34 @@ class GroupStatsPage(QWidget):
 
     def _on_done(self, folder: str) -> None:
         self._btn_gen.setEnabled(True)
-        self._btn_gen.setText("Generar Graficas y Excel")
-        self._log.append(f"\n Completado. Carpeta: {folder}")
+        self._btn_gen.setText(self._t("gen_btn"))
+        self._log.append(f"\n {self._t('done_log')} {folder}")
         QMessageBox.information(
-            self, "Completado",
-            f"Graficas y Excel generados en:\n{folder}"
+            self, self._t("done_title"),
+            f"{self._t('done_msg')}\n{folder}"
         )
 
     def _on_error(self, err: str) -> None:
         self._btn_gen.setEnabled(True)
-        self._btn_gen.setText("Generar Graficas y Excel")
+        self._btn_gen.setText(self._t("gen_btn"))
         self._log.append(f"[ERROR] {err}")
-        QMessageBox.critical(self, "Error al generar", err[:800])
-
-    # ------------------------------------------------------------------
-    # Soporte de idioma (preparado para bilingue)
-    # ------------------------------------------------------------------
+        QMessageBox.critical(self, self._t("err_title"), err[:800])
 
     def apply_language(self, lang: str) -> None:
-        pass
+        self._lang = lang
+        self._lbl_title.setText(self._t("title"))
+        self._lbl_sub.setText(self._t("subtitle"))
+        self._grp_files.setTitle(self._t("grp_files"))
+        self._table.setHorizontalHeaderLabels(
+            [self._t("col_file"), self._t("col_group"), self._t("col_session")]
+        )
+        self._btn_add.setText(self._t("btn_add"))
+        self._btn_rem.setText(self._t("btn_remove"))
+        self._grp_names.setTitle(self._t("grp_names"))
+        self._lbl_ctrl.setText(self._t("lbl_ctrl"))
+        self._lbl_treat.setText(self._t("lbl_treat"))
+        self._grp_out.setTitle(self._t("grp_out"))
+        self._out_edit.setPlaceholderText(self._t("ph_out"))
+        self._btn_browse.setText(self._t("browse_btn"))
+        if not (self._worker and self._worker.isRunning()):
+            self._btn_gen.setText(self._t("gen_btn"))
