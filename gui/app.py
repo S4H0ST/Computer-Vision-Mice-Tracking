@@ -13,7 +13,10 @@ from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 from gui.controllers.main_window import MainWindow
 
-_ICON_PATH = Path(__file__).parent / "assets" / "icons" / "app_icon.ico"
+if getattr(sys, "frozen", False):
+    _ICON_PATH = Path(sys._MEIPASS) / "gui" / "assets" / "icons" / "app_icon.ico"
+else:
+    _ICON_PATH = Path(__file__).parent / "assets" / "icons" / "app_icon.ico"
 
 
 def main() -> None:
