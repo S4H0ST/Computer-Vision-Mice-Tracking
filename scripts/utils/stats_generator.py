@@ -51,6 +51,7 @@ class StatsGenerator:
         self.fps:          float      = 30.0
         self.inner_limits: dict | None = None
         self.outer_limits: dict | None = None
+        self.limits_center: dict | None = None
         self.holes:        list[tuple] = []
         self.hole_radius:  int = 20
         self.px_per_cm:    float | None = None
@@ -77,10 +78,11 @@ class StatsGenerator:
         if self.coords_json and self.coords_json.exists():
             with open(self.coords_json) as f:
                 data = json.load(f)
-            self.inner_limits = data.get("limits_inner")
-            self.outer_limits = data.get("limits_outer")
-            self.holes        = [tuple(h) for h in data.get("holes", [])]
-            self.hole_radius  = data.get("hole_radius", 20)
+            self.inner_limits  = data.get("limits_inner")
+            self.outer_limits  = data.get("limits_outer")
+            self.limits_center = data.get("limits_center")
+            self.holes         = [tuple(h) for h in data.get("holes", [])]
+            self.hole_radius   = data.get("hole_radius", 20)
 
             box_w_cm = data.get("box_width_cm")
             box_h_cm = data.get("box_height_cm")
@@ -154,40 +156,64 @@ class StatsGenerator:
         cy = max(m, min(sz - m, int(m + (y - y_min) * y_scale)))
         return cx, cy
 
+    # Colores BGR por etiqueta para la trayectoria (mismo esquema que el video anotado)
+    # Orden: de menor a mayor actividad/relevancia conductual en OFT
+    _TRAJ_COLORS: list[tuple[str, str, tuple[int, int, int]]] = [
+        ("immobile",         "Inmovil",      (180, 180, 180)),
+        ("walking",          "Caminando",    (0,   255, 255)),
+        ("sniffing",         "Olfateando",   (0,   200, 255)),
+        ("rat_head_dipping", "Agujero",      (0,   165, 255)),
+        ("rat_rearing",      "Erguido",      (0,   255,   0)),
+        ("rat_climbing",     "Escalando",    (255,   0, 255)),
+        ("rat_grooming",     "Acicalamiento",(180, 255, 180)),
+    ]
+    _DEFAULT_TRAJ_COLOR: tuple[int, int, int] = (120, 120, 120)
+
+    @classmethod
+    def _traj_color(cls, label: str) -> tuple[int, int, int]:
+        for key, _, color in cls._TRAJ_COLORS:
+            if key in label:
+                return color
+        return cls._DEFAULT_TRAJ_COLOR
+
     # ------------------------------------------------------------------
     # Imagen de trayectoria
     # ------------------------------------------------------------------
 
     def _generate_trajectory(self, out_path: Path) -> None:
-        sz = self.CANVAS_SIZE
-        m  = self.CANVAS_MARGIN
+        sz     = self.CANVAS_SIZE
+        m      = self.CANVAS_MARGIN
+        leg_h  = 52   # franja extra debajo del canvas para la leyenda
 
-        # Fondo blanco
-        img = np.full((sz, sz, 3), 255, dtype=np.uint8)
+        img = np.full((sz + leg_h, sz, 3), 255, dtype=np.uint8)
 
-        # Cuadricula gris muy suave (12x12)
         step = (sz - 2 * m) // 12
         for i in range(1, 12):
             o = m + i * step
             cv2.line(img, (o, m),     (o, sz - m), (235, 235, 235), 1)
             cv2.line(img, (m, o), (sz - m, o),     (235, 235, 235), 1)
 
-        # Borde de la caja — gris oscuro
         cv2.rectangle(img, (m, m), (sz - m, sz - m), (60, 60, 60), 2)
 
         x_min, y_min, x_scale, y_scale = self._canvas_mapping()
 
-        # Agujeros: circulo gris oscuro con contorno mas grueso para que
-        # se distingan entre las lineas de trayectoria
+        # Borde central — linea negra suave para separar zona central de zona periferica
+        if self.limits_center:
+            lim = self.limits_center
+            p1 = self._to_canvas(lim["x_min"], lim["y_min"], x_min, y_min, x_scale, y_scale)
+            p2 = self._to_canvas(lim["x_max"], lim["y_max"], x_min, y_min, x_scale, y_scale)
+            cv2.rectangle(img, p1, p2, (0, 0, 0), 1, cv2.LINE_AA)
+
+        # Agujeros
         if self.holes:
             r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
             for hx, hy in self.holes:
                 cx, cy = self._to_canvas(hx, hy, x_min, y_min, x_scale, y_scale)
                 cv2.circle(img, (cx, cy), r_canvas, (80, 80, 80), 2)
 
-        # Trayectoria del snout — azul oscuro (BGR: 160, 60, 10)
-        COLOR_TRACK = (160, 60, 10)
-        prev_pt: tuple[int, int] | None = None
+        # Trayectoria del snout — cada segmento coloreado segun la etiqueta en ese frame
+        prev_pt:    tuple[int, int] | None = None
+        prev_label: str                    = ""
         for row in self.rows:
             try:
                 sx = float(row.get("snout_x", -1))
@@ -198,12 +224,49 @@ class StatsGenerator:
             if sx < 0 or sy < 0:
                 prev_pt = None
                 continue
-            pt = self._to_canvas(sx, sy, x_min, y_min, x_scale, y_scale)
+            lbl   = row.get("final_label", "")
+            color = self._traj_color(lbl)
+            pt    = self._to_canvas(sx, sy, x_min, y_min, x_scale, y_scale)
             if prev_pt is not None:
-                cv2.line(img, prev_pt, pt, COLOR_TRACK, 1)
-            prev_pt = pt
+                cv2.line(img, prev_pt, pt, color, 1)
+            prev_pt    = pt
+            prev_label = lbl
 
+        self._draw_traj_legend(img, sz, m, leg_h)
         cv2.imwrite(str(out_path), img)
+
+    def _draw_traj_legend(self, img: np.ndarray, sz: int, m: int, leg_h: int = 52) -> None:
+        """Leyenda de comportamientos en franja horizontal debajo del canvas."""
+        box_s  = 12
+        font   = cv2.FONT_HERSHEY_SIMPLEX
+        fscale = 0.38
+        fthick = 1
+        gap    = 6    # espacio entre cuadrado y texto
+        sep    = 18   # espacio entre un item y el siguiente
+
+        labels = self._TRAJ_COLORS
+        # Calcular ancho de cada item: box + gap + text_w + sep
+        item_widths = [
+            box_s + gap + cv2.getTextSize(name, font, fscale, fthick)[0][0] + sep
+            for _, name, _ in labels
+        ]
+        total_w = sum(item_widths)
+
+        # Centrar horizontalmente; franja comienza en y=sz
+        x = (sz - total_w) // 2
+        cy = sz + (leg_h - box_s) // 2   # centra verticalmente en la franja
+
+        # Linea separadora tenue entre arena y franja
+        cv2.line(img, (m, sz + 1), (sz - m, sz + 1), (210, 210, 210), 1)
+
+        for (_, name, color), iw in zip(labels, item_widths):
+            # Cuadrado de color con borde
+            cv2.rectangle(img, (x, cy), (x + box_s, cy + box_s), color, -1)
+            cv2.rectangle(img, (x, cy), (x + box_s, cy + box_s), (100, 100, 100), 1)
+            # Texto
+            cv2.putText(img, name, (x + box_s + gap, cy + box_s - 1),
+                        font, fscale, (40, 40, 40), fthick, cv2.LINE_AA)
+            x += iw
 
     # ------------------------------------------------------------------
     # Mapa de calor
@@ -238,7 +301,6 @@ class StatsGenerator:
 
         x_min, y_min, x_scale, y_scale = self._canvas_mapping()
 
-        # Paso 1: acumular en cuantos frames estuvo el snout en cada pixel
         accum = np.zeros((sz, sz), dtype=np.float32)
         for row in self.rows:
             try:
@@ -251,22 +313,25 @@ class StatsGenerator:
             cx, cy = self._to_canvas(sx, sy, x_min, y_min, x_scale, y_scale)
             accum[cy, cx] += 1.0
 
-        # Paso 2: desenfoque gaussiano — convierte puntos discretos en manchas suaves
         accum = cv2.GaussianBlur(accum, (0, 0), sigmaX=12)
 
-        # Paso 3: normalizar a [0, 255] y aplicar COLORMAP_JET
         if accum.max() > 0:
             accum = accum / accum.max()
         img = cv2.applyColorMap((accum * 255).astype(np.uint8), cv2.COLORMAP_JET)
 
-        # Pintar el margen de blanco para que el borde de la caja quede limpio
         img[:m,    :]  = (255, 255, 255)
         img[sz - m:, :] = (255, 255, 255)
         img[:,    :m]  = (255, 255, 255)
         img[:, sz - m:] = (255, 255, 255)
 
-        # Superponer borde de la caja y agujeros en blanco sobre el colormap
         cv2.rectangle(img, (m, m), (sz - m, sz - m), (40, 40, 40), 2)
+
+        if self.limits_center:
+            lim = self.limits_center
+            p1 = self._to_canvas(lim["x_min"], lim["y_min"], x_min, y_min, x_scale, y_scale)
+            p2 = self._to_canvas(lim["x_max"], lim["y_max"], x_min, y_min, x_scale, y_scale)
+            cv2.rectangle(img, p1, p2, (255, 255, 255), 1)
+
         if self.holes:
             r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
             for hx, hy in self.holes:
@@ -277,13 +342,12 @@ class StatsGenerator:
         cv2.imwrite(str(out_path), img)
 
     def _draw_heatmap_legend(self, img: np.ndarray, sz: int, m: int) -> None:
-        """Leyenda de gradiente COLORMAP_JET en la esquina superior derecha."""
+        """Leyenda de gradiente COLORMAP_JET en el margen blanco derecho (fuera del canvas)."""
         legend_h = 80
         legend_w = 12
-        lx = sz - m - legend_w - 5
-        ly = m + 5
+        lx = sz - m + 4   # dentro del margen blanco derecho, a la derecha del borde del canvas
+        ly = m + 10
 
-        # Reproducir el gradiente JET de abajo (frio, 0) a arriba (caliente, 255)
         for i in range(legend_h):
             val = int((legend_h - 1 - i) * 255 / (legend_h - 1))
             color_px  = np.array([[[val]]], dtype=np.uint8)
@@ -292,10 +356,10 @@ class StatsGenerator:
                      (int(color_bgr[0]), int(color_bgr[1]), int(color_bgr[2])), 1)
 
         cv2.rectangle(img, (lx, ly), (lx + legend_w, ly + legend_h), (80, 80, 80), 1)
-        cv2.putText(img, "alto",  (lx - 22, ly + 8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.28, (40, 40, 40), 1)
-        cv2.putText(img, "bajo",  (lx - 22, ly + legend_h + 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.28, (40, 40, 40), 1)
+        cv2.putText(img, "alto",  (lx + legend_w + 3, ly + 8),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.30, (40, 40, 40), 1)
+        cv2.putText(img, "bajo",  (lx + legend_w + 3, ly + legend_h),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.30, (40, 40, 40), 1)
 
     # ------------------------------------------------------------------
     # Utilidades Excel
@@ -314,6 +378,34 @@ class StatsGenerator:
             1 for lbl, _ in groupby(rows_subset, key=lambda r: r.get("final_label", ""))
             if lbl == label
         )
+
+    def _count_hole_usage(self) -> tuple[dict[int, int], dict[int, int]]:
+        """
+        Cuenta frames y bouts de head dipping por agujero.
+        Devuelve (frames_per_hole, bouts_per_hole) donde la clave es el indice (0-3).
+        """
+        n_holes = len(self.holes)
+        frames_ph: dict[int, int] = {i: 0 for i in range(n_holes)}
+        bouts_ph:  dict[int, int] = {i: 0 for i in range(n_holes)}
+        prev_hi = -1
+
+        for r in self.rows:
+            if r.get("final_label") != "rat_head_dipping":
+                prev_hi = -1
+                continue
+            try:
+                hi = int(r.get("hole_idx", -1))
+            except (ValueError, TypeError):
+                hi = -1
+            if hi < 0 or hi >= n_holes:
+                prev_hi = -1
+                continue
+            frames_ph[hi] += 1
+            if hi != prev_hi:
+                bouts_ph[hi] += 1
+            prev_hi = hi
+
+        return frames_ph, bouts_ph
 
     # ------------------------------------------------------------------
     # Excel
@@ -419,7 +511,7 @@ class StatsGenerator:
         )
         trans_pm = round(transitions / mins, 1) if mins > 0 else 0.0
 
-        # Head-dipping
+        # Head-dipping global
         dipping_b   = bouts_cnt.get("rat_head_dipping", 0)
         dipping_fr  = label_cnt.get("rat_head_dipping", 0)
         dipping_dur = round(dipping_fr / self.fps, 2)
@@ -438,6 +530,9 @@ class StatsGenerator:
         quarters = [rows[i * q:(i + 1) * q] for i in range(3)] + [rows[3 * q:]]
         hd_q = [self._bouts_for_label_in(qr, "rat_head_dipping") for qr in quarters]
 
+        # Head-dipping por agujero
+        hole_frames, hole_bouts = self._count_hole_usage()
+
         # Grooming
         grooming_b   = bouts_cnt.get("rat_grooming", 0)
         grooming_fr  = label_cnt.get("rat_grooming", 0)
@@ -449,7 +544,7 @@ class StatsGenerator:
         climbing_b   = bouts_cnt.get("rat_climbing", 0)
         climbing_pct = round(label_cnt.get("rat_climbing", 0) / n * 100, 1)
 
-        # Zonificacion (requiere calibracion)
+        # Zonificacion interior/exterior (inner_limits)
         if self.inner_limits:
             lim = self.inner_limits
             central_fr   = 0
@@ -479,6 +574,27 @@ class StatsGenerator:
             imm_p_pct    = round(imm_periph  / n * 100, 1)
         else:
             central_pct = periph_pct = imm_c_pct = imm_p_pct = na
+
+        # Zona central definida por el usuario (limits_center)
+        if self.limits_center:
+            lim_c = self.limits_center
+            center_zone_fr  = 0
+            periph_zone_fr  = 0
+            for r in rows:
+                try:
+                    cx = (float(r["x1"]) + float(r["x2"])) / 2
+                    cy = (float(r["y1"]) + float(r["y2"])) / 2
+                except (KeyError, ValueError):
+                    continue
+                if (lim_c["x_min"] <= cx <= lim_c["x_max"] and
+                        lim_c["y_min"] <= cy <= lim_c["y_max"]):
+                    center_zone_fr += 1
+                else:
+                    periph_zone_fr += 1
+            center_zone_pct = round(center_zone_fr / n * 100, 1)
+            periph_zone_pct = round(periph_zone_fr / n * 100, 1)
+        else:
+            center_zone_pct = periph_zone_pct = na
 
         # Sniffing
         sniff_walk_fr = label_cnt.get("sniffing_walking", 0)
@@ -519,7 +635,7 @@ class StatsGenerator:
 
         r += 1
         _s(r, "Head-dipping (Indice Principal de Exploracion)"); r += 1
-        _m(r, "N. de head-dips (bouts)",               dipping_b,    "bouts");    r += 1
+        _m(r, "N. de head-dips totales (bouts)",       dipping_b,    "bouts");    r += 1
         _m(r, "Head-dips por minuto",                  dipping_pm,   "bouts/min"); r += 1
         _m(r, "Latencia al primer head-dip",           latencia_hd,  "s");        r += 1
         _m(r, "Duracion total head-dipping",           dipping_dur,  "s");        r += 1
@@ -528,6 +644,18 @@ class StatsGenerator:
         _m(r, "Habituacion — head-dips (2o cuarto)",   hd_q[1],      "bouts");    r += 1
         _m(r, "Habituacion — head-dips (3er cuarto)",  hd_q[2],      "bouts");    r += 1
         _m(r, "Habituacion — head-dips (4o cuarto)",   hd_q[3],      "bouts");    r += 1
+
+        # Head-dipping por agujero individual
+        if self.holes:
+            r += 1
+            _s(r, "Head-dipping por Agujero"); r += 1
+            for i in range(len(self.holes)):
+                fr_h  = hole_frames.get(i, 0)
+                bt_h  = hole_bouts.get(i, 0)
+                dur_h = round(fr_h / self.fps, 2)
+                _m(r, f"  Agujero {i + 1} — bouts",       bt_h,  "bouts"); r += 1
+                _m(r, f"  Agujero {i + 1} — duracion",    dur_h, "s");     r += 1
+                _m(r, f"  Agujero {i + 1} — % tiempo HD", round(fr_h / max(dipping_fr, 1) * 100, 1), "%"); r += 1
 
         r += 1
         _s(r, "Sniffing (Exploracion Olfativa — conducta mayoritaria)"); r += 1
@@ -540,14 +668,19 @@ class StatsGenerator:
         _s(r, "Distribucion Espacial y Conducta de Pared"); r += 1
         _m(r, "Thigmotaxis — climbing (conducta de pared)", climbing_pct, "%");    r += 1
         _m(r, "Climbing (n. bouts)",                    climbing_b,     "bouts");  r += 1
-        _m(r, "Tiempo zona central (centroide interior)", central_pct,  "%");      r += 1
-        _m(r, "Tiempo zona periferica (centroide exterior)", periph_pct, "%");     r += 1
+        _m(r, "Tiempo zona interior (centroide)",        central_pct,    "%");     r += 1
+        _m(r, "Tiempo zona periferica (centroide)",      periph_pct,     "%");     r += 1
+
+        r += 1
+        _s(r, "Zona Central (cuadrado usuario — deteccion forfox vs control)"); r += 1
+        _m(r, "Tiempo en zona central (cuadrado)",      center_zone_pct, "%"); r += 1
+        _m(r, "Tiempo en zona periferica (fuera cuad.)",periph_zone_pct, "%"); r += 1
 
         r += 1
         _s(r, "Inactividad y Estado Emocional"); r += 1
         _m(r, "Inmovilidad total",                     immobile_pct,   "%");  r += 1
-        _m(r, "  Inmovilidad zona central (freezing)", imm_c_pct,      "%");  r += 1
-        _m(r, "  Inmovilidad zona periferica",         imm_p_pct,      "%");  r += 1
+        _m(r, "  Inmovilidad zona interior (freezing)", imm_c_pct,     "%");  r += 1
+        _m(r, "  Inmovilidad zona periferica",          imm_p_pct,     "%");  r += 1
 
         r += 1
         _s(r, "Grooming (Conducta de Desplazamiento de Estres)"); r += 1
