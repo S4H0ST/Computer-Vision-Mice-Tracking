@@ -1,5 +1,5 @@
 
-# Computer Vision Mice Tracking System
+# Rat Tracker Pose
 ### Bachelor's Thesis (TFG) — Universidad Rey Juan Carlos (URJC)
 
 ![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)
@@ -7,9 +7,9 @@
 ![PyTorch](https://img.shields.io/badge/Framework-PyTorch-ee4c2c.svg)
 ![OpenCV](https://img.shields.io/badge/Vision-OpenCV-green.svg)
 ![PyQt5](https://img.shields.io/badge/GUI-PyQt5-41cd52.svg)
-![Status](https://img.shields.io/badge/Status-Active_Development-orange)
+![Status](https://img.shields.io/badge/Status-Validation-blue)
 
-**Automated behavioral analysis of rodents in Open Field Test experiments using Deep Learning (Pose Estimation + Spatial Logic).**
+**Automated behavioral analysis of rats in Open Field / hole-board experiments using YOLO-Pose keypoint detection and calibrated spatial logic.**
 
 ---
 
@@ -32,12 +32,13 @@
 
 ## Project Overview
 
-This project automates the observation of the **Open Field Test (OFT)**, a standard protocol in pharmacology used to assess anxiety and locomotion in rodents — specifically white mice in a hole-board arena. Manual observation is time-consuming and subject to human bias; this system replaces it with a real-time Computer Vision pipeline.
+This project automates the observation of the **Open Field Test (OFT)**, a standard protocol in pharmacology used to assess anxiety and locomotion in rodents — specifically white rats in a hole-board arena. Manual observation is time-consuming and subject to human bias; this system replaces it with a real-time Computer Vision pipeline.
 
 **Key capabilities:**
 - Detects and classifies **7 behaviors** from overhead video without manual annotation
 - Outputs an annotated video, a per-frame CSV, a trajectory image and an Excel report — all in a single run
 - Calibrates spatially to any camera position in under 2 minutes
+- Full bilingual (ES/EN) PyQt5 GUI covering the entire workflow — from video labeling to model training to group comparison
 - Runs on a consumer GPU with no cloud dependency
 
 ---
@@ -182,19 +183,21 @@ The recording environment is hyper-controlled (same arena, same lighting, same c
 
 ## Detected Behaviors
 
-YOLO is trained on **5 visually distinct posture classes**. The spatial + temporal layers then derive **7 final behaviors**:
+YOLO is trained on **7 posture classes**. The spatial + temporal layers refine or override detections where geometry carries more information than appearance alone:
 
-| # | YOLO Training Label | Final Behavior | Detection Layer |
+| # | YOLO Class | Final Behavior | Detection Layer |
 |---|---|---|---|
-| 1 | `rat_climbing` | **Climbing** | YOLO + bbox extends into wall zone |
-| 2 | `rat_grooming` | **Grooming** | YOLO (direct) |
-| 3 | `rat_head_dipping` | **Head Dipping** | YOLO + snout inside hole radius |
-| 4 | `rat_rearing` | **Rearing** | YOLO + bbox aspect ratio ≥ 0.80 |
-| 5 | `rat_horizontal` | **Walking** | Centroid speed > 0.35 (normalized) |
-| 5 | `rat_horizontal` | **Immobile** | Centroid speed < 0.15 |
-| 5 | `rat_horizontal` | **Sniffing** | Snout within 30 px of inner wall boundary |
+| 1 | `climbing` | **Climbing** | YOLO + bbox extends into wall zone |
+| 2 | `grooming` | **Grooming** | YOLO (direct) |
+| 3 | `head_dipping` | **Head Dipping** | YOLO + snout inside hole radius |
+| 4 | `horizontal` | **Walking** | YOLO + centroid speed > threshold |
+| 4 | `horizontal` | **Immobile** | YOLO + centroid speed < threshold |
+| 4 | `horizontal` | **Sniffing** | YOLO + snout within 30 px of inner wall |
+| 5 | `rearing` | **Rearing** | YOLO + bbox aspect ratio ≥ 0.80 |
+| 6 | `sniffing` | **Sniffing** | YOLO (direct, merged with spatial sniffing) |
+| 7 | `immobile` | **Immobile** | YOLO (direct, merged with speed-based) |
 
-`rat_horizontal` maps to three different behaviors because a single overhead frame cannot distinguish them — the rat's body silhouette is identical in all three cases. Speed threshold and snout position provide the missing information without any additional training.
+`horizontal` maps to three behaviors because a single overhead frame cannot distinguish them by appearance — centroid speed and snout-to-wall distance provide the missing information without additional training.
 
 ### Arena Spatial Zones
 
@@ -361,10 +364,10 @@ pip install ultralytics opencv-python pandas openpyxl pyyaml PyQt5
 ### Graphical Interface (recommended)
 
 ```bash
-python -m gui.app
+python run_gui.py
 ```
 
-The GUI guides you through the full workflow in four pages:
+The GUI covers the complete research workflow across seven pages (ES/EN toggle in the sidebar):
 
 | Page | What you do |
 |---|---|
@@ -372,8 +375,11 @@ The GUI guides you through the full workflow in four pages:
 | **Calibration** | Click 8 mandatory points (2 exterior corners, 2 interior corners, 4 hole centres) + 2 optional points for the central border. Set real dimensions and output folder. |
 | **Detection** | Processing runs automatically. Live feed, FPS, and per-behaviour counters are shown in real time. Cancel at any point — partial results are saved. |
 | **Results** | Trajectory and heatmap tabs. Open the Excel report, annotated video or output folder directly from the UI. |
+| **Pre-Labeling** | Load a video, calibrate the arena, then label each frame using keyboard shortcuts (1–7 for behaviors, `O` for occluded snout). Exports YOLO-format `.txt` files and a `data.yaml` ready for training. |
+| **Train** | Fine-tune the YOLO-Pose model on your labeled dataset. Training output streams to the console; mAP50, Precision and Recall are shown when training completes. |
+| **Compare Groups** | Load `stats_*.xlsx` files from multiple runs, assign group and session, and generate bar charts with mean ± SEM for pharmacological comparison. |
 
-Press `F1` at any time to open the built-in user guide.
+Press `F1` at any time to open the built-in user guide. The sidebar **Config. Etiquetas** button lets you add, remove or modify behavior labels and their key bindings without editing any file.
 
 ### Output per Detection Run
 
@@ -395,53 +401,47 @@ Each run creates a folder `outputs/detections/{stem}_{datetime}/` containing:
 ```text
 Computer-Vision-Mice-Tracking/
 │
-│  ── APP (packaged for end users) ─────────────────────────────────────
+│  ── APP ───────────────────────────────────────────────────────────────
+├── run_gui.py                  # Entry point: python run_gui.py
 ├── gui/
-│   ├── app.py                  # Entry point: python -m gui.app
+│   ├── app.py                  # QApplication bootstrap
 │   ├── main_window.ui          # Qt Designer layout (XML)
 │   ├── assets/icons/
-│   │   └── app_icon.ico        # App icon (all sizes)
+│   │   └── app_icon.ico
 │   └── controllers/
-│       ├── main_window.py      # MainWindow — navigation, calibration, language
-│       ├── detect_worker.py    # DetectionWorker(QThread) — runs pipeline off UI thread
-│       ├── prelabel_page.py    # PrelabelPage — frame-by-frame annotation tool
-│       └── train_page.py       # TrainPage — fine-tuning launcher
+│       ├── main_window.py      # MainWindow — navigation, calibration, language (ES/EN)
+│       ├── detect_worker.py    # DetectionWorker(QThread) — pipeline off UI thread
+│       ├── prelabel_page.py    # PrelabelPage + LabelSettingsDialog
+│       ├── train_page.py       # TrainPage — fine-tuning launcher + metrics display
+│       └── group_stats_page.py # GroupStatsPage — inter-group bar charts + Excel
 │
 ├── scripts/
-│   ├── main_model.py           # CLI entry point (admin / headless mode)
+│   ├── main_model.py           # CLI entry point (headless mode)
 │   ├── config/
 │   │   ├── config.py           # Central config: Paths, TrainParams, DetectParams
-│   │   └── interfaces.py       # BaseModule abstract class
+│   │   ├── translations.json   # UI strings for train and compare pages (ES/EN)
+│   │   └── labels.json         # Behavior label config (generated at runtime)
 │   ├── calibration/
 │   │   ├── calibrator.py       # ZoneCalibrator — interactive video calibration
 │   │   └── calibrator_image.py # ImageCalibrator — static image calibration
 │   ├── detection/
-│   │   ├── detector.py         # RatDetector — YOLO + classifier + writers
-│   │   └── trainer.py          # YOLOTrainer — training with geometric augmentation
+│   │   └── detector.py         # RatDetector — YOLO + classifier + writers
 │   ├── spatial/
 │   │   └── spatial.py          # SpatialAnalyzer — dipping, sniffing, wall checks
-│   ├── behavior/
-│   │   └── behavior_classifier.py  # BehaviorClassifier + _LabelStabilizer
-│   ├── output/
-│   │   └── writers.py          # VideoOutput + CsvOutput — persistence only
 │   └── utils/
 │       └── stats_generator.py  # Excel report + trajectory + heatmap images
 │
-├── models/                     # Model weights (not committed — download separately)
+├── models/                     # Model weights — .pt files gitignored
 │   └── yolo_ratas.pt           # Active model: exp8 YOLOv8s-Pose
 │
 ├── outputs/
-│   ├── calibration/            # coords JSON files saved here after calibration
+│   ├── calibration/            # coords_*.json saved here after calibration
 │   └── detections/             # Per-run output folders (generated at runtime)
 │
-│  ── DEVELOPMENT / TRAINING (not packaged) ────────────────────────────
-├── datasets/                   # Training data — not committed (gitignored)
-│   ├── train/ valid/ test/     # 1 101 / 48 / 23 images
-│   └── data.yaml               # YOLO config (kpt_shape=[3,3], nc=5)
+│  ── DEVELOPMENT / TRAINING ────────────────────────────────────────────
+├── datasets/                   # Training data (gitignored)
+│   ├── images/train, valid, test/
+│   └── data.yaml               # YOLO config (kpt_shape=[3,3], nc=7)
 │
-├── docs/                       # README assets (gifs, result images)
-│
-└── media_original/             # Raw development media (gitignored)
-    ├── frames_original/        # Source frames used for annotation
-    └── videos/                 # Original experiment videos
+└── docs/                       # README assets (gifs, result images)
 ```
