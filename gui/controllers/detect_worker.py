@@ -3,10 +3,11 @@ QThread que ejecuta el pipeline de deteccion y emite senales por frame.
 Reimplementa el bucle principal de RatDetector para que la interfaz reciba
 actualizaciones en vivo sin bloquear el hilo principal.
 
-Deteccion: usa model.predict(stream=True) sobre la fuente completa, igual que la
-version original, garantizando la calidad del tracker interno de YOLO (ByteTrack).
-Anadidos respecto a la version base:
-  - _draw_skeleton dibuja los 3 keypoints (snout/spine/tail) sin texto sobre el frame.
+Deteccion: model.predict(stream=True) sobre la fuente completa — ByteTrack activo,
+sin parpadeo de cajas. YOLO procesa el frame original; el recorte al borde exterior
+se aplica solo al output (video + senal frame_ready).
+Anadidos:
+  - _draw_kps dibuja los 3 keypoints (snout/spine/tail) y sus conexiones.
   - hole_idx en CSV: agujero activo durante head_dipping (0-3), -1 en otro caso.
   - Sin dual_output: solo se genera el video anotado.
 """
@@ -234,8 +235,9 @@ class DetectionWorker(QThread):
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
 
-        # ---- Recorte al borde exterior (mejora velocidad y visualizacion) ----
+        # ---- Recorte de salida: YOLO ve el frame completo, output se recorta ----
         x1_c = y1_c = 0
         x2_c, y2_c  = w, h
         crop_w, crop_h = w, h
@@ -247,8 +249,7 @@ class DetectionWorker(QThread):
             y2_c = min(h, int(lim["y_max"]))
             crop_w = x2_c - x1_c
             crop_h = y2_c - y1_c
-            spatial.apply_crop_offset(x1_c, y1_c)
-            self.log_msg.emit(f"Recorte activo: {w}x{h} → {crop_w}x{crop_h} px")
+            self.log_msg.emit(f"Recorte de salida: {w}x{h} → {crop_w}x{crop_h} px")
 
         # ---- Rutas de salida ----
         self._output_dir.mkdir(parents=True, exist_ok=True)
@@ -257,7 +258,7 @@ class DetectionWorker(QThread):
         vid_out = VideoOutput(output_video, fps, crop_w, crop_h)
         csv_out = CsvOutput(output_video.with_suffix(".csv"))
 
-        spatial_ok = spatial.is_valid_for(crop_w, crop_h)
+        spatial_ok = spatial.is_valid_for(w, h)
         if not spatial_ok:
             self.log_msg.emit("[!] Calibracion parcial: head_dipping no usara referencias espaciales.")
 
@@ -266,34 +267,24 @@ class DetectionWorker(QThread):
         device = "0" if torch.cuda.is_available() else "cpu"
         self.log_msg.emit(f"Dispositivo: {'GPU (CUDA)' if device == '0' else 'CPU'}")
 
-        # ---- Bucle de deteccion frame a frame con recorte ----
+        # ---- Bucle stream=True: ByteTrack activo, sin parpadeo ----
         stats: dict[str, int] = {k: 0 for k in BEHAVIOR_KEYS}
 
-        # Estado para la correccion de intercambio snout<->tail
         _prev_snout: "np.ndarray | None" = None
         _prev_tail:  "np.ndarray | None" = None
 
+        results = model.predict(
+            source=cv2_source, stream=True,
+            conf=0.18, device=device, iou=0.5, verbose=False,
+        )
+
         frame_idx = 0
-        while not self._stop:
-            ret, raw = cap.read()
-            if not ret:
+        for res in results:
+            if self._stop:
+                self.log_msg.emit("Deteccion detenida por el usuario.")
                 break
 
-            # Recortar al borde exterior antes de pasarlo a YOLO
-            frame = raw[y1_c:y2_c, x1_c:x2_c]
-
-            preds = model.predict(
-                source=frame, conf=0.18, device=device, iou=0.5,
-                verbose=False, stream=False,
-            )
-            if not preds:
-                vid_out.write(frame)
-                self.frame_ready.emit(frame, dict(stats), frame_idx)
-                frame_idx += 1
-                continue
-
-            res      = preds[0]
-            img      = res.orig_img.copy()
+            img = res.orig_img.copy()
 
             if spatial_ok:
                 spatial.draw_zones(img)
@@ -315,7 +306,6 @@ class DetectionWorker(QThread):
                 cls_id     = int(res.boxes.cls[best].cpu())
                 yolo_label = model.names.get(cls_id, "Unknown")
 
-            # Extraer keypoints de la mejor deteccion
             if rat_box is not None and res.keypoints is not None:
                 kps_xy   = res.keypoints.xy
                 kps_conf = res.keypoints.conf
@@ -336,7 +326,6 @@ class DetectionWorker(QThread):
                             spine_kp = sp
 
             if rat_box is not None:
-                # Correccion de intercambio snout<->tail (heuristica temporal)
                 if self._kp_swap_fix:
                     snout_kp, tail_kp = _kp_swap_fix(snout_kp, tail_kp, _prev_snout, _prev_tail)
                 if snout_kp is not None:
@@ -344,7 +333,7 @@ class DetectionWorker(QThread):
                 if tail_kp is not None:
                     _prev_tail = tail_kp
 
-                speed_val   = speed_tracker.update(rat_box, crop_w, crop_h)
+                speed_val   = speed_tracker.update(rat_box, w, h)
                 final_label = classifier.classify(yolo_label, speed_val, snout_kp, rat_box, spatial_ok)
 
                 if final_label == "rat_head_dipping" and snout_kp is not None and spatial_ok:
@@ -371,14 +360,11 @@ class DetectionWorker(QThread):
                 if key:
                     stats[key] += 1
 
-            vid_out.write(img)
-            self.frame_ready.emit(img, dict(stats), frame_idx)
+            img_out = img[y1_c:y2_c, x1_c:x2_c]
+            vid_out.write(img_out)
+            self.frame_ready.emit(img_out, dict(stats), frame_idx)
             frame_idx += 1
 
-        if self._stop:
-            self.log_msg.emit("Deteccion detenida por el usuario.")
-
-        cap.release()
         vid_out.release()
         csv_out.close()
         self.log_msg.emit(f"Deteccion completada: {frame_idx} frames.")
