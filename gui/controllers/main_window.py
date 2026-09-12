@@ -487,7 +487,7 @@ class MainWindow(QMainWindow):
         # Checkbox temporal: correccion de intercambio snout<->tail
         from PyQt5.QtWidgets import QCheckBox, QHBoxLayout
         self._chk_kp_swap = QCheckBox()
-        self._chk_kp_swap.setChecked(True)
+        self._chk_kp_swap.setChecked(False)
         self._chk_kp_swap.setStyleSheet(
             "font-size: 11px; color: #555; padding: 0 4px;"
         )

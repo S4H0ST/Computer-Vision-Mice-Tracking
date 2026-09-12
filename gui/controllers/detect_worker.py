@@ -282,7 +282,7 @@ class DetectionWorker(QThread):
             # Recortar al borde exterior antes de pasarlo a YOLO
             frame = raw[y1_c:y2_c, x1_c:x2_c]
 
-            preds = model.predict(
+            preds = model.track(
                 source=frame, conf=0.18, device=device, iou=0.5,
                 verbose=False, stream=False, persist=True,
             )
