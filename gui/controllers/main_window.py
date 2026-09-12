@@ -595,7 +595,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "About Mouse Tracker",
-            "<b>Mouse Tracker v1.0</b><br><br>"
+            "<b>Mouse Tracker v2.0</b><br><br>"
             "Automated mouse behaviour analysis using computer vision.<br><br>"
             "<small style='color:#7f8c8d;'>Universidad Rey Juan Carlos, 2026</small>",
         )
