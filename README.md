@@ -7,7 +7,7 @@
 ![PyTorch](https://img.shields.io/badge/Framework-PyTorch-ee4c2c.svg)
 ![OpenCV](https://img.shields.io/badge/Vision-OpenCV-green.svg)
 ![PyQt5](https://img.shields.io/badge/GUI-PyQt5-41cd52.svg)
-![Status](https://img.shields.io/badge/Status-Complete-brightgreen)
+![Status](https://img.shields.io/badge/Status-Active_Development-orange)
 
 **Automated behavioral analysis of rodents in Open Field Test experiments using Deep Learning (Pose Estimation + Spatial Logic).**
 
@@ -44,7 +44,7 @@ This project automates the observation of the **Open Field Test (OFT)**, a stand
 
 ## Project Evolution (ADR)
 
-The project went through 6 iterative phases. Each phase is linked to the commit where it was implemented.
+The project went through 6 completed phases plus one active phase. Each completed phase is linked to the commit where it was implemented.
 
 <details>
 <summary><strong>Phase 1 — Base Detection and Overfitting Control</strong></summary>
@@ -120,6 +120,31 @@ No training data, no model file, no warmup delay. The filter is interpretable an
 </details>
 
 <details>
+<summary><strong>Phase 7 — GUI Overhaul, Pre-labeling Tool and Dataset Expansion (active)</strong></summary>
+
+The pipeline is fully functional (92.1 % detection rate on the current test video) but two gaps were identified that require further work.
+
+**1. Complete graphical interface**
+
+A full PyQt5 GUI replaces the previous CLI-only workflow. New pages added:
+
+- **Pre-labeling** — loads a video, applies the calibrated zones, shows each frame with YOLO's current predictions overlaid, and lets the researcher correct labels frame-by-frame using keyboard shortcuts (keys 1–7 for behaviors, arrow keys to navigate, `O` to flag occluded snout). Exports YOLO-format `.txt` annotation files ready to extend the dataset without leaving the app.
+- **Training** — launches fine-tuning runs from the GUI without editing config files.
+- **Central border calibration** — optional 5th calibration step that marks a central zone within the arena, used to compare center-seeking behavior (forfox-treated animals) vs. peripheral behavior (controls) in the trajectory and heatmap outputs.
+
+**2. Keypoint swap bug (snout ↔ tail)**
+
+During fast movement, YOLO Pose occasionally assigns the snout keypoint (KP0) to the position of the tail and vice versa. The effect is visible as an abrupt inversion of the skeleton: the red dot (snout) jumps to the tail end and the blue dot (tail) jumps to the head end for one or more frames, before the model recovers.
+
+**Root cause:** the current training dataset (1 101 images) lacks sufficient examples of the rat mid-rotation and at speed. YOLO Pose learns the statistical distribution of poses seen during training — underrepresented angles and motion states generalize poorly, causing the model to predict an inverted keypoint assignment when the input is ambiguous.
+
+**Temporary fix (heuristic, active):** a post-processing correction compares the total displacement cost of the normal assignment (snout→prev_snout + tail→prev_tail) against the swapped assignment (snout→prev_tail + tail→prev_snout). If the swapped assignment reduces the total cost by more than 20 %, the keypoints are exchanged before classification. A toggle button ("Corregir intercambio KP") in the detection page activates or deactivates this fix at runtime. The fix is logged as temporary — it helps with the current dataset but does not fix the underlying model gap.
+
+**Planned resolution:** add approximately 100–200 images per underrepresented pose angle (mid-rotation, fast movement, climbing corners) to the dataset and retrain. The laboratory team will provide additional raw video. The pre-labeling tool built in this phase exists precisely to make this annotation process fast.
+
+</details>
+
+<details>
 <summary><strong>Phase 6 — Model Selection and Pipeline v3</strong></summary>
 
 Two candidates: **exp8** (mAP50=0.82, Recall=0.887) and **exp9** (mAP50=0.87, Recall=0.795).
@@ -174,14 +199,15 @@ YOLO is trained on **5 visually distinct posture classes**. The spatial + tempor
 ### Arena Spatial Zones
 
 ```
-┌──────────────────────────────────┐  ← Outer wall
+┌──────────────────────────────────┐  ← Outer wall  (red, step 1)
 │  [       WALL ZONE              ]│
 │  ┌────────────────────────────┐  │
+│  │    ┌──────────────────┐    │  │  ← Central border (yellow, step 4 — optional)
+│  │    │   CENTER ZONE    │    │  │    forfox animals tend toward center
+│  │    └──────────────────┘    │  │    control animals tend toward periphery
+│  │    ○    ○    ○    ○        │  │  ← 4 holes  (green, step 3)
 │  │                            │  │
-│  │       ARENA INTERIOR       │  │  ← Inner boundary
-│  │    ○    ○    ○    ○        │  │  ← 4 holes
-│  │                            │  │
-│  └────────────────────────────┘  │
+│  └────────────────────────────┘  │  ← Inner boundary  (blue, step 2)
 │  [       WALL ZONE              ]│
 └──────────────────────────────────┘
 ```
@@ -272,12 +298,49 @@ Overall: the animal shows an **active coping style with strong olfactory focus**
 
 ## Installation
 
-### Prerequisites
+### Option A — Standalone executable (no Python required)
+
+The `MiceTracker_lab/` folder at the project root is a self-contained build. Copy the entire folder to any Windows machine and double-click `MiceTracker.exe`. No Python, no dependencies to install.
+
+```
+MiceTracker_lab/
+├── MiceTracker.exe      ← launch here
+├── models/
+│   └── yolo_ratas.pt    ← YOLO model (already included)
+└── _internal/           ← all Python libraries bundled by PyInstaller
+```
+
+> GPU (CUDA) is used automatically if the target machine has an NVIDIA GPU with CUDA drivers installed. Otherwise the app falls back to CPU silently.
+
+To rebuild the executable from source (requires the `yolorat_gpu` conda environment):
+
+```bash
+pyinstaller --onedir --windowed --name MiceTracker ^
+  --icon gui\assets\icons\app_icon.ico ^
+  --paths . --paths scripts ^
+  --add-data "gui/main_window.ui;gui" ^
+  --add-data "gui/assets;gui/assets" ^
+  --collect-all torch --collect-all torchvision ^
+  --collect-all ultralytics --collect-all cv2 ^
+  --collect-all numpy --collect-all PIL --collect-all PyQt5 ^
+  run_gui.py
+
+# After the build finishes:
+mkdir dist\MiceTracker\models
+copy models\yolo_ratas.pt dist\MiceTracker\models\
+# Then rename dist\MiceTracker\ to MiceTracker_lab\ (or zip it)
+```
+
+---
+
+### Option B — Run from source (development)
+
+#### Prerequisites
 
 - Python 3.9+
 - CUDA-compatible GPU (required for real-time inference; training strongly recommended on GPU)
 
-### Steps
+#### Steps
 
 **1. Clone the repository:**
 ```bash
@@ -306,7 +369,7 @@ The GUI guides you through the full workflow in four pages:
 | Page | What you do |
 |---|---|
 | **Home** | Choose a video file or start the live camera |
-| **Calibration** | Click 8 points on the arena image (2 exterior corners, 2 interior corners, 4 hole centres). Set real dimensions and output folder. |
+| **Calibration** | Click 8 mandatory points (2 exterior corners, 2 interior corners, 4 hole centres) + 2 optional points for the central border. Set real dimensions and output folder. |
 | **Detection** | Processing runs automatically. Live feed, FPS, and per-behaviour counters are shown in real time. Cancel at any point — partial results are saved. |
 | **Results** | Trajectory and heatmap tabs. Open the Excel report, annotated video or output folder directly from the UI. |
 
@@ -340,7 +403,9 @@ Computer-Vision-Mice-Tracking/
 │   │   └── app_icon.ico        # App icon (all sizes)
 │   └── controllers/
 │       ├── main_window.py      # MainWindow — navigation, calibration, language
-│       └── detect_worker.py    # DetectionWorker(QThread) — runs pipeline off UI thread
+│       ├── detect_worker.py    # DetectionWorker(QThread) — runs pipeline off UI thread
+│       ├── prelabel_page.py    # PrelabelPage — frame-by-frame annotation tool
+│       └── train_page.py       # TrainPage — fine-tuning launcher
 │
 ├── scripts/
 │   ├── main_model.py           # CLI entry point (admin / headless mode)
