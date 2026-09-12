@@ -199,6 +199,10 @@ class PreprocessWorker(QThread):
     def __init__(self, video_path: str | Path, parent=None) -> None:
         super().__init__(parent)
         self._video_path = str(video_path)
+        self._stop = False
+
+    def request_stop(self) -> None:
+        self._stop = True
 
     def run(self) -> None:
         try:
@@ -229,6 +233,9 @@ class PreprocessWorker(QThread):
         frame_idx = 0
 
         for res in results_iter:
+            if self._stop:
+                break
+
             box_out = kps_xy_out = kps_conf_out = None
             best_out = 0
 
@@ -244,7 +251,8 @@ class PreprocessWorker(QThread):
             frame_idx += 1
             self.progress.emit(frame_idx, total if total > 0 else frame_idx)
 
-        self.finished.emit(detections)
+        if not self._stop:
+            self.finished.emit(detections)
 
 
 # ---------------------------------------------------------------------------
@@ -615,11 +623,12 @@ class PrelabelPage(QWidget):
         outer.addSpacing(16)
 
         self._btn_cancel_preprocess = QPushButton(_PL_T["cancel_btn"][self._lang])
-        self._btn_cancel_preprocess.setFixedHeight(32)
-        self._btn_cancel_preprocess.setMaximumWidth(160)
+        self._btn_cancel_preprocess.setFixedHeight(44)
+        self._btn_cancel_preprocess.setMinimumWidth(180)
         self._btn_cancel_preprocess.setStyleSheet(
-            "QPushButton { background-color: #888; color: white; font-weight: bold; "
-            "border-radius: 4px; } QPushButton:hover { background-color: #666; }"
+            "QPushButton { background-color: #c0392b; color: white; font-weight: bold; "
+            "font-size: 14px; border-radius: 5px; } "
+            "QPushButton:hover { background-color: #e74c3c; }"
         )
         self._btn_cancel_preprocess.clicked.connect(self._on_cancel_preprocess)
         cancel_row = QHBoxLayout()
@@ -1122,8 +1131,10 @@ class PrelabelPage(QWidget):
 
     def _on_cancel_preprocess(self) -> None:
         if hasattr(self, "_preproc_worker") and self._preproc_worker.isRunning():
-            self._preproc_worker.terminate()
-            self._preproc_worker.wait()
+            self._preproc_worker.request_stop()
+            self._preproc_worker.wait(3000)  # espera max 3s; si no termina, forzamos
+            if self._preproc_worker.isRunning():
+                self._preproc_worker.terminate()
         self._inner_stack.setCurrentIndex(0)
 
     def _on_preprocess_error(self, msg: str) -> None:

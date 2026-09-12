@@ -284,7 +284,7 @@ class DetectionWorker(QThread):
 
             preds = model.predict(
                 source=frame, conf=0.18, device=device, iou=0.5,
-                verbose=False, stream=False,
+                verbose=False, stream=False, persist=True,
             )
             if not preds:
                 vid_out.write(frame)
