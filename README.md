@@ -121,6 +121,25 @@ No training data, no model file, no warmup delay. The filter is interpretable an
 </details>
 
 <details>
+<summary><strong>Phase 6 — Model Selection and Pipeline v3</strong></summary>
+
+Two candidates: **exp8** (mAP50=0.82, Recall=0.887) and **exp9** (mAP50=0.87, Recall=0.795).
+
+Despite exp9's higher aggregate mAP50, visual validation revealed it lost 10.5 % of climbing detections and 5.7 % of grooming detections compared to exp8 on the same test video. **Aggregate metrics can hide per-class degradation** — visual validation on real video is non-negotiable.
+
+exp8 was selected as the active model. Three post-processing improvements were applied (Pipeline v3):
+- `conf_threshold` lowered 0.25 → 0.18 to recover minority class detections
+- Climbing confirmation changed from snout-based to bbox-based (a rat can climb with its head pointing inward)
+- `_LabelStabilizer` added (8-frame hysteresis)
+
+Result: detection rate 92.1 %, climbing +13.4 pp over exp9 on the same test video.
+
+![Pipeline v3 detection output](docs/DemoGit_detection.gif)
+
+> *testRata5.mp4 — exp8 model + pipeline v3. Bounding box + behavior label + calibrated zone overlay (inner wall boundary + hole markers). 30 s segment from minute 5: head dipping, walking, sniffing, climbing and grooming.*
+</details>
+
+<details>
 <summary><strong>Phase 7 — GUI Overhaul, Pre-labeling Tool and Dataset Expansion (active)</strong></summary>
 
 The pipeline is fully functional (92.1 % detection rate on the current test video) but two gaps were identified that require further work.
@@ -143,25 +162,6 @@ During fast movement, YOLO Pose occasionally assigns the snout keypoint (KP0) to
 
 **Planned resolution:** add approximately 100–200 images per underrepresented pose angle (mid-rotation, fast movement, climbing corners) to the dataset and retrain. The laboratory team will provide additional raw video. The pre-labeling tool built in this phase exists precisely to make this annotation process fast.
 
-</details>
-
-<details>
-<summary><strong>Phase 6 — Model Selection and Pipeline v3</strong></summary>
-
-Two candidates: **exp8** (mAP50=0.82, Recall=0.887) and **exp9** (mAP50=0.87, Recall=0.795).
-
-Despite exp9's higher aggregate mAP50, visual validation revealed it lost 10.5 % of climbing detections and 5.7 % of grooming detections compared to exp8 on the same test video. **Aggregate metrics can hide per-class degradation** — visual validation on real video is non-negotiable.
-
-exp8 was selected as the active model. Three post-processing improvements were applied (Pipeline v3):
-- `conf_threshold` lowered 0.25 → 0.18 to recover minority class detections
-- Climbing confirmation changed from snout-based to bbox-based (a rat can climb with its head pointing inward)
-- `_LabelStabilizer` added (8-frame hysteresis)
-
-Result: detection rate 92.1 %, climbing +13.4 pp over exp9 on the same test video.
-
-![Pipeline v3 detection output](docs/DemoGit_detection.gif)
-
-> *testRata5.mp4 — exp8 model + pipeline v3. Bounding box + behavior label + calibrated zone overlay (inner wall boundary + hole markers). 30 s segment from minute 5: head dipping, walking, sniffing, climbing and grooming.*
 </details>
 
 ---
