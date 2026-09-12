@@ -330,7 +330,7 @@ QListWidget#list_result_runs::item:selected {
        <item>
         <widget class="QLabel" name="lbl_version">
          <property name="text">
-          <string>  v1.0</string>
+          <string>  v2.0</string>
          </property>
         </widget>
        </item>
