@@ -174,9 +174,7 @@ def _run_detection(frame_for_calib, source_label: str,
     # show_preview=True en camara para que el usuario vea y pueda parar con Q
     show_preview = camera_index is not None
     detector = RatDetector(detect_cfg,
-                           show_skeleton=False,
                            show_preview=show_preview,
-                           dual_output=(camera_index is None),
                            camera_index=camera_index)
     detector.run()
 

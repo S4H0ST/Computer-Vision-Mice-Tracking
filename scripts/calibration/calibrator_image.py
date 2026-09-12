@@ -2,19 +2,20 @@
 Calibrador visual de zonas sobre una imagen estatica.
 
 Permite marcar manualmente:
-  1. BORDE EXTERIOR - 2 esquinas opuestas (rectangulo rojo)
-  2. BORDE INTERIOR - 2 esquinas opuestas (rectangulo azul)
-  3. AGUJEROS       - 4 centros (circulos verdes)
+  1. BORDE EXTERIOR  - 2 esquinas opuestas (rectangulo rojo)
+  2. BORDE INTERIOR  - 2 esquinas opuestas (rectangulo azul)
+  3. AGUJEROS        - 4 centros (circulos verdes)
+  4. ZONA CENTRAL    - 2 esquinas opuestas (rectangulo amarillo, OPCIONAL)
 
 Guarda coords.json en outputs/calibration/ con: exterior, interior, holes,
-hole_radius, limits_inner y limits_outer.
+hole_radius, limits_inner, limits_outer y (si se define) center_zone, limits_center.
 
 Clases:
     ImageCalibrator - calibrador sobre imagen estatica (p.ej. primer frame de video).
 
 Controles de la ventana:
     Clic izquierdo - anadir punto
-    S              - guardar y salir (solo cuando hay 8 puntos)
+    S              - guardar y salir (solo cuando hay al menos 8 puntos obligatorios)
     R              - resetear todos los puntos
     Q              - salir sin guardar
 """
@@ -38,12 +39,13 @@ DISPLAY_WIDTH: int = 1000   # ancho de la imagen mostrada en pantalla (px)
 WIN_NAME:      str = "CALIBRADOR"
 
 # Colores BGR (OpenCV usa BGR, no RGB)
-RED   = (0,   0,   255)
-BLUE  = (255, 0,   0)
-GREEN = (0,   255, 0)
-WHITE = (255, 255, 255)
-BLACK = (0,   0,   0)
-GRAY  = (210, 210, 210)
+RED    = (0,   0,   255)
+BLUE   = (255, 0,   0)
+GREEN  = (0,   255, 0)
+YELLOW = (0,   220, 220)
+WHITE  = (255, 255, 255)
+BLACK  = (0,   0,   0)
+GRAY   = (210, 210, 210)
 
 
 class ImageCalibrator:
@@ -62,6 +64,7 @@ class ImageCalibrator:
         self.exterior: list = []   # 2 puntos en coordenadas originales
         self.interior: list = []   # 2 puntos en coordenadas originales
         self.holes:    list = []   # 4 puntos en coordenadas originales
+        self.center:   list = []   # 2 puntos en coordenadas originales (opcional)
 
         self.img_raw:  np.ndarray | None = None  # imagen original sin tocar
         self.scale_x:  float = 1.0               # factor display -> original (ancho)
@@ -83,7 +86,6 @@ class ImageCalibrator:
         if event != cv2.EVENT_LBUTTONDOWN:
             return
 
-        # Convertir de pantalla a imagen original antes de guardar
         ox, oy = self._to_orig(x, y)
 
         if len(self.exterior) < 2:
@@ -92,6 +94,8 @@ class ImageCalibrator:
             self.interior.append([ox, oy])
         elif len(self.holes) < 4:
             self.holes.append([ox, oy])
+        elif len(self.center) < 2:
+            self.center.append([ox, oy])
 
         self._refresh()
 
@@ -99,10 +103,6 @@ class ImageCalibrator:
         """
         Dibuja una cuadricula semitransparente sobre img para ayudar a
         alinear los puntos con los bordes fisicos de la caja.
-
-        Se dibuja sobre la imagen de pantalla (ya escalada) para que las
-        lineas tengan siempre el mismo grosor visual.
-        alpha=0.15: la cuadricula es muy sutil para no tapar al raton.
         """
         h, w = img.shape[:2]
         overlay = img.copy()
@@ -146,40 +146,49 @@ class ImageCalibrator:
                        max(HOLE_RADIUS, int(HOLE_RADIUS * self.scale_x)),
                        GREEN, max(2, int(2 * self.scale_x)))
 
+        for pt in self.center:
+            cv2.circle(img, tuple(pt), max(6, int(6 * self.scale_x)), YELLOW, -1)
+        if len(self.center) == 2:
+            cv2.rectangle(img, tuple(self.center[0]), tuple(self.center[1]),
+                          YELLOW, max(2, int(2 * self.scale_x)))
+
         # 2. Escalar al tamano display para mostrar en pantalla
         h_orig, w_orig = img.shape[:2]
         display_h = int(DISPLAY_WIDTH * h_orig / w_orig)
         disp = cv2.resize(img, (DISPLAY_WIDTH, display_h))
 
-        # 3. Cuadricula sobre la imagen ya escalada (lineas a tamano fijo en pantalla)
+        # 3. Cuadricula sobre la imagen ya escalada
         self._draw_grid(disp)
 
-        # 4. Banner de instrucciones en la franja inferior
+        # 4. Banner de instrucciones
         self._draw_header(disp)
 
         cv2.imshow(WIN_NAME, disp)
 
     def _draw_header(self, disp: np.ndarray) -> None:
         """Banner de instrucciones en la parte inferior de la imagen de pantalla."""
-        total = len(self.exterior) + len(self.interior) + len(self.holes)
+        mandatory = len(self.exterior) + len(self.interior) + len(self.holes)
         h = disp.shape[0]
 
-        if total < 2:
-            msg   = f"PASO 1/3 - BORDE EXTERIOR (pared): [{len(self.exterior)}/2] clics"
+        if mandatory < 2:
+            msg   = f"PASO 1/4 - BORDE EXTERIOR (pared): [{len(self.exterior)}/2] clics"
             color = RED
-        elif total < 4:
-            msg   = f"PASO 2/3 - BORDE INTERIOR (suelo): [{len(self.interior)}/2] clics"
+        elif mandatory < 4:
+            msg   = f"PASO 2/4 - BORDE INTERIOR (suelo): [{len(self.interior)}/2] clics"
             color = BLUE
-        elif total < 8:
-            msg   = f"PASO 3/3 - AGUJEROS (centra el clic): [{len(self.holes)}/4] clics"
+        elif mandatory < 8:
+            msg   = f"PASO 3/4 - AGUJEROS (centra el clic): [{len(self.holes)}/4] clics"
             color = GREEN
+        elif len(self.center) < 2:
+            n_c   = len(self.center)
+            msg   = f"PASO 4/4 - ZONA CENTRAL (OPCIONAL): [{n_c}/2] clics  |  S para omitir"
+            color = YELLOW
         else:
-            msg   = "Completo - pulsa  S  para guardar   |   R  para repetir"
+            msg   = "Completo con zona central - pulsa  S  para guardar   |   R  para repetir"
             color = (0, 220, 0)
 
         hint = "  R = resetear     S = guardar     Q = salir sin guardar"
 
-        # Fondo semitransparente en la franja inferior para que el texto sea legible
         overlay = disp.copy()
         cv2.rectangle(overlay, (0, h - 50), (disp.shape[1], h), BLACK, -1)
         cv2.addWeighted(overlay, 0.75, disp, 0.25, 0, disp)
@@ -192,8 +201,7 @@ class ImageCalibrator:
     def _save(self) -> None:
         """
         Serializa los puntos marcados a output_json.
-        Los limites (limits_inner/outer) pre-calculan min/max para que
-        SpatialAnalyzer compruebe pertenencia a zona con una comparacion simple.
+        La zona central es opcional: se guarda solo si se marcaron 2 puntos.
         """
         e = self.exterior
         i = self.interior
@@ -215,6 +223,16 @@ class ImageCalibrator:
                 "y_max": max(e[0][1], e[1][1]),
             },
         }
+        if len(self.center) == 2:
+            c = self.center
+            data["center_zone"] = c
+            data["limits_center"] = {
+                "x_min": min(c[0][0], c[1][0]),
+                "x_max": max(c[0][0], c[1][0]),
+                "y_min": min(c[0][1], c[1][1]),
+                "y_max": max(c[0][1], c[1][1]),
+            }
+
         self.output_json.parent.mkdir(parents=True, exist_ok=True)
         with open(self.output_json, "w") as f:
             json.dump(data, f, indent=4)
@@ -222,12 +240,17 @@ class ImageCalibrator:
         print(f"     Exterior : {e}")
         print(f"     Interior : {i}")
         print(f"     Agujeros : {self.holes}")
+        if len(self.center) == 2:
+            print(f"     Centro   : {self.center}")
+        else:
+            print("     Centro   : no definido (opcional)")
 
     def _reset(self) -> None:
         """Borra todos los puntos marcados y actualiza la ventana."""
         self.exterior = []
         self.interior = []
         self.holes    = []
+        self.center   = []
         print("[R] Puntos reseteados.")
         self._refresh()
 
@@ -248,12 +271,9 @@ class ImageCalibrator:
         h_orig, w_orig = self.img_raw.shape[:2]
         display_h = int(DISPLAY_WIDTH * h_orig / w_orig)
 
-        # Factores de escala: un clic en pantalla a (x, y) corresponde a
-        # (x * scale_x, y * scale_y) en la imagen original
         self.scale_x = w_orig / DISPLAY_WIDTH
         self.scale_y = h_orig / display_h
 
-        # WINDOW_AUTOSIZE: la ventana se ajusta exactamente al tamano de la imagen
         cv2.namedWindow(WIN_NAME, cv2.WINDOW_AUTOSIZE)
         cv2.setMouseCallback(WIN_NAME, self._click)
 
@@ -273,12 +293,12 @@ class ImageCalibrator:
                 print("[Q] Saliendo sin guardar.")
                 break
             elif key in (ord('s'), ord('S')):
-                total = len(self.exterior) + len(self.interior) + len(self.holes)
-                if total == 8:
+                mandatory = len(self.exterior) + len(self.interior) + len(self.holes)
+                if mandatory >= 8:
                     self._save()
                     break
                 else:
-                    print(f"[!] Faltan {8 - total} puntos para completar la calibracion.")
+                    print(f"[!] Faltan {8 - mandatory} puntos obligatorios para guardar.")
             elif key in (ord('r'), ord('R')):
                 self._reset()
 

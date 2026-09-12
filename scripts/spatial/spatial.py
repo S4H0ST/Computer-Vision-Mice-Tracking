@@ -24,6 +24,7 @@ class SpatialAnalyzer:
         self.hole_radius: int = 20
         self.inner_limits: dict | None = None
         self.outer_limits: dict | None = None
+        self.limits_center: dict | None = None
         self._calibrated: bool = False
         self._load_config(config_path)
 
@@ -37,14 +38,25 @@ class SpatialAnalyzer:
         with open(p, "r") as f:
             data = json.load(f)
 
-        self.holes        = [tuple(h) for h in data.get("holes", [])]
-        self.hole_radius  = data.get("hole_radius", 20)
-        self.inner_limits = data.get("limits_inner", None)
-        self.outer_limits = data.get("limits_outer", None)
-        self._calibrated  = len(self.holes) == 4 and self.inner_limits is not None
+        self.holes         = [tuple(h) for h in data.get("holes", [])]
+        self.hole_radius   = data.get("hole_radius", 20)
+        self.inner_limits  = data.get("limits_inner", None)
+        self.outer_limits  = data.get("limits_outer", None)
+        self.limits_center = data.get("limits_center", None)
+        self._calibrated   = len(self.holes) == 4 and self.inner_limits is not None
 
+        center_info = "si" if self.limits_center else "no"
         print(f"[OK] SpatialAnalyzer: {len(self.holes)} agujeros | "
-              f"radio={self.hole_radius}px | interior={self.inner_limits}")
+              f"radio={self.hole_radius}px | interior={self.inner_limits} | "
+              f"zona_central={center_info}")
+
+    def apply_crop_offset(self, x_off: int, y_off: int) -> None:
+        """Translates all calibration coords to crop-space by subtracting the crop origin."""
+        self.holes = [(hx - x_off, hy - y_off) for hx, hy in self.holes]
+        for d in [self.inner_limits, self.outer_limits, self.limits_center]:
+            if d is not None:
+                d["x_min"] -= x_off;  d["x_max"] -= x_off
+                d["y_min"] -= y_off;  d["y_max"] -= y_off
 
     def is_valid_for(self, img_w: int, img_h: int) -> bool:
         """
@@ -58,16 +70,23 @@ class SpatialAnalyzer:
                 return True
         return False
 
-    def check_dipping(self, snout_xy) -> bool:
-        """Devuelve True si el snout esta dentro del radio de alguno de los agujeros."""
+    def check_dipping_hole(self, snout_xy) -> int:
+        """
+        Devuelve el indice (0-3) del agujero en el que el snout esta asomado,
+        o -1 si no esta en ningun agujero.
+        """
         if not self.holes or snout_xy is None:
-            return False
+            return -1
         pt = np.array(snout_xy[:2], dtype=float)
         threshold = self.hole_radius * self.DIPPING_RATIO
-        for hole in self.holes:
+        for i, hole in enumerate(self.holes):
             if np.linalg.norm(pt - np.array(hole, dtype=float)) < threshold:
-                return True
-        return False
+                return i
+        return -1
+
+    def check_dipping(self, snout_xy) -> bool:
+        """Devuelve True si el snout esta dentro del radio de alguno de los agujeros."""
+        return self.check_dipping_hole(snout_xy) >= 0
 
     WALL_CLIMB_MARGIN: int = 10   # px que el snout debe penetrar en la zona de pared
 
@@ -131,12 +150,21 @@ class SpatialAnalyzer:
         return (x1 >= lim["x_min"] - margin and x2 <= lim["x_max"] + margin and
                 y1 >= lim["y_min"] - margin and y2 <= lim["y_max"] + margin)
 
+    def check_in_center(self, point) -> bool:
+        """Devuelve True si el punto (x, y) esta dentro de la zona central definida por el usuario."""
+        if point is None or self.limits_center is None:
+            return False
+        x, y = float(point[0]), float(point[1])
+        lim = self.limits_center
+        return lim["x_min"] <= x <= lim["x_max"] and lim["y_min"] <= y <= lim["y_max"]
+
     def draw_zones(self, img: np.ndarray, alpha: float = 0.35) -> np.ndarray:
         """
         Dibuja sobre img las zonas calibradas.
-        - Rectangulo rojo = borde EXTERIOR (paredes de la caja)
-        - Rectangulo azul = borde INTERIOR (suelo transitable)
-        - Circulo verde   = zona head_dipping (radio activo del agujero)
+        - Rectangulo rojo    = borde EXTERIOR (paredes de la caja)
+        - Rectangulo azul    = borde INTERIOR (suelo transitable)
+        - Rectangulo amarillo = zona CENTRAL (cuadrado interior definido por usuario)
+        - Circulo verde      = zona head_dipping (radio activo del agujero)
         """
         import cv2
         overlay = img.copy()
@@ -154,6 +182,13 @@ class SpatialAnalyzer:
                           (lim["x_min"], lim["y_min"]),
                           (lim["x_max"], lim["y_max"]),
                           (255, 100, 0), 2)
+
+        if self.limits_center is not None:
+            lim = self.limits_center
+            cv2.rectangle(overlay,
+                          (lim["x_min"], lim["y_min"]),
+                          (lim["x_max"], lim["y_max"]),
+                          (0, 220, 220), 2)   # amarillo
 
         for hx, hy in self.holes:
             cv2.circle(overlay, (int(hx), int(hy)),

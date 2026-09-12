@@ -82,18 +82,17 @@ class RatDetector(BaseModule):
     """
     Detecta y clasifica el comportamiento del raton frame a frame.
     Combina YOLO Pose, BehaviorClassifier y la logica espacial calibrada.
+
+    El video de salida se recorta automaticamente al area exterior calibrada
+    (outer_limits) para reducir la carga de inferencia de YOLO.
+    Los keypoints se dibujan siempre sobre el video anotado.
     """
 
     def __init__(self, config: DetectParams,
-                 show_skeleton: bool = False,
                  show_preview: bool = True,
-                 dual_output: bool = False,
                  camera_index: int | None = None) -> None:
         self.cfg: DetectParams                     = config
-        self.show_skeleton: bool                   = show_skeleton
         self.show_preview: bool                    = show_preview
-        self.dual_output: bool                     = dual_output
-        # camera_index != None activa el modo camara en vivo (0 = camara por defecto)
         self.camera_index: int | None              = camera_index
         self.model: YOLO | None                    = None
         self.spatial_logic: SpatialAnalyzer | None = None
@@ -210,37 +209,54 @@ class RatDetector(BaseModule):
     def run(self) -> None:
         """
         Procesa el video (o camara en vivo) y escribe el video anotado y el CSV.
-        Si camera_index no es None, usa la camara en lugar del archivo de video.
+
+        - El frame se recorta al area exterior calibrada antes de pasar a YOLO.
+        - Los 3 keypoints (snout, spine, tail) se dibujan siempre.
+        - El CSV almacena coordenadas en el espacio ORIGINAL del video (no del recorte).
         """
         self._setup()
 
-        # Determinar la fuente: archivo de video o indice de camara
+        # Fuente: archivo de video o camara
         if self.camera_index is not None:
-            source_cv2 = self.camera_index          # cv2.VideoCapture(0)
-            source_yolo = self.camera_index         # model.predict(source=0, ...)
+            source_cv2  = self.camera_index
             source_name = f"camara [{self.camera_index}]"
         else:
             source_cv2  = str(paths.video_source)
-            source_yolo = str(paths.video_source)
             source_name = paths.video_source.name
 
+        # Leer dimensiones del video/camara
         cap = cv2.VideoCapture(source_cv2)
         if not cap.isOpened():
             print(f"[X] Error abriendo fuente: {source_name}")
             return
-
         fps: float = cap.get(cv2.CAP_PROP_FPS) or 30.0
         w: int     = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h: int     = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
-        vid_out = VideoOutput(paths.output_video, fps, w, h, dual_output=self.dual_output)
+        # Calcular el recorte al borde exterior calibrado
+        crop_x, crop_y = 0, 0
+        out_w, out_h   = w, h
+        lim_outer = self.spatial_logic.outer_limits
+        if lim_outer:
+            margin = 5
+            cx1 = max(0, lim_outer["x_min"] - margin)
+            cy1 = max(0, lim_outer["y_min"] - margin)
+            cx2 = min(w, lim_outer["x_max"] + margin)
+            cy2 = min(h, lim_outer["y_max"] + margin)
+            if cx2 > cx1 and cy2 > cy1:
+                crop_x, crop_y = cx1, cy1
+                out_w, out_h   = cx2 - cx1, cy2 - cy1
+                self.spatial_logic.apply_crop_offset(cx1, cy1)
+
+        vid_out = VideoOutput(paths.output_video, fps, out_w, out_h)
         csv_out = CsvOutput(paths.output_video.with_suffix(".csv"))
 
         print(f"[>] Procesando: {source_name}")
         print(f"    Salida    : {paths.output_video}")
-        if vid_out.clean_path is not None:
-            print(f"    Limpio    : {vid_out.clean_path}")
+        if out_w < w or out_h < h:
+            print(f"    Recorte  : ({crop_x},{crop_y})->({crop_x+out_w},{crop_y+out_h})"
+                  f"  {out_w}x{out_h} px (original: {w}x{h})")
 
         print("\n" + "=" * 55)
         print("  LEYENDA")
@@ -248,26 +264,43 @@ class RatDetector(BaseModule):
             print(f"  {k:<22}  {v}")
         print("=" * 55 + "\n")
 
-        spatial_ok: bool = self.spatial_logic.is_valid_for(w, h)
+        spatial_ok: bool = self.spatial_logic.is_valid_for(out_w, out_h)
         if not spatial_ok:
             print(f"[!] AVISO: coords.json no esta calibrado para esta fuente ({w}x{h}).")
             print(f"    head_dipping y sniffing no usaran referencias espaciales.")
 
-        results = self.model.predict(
-            source=source_yolo, stream=True,
-            conf=self.cfg.conf_threshold, device=self.cfg.device, iou=0.5
-        )
-
+        cap_proc = cv2.VideoCapture(source_cv2)
         frame_idx: int  = 0
         last_label: str = "—"
 
-        for res in results:
-            img_base  = res.orig_img.copy()
-            img       = img_base.copy()
-            img_clean: np.ndarray | None = img_base.copy() if self.dual_output else None
+        while True:
+            ret, raw_frame = cap_proc.read()
+            if not ret:
+                break
 
+            # Recortar al area de la caja
+            if crop_x > 0 or crop_y > 0 or out_w < w or out_h < h:
+                frame = raw_frame[crop_y:crop_y + out_h, crop_x:crop_x + out_w]
+            else:
+                frame = raw_frame
+
+            # Inferencia YOLO sobre el frame recortado
+            pred_list = self.model.predict(
+                source=frame, stream=False,
+                conf=self.cfg.conf_threshold, device=self.cfg.device, iou=0.5,
+                verbose=False,
+            )
+
+            img = frame.copy()
             if spatial_ok:
                 self.spatial_logic.draw_zones(img)
+
+            if not pred_list:
+                vid_out.write(img)
+                frame_idx += 1
+                continue
+
+            res = pred_list[0]
 
             rat_box: np.ndarray | None = None
             yolo_label: str  = "Unknown"
@@ -275,8 +308,9 @@ class RatDetector(BaseModule):
             snout_kp: np.ndarray | None = None
             tail_kp:  np.ndarray | None = None
             speed_val: float = 0.0
+            hole_idx: int    = -1
 
-            # 1. Extraer la deteccion de mayor confianza de YOLO
+            # Mejor deteccion por confianza
             if res.boxes and len(res.boxes) > 0:
                 confs      = res.boxes.conf.cpu().numpy()
                 best       = int(np.argmax(confs))
@@ -284,17 +318,20 @@ class RatDetector(BaseModule):
                 cls_id     = int(res.boxes.cls[best].cpu())
                 yolo_label = self.model.names.get(cls_id, "Unknown")
 
-            # 2. Extraer keypoints del snout y la cola
+            # Keypoints en coordenadas del frame recortado
             if rat_box is not None and res.keypoints is not None:
                 snout_kp = self._extract_snout(res, detection_idx=0)
                 tail_kp  = self._extract_keypoint(res, KP_TAIL, detection_idx=0)
 
-            # 3. Calcular velocidad y delegar clasificacion
             if rat_box is not None:
-                speed_val   = self._speed_tracker.update(rat_box, w, h)
+                speed_val   = self._speed_tracker.update(rat_box, out_w, out_h)
                 final_label = self._behavior_classifier.classify(
                     yolo_label, speed_val, snout_kp, rat_box, spatial_ok
                 )
+
+                # Indice del agujero en el que se asoma (si hay head dipping)
+                if final_label == "rat_head_dipping" and snout_kp is not None and spatial_ok:
+                    hole_idx = self.spatial_logic.check_dipping_hole(snout_kp)
 
                 # Dibujar bbox y etiqueta
                 color = self._get_color(final_label)
@@ -304,7 +341,7 @@ class RatDetector(BaseModule):
                     motion = final_label.split("_", 1)[1]
                     label_txt = f"sniffing [{motion}]"
                 else:
-                    display = final_label.removeprefix("rat_").replace("_", " ")
+                    display    = final_label.removeprefix("rat_").replace("_", " ")
                     yolo_ruido = yolo_label in ("rat_horizontal", "Unknown")
                     if not yolo_ruido and yolo_label != final_label:
                         yolo_disp = yolo_label.removeprefix("rat_").replace("_", " ")
@@ -312,32 +349,29 @@ class RatDetector(BaseModule):
                     else:
                         label_txt = display
 
-                for target in ([img] + ([img_clean] if img_clean is not None else [])):
-                    cv2.rectangle(target, (rx1, ry1), (rx2, ry2), color, 2)
-                    cv2.putText(target, label_txt, (rx1, ry1 - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
-                    if self.show_skeleton:
-                        self._draw_skeleton(target, res, detection_idx=0)
+                cv2.rectangle(img, (rx1, ry1), (rx2, ry2), color, 2)
+                cv2.putText(img, label_txt, (rx1, ry1 - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                # Siempre dibujar los 3 keypoints
+                self._draw_skeleton(img, res, detection_idx=0)
+
+                # CSV en coordenadas originales (recorte invertido)
+                box_orig   = rat_box + np.array([crop_x, crop_y, crop_x, crop_y], dtype=float)
+                snout_orig = (np.array([snout_kp[0] + crop_x, snout_kp[1] + crop_y, snout_kp[2]])
+                              if snout_kp is not None else None)
+                tail_orig  = (np.array([tail_kp[0] + crop_x, tail_kp[1] + crop_y])
+                              if tail_kp is not None else None)
 
                 csv_out.write_row(frame_idx, fps, yolo_label, final_label,
-                                  rat_box, snout_kp, tail_kp, speed_val)
+                                  box_orig, snout_orig, tail_orig, speed_val, hole_idx)
                 last_label = final_label
 
-            vid_out.write(img, img_clean)
+            vid_out.write(img)
 
             if self.show_preview:
-                preview = img.copy()
-                skel_state = "ON" if self.show_skeleton else "OFF"
-                hint = f"[K] Skeleton: {skel_state}   [Q] Salir"
-                cv2.putText(preview, hint, (10, h - 12),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1,
-                            cv2.LINE_AA)
-                cv2.imshow("RatDetector - Preview", preview)
+                cv2.imshow("RatDetector - Preview", img)
                 key = cv2.waitKey(1) & 0xFF
-                if key == ord('k') or key == ord('K'):
-                    self.show_skeleton = not self.show_skeleton
-                    print(f"\n[Preview] Skeleton {'ON' if self.show_skeleton else 'OFF'}")
-                elif key == ord('q') or key == ord('Q'):
+                if key in (ord('q'), ord('Q')):
                     print("\n[Preview] Detencion manual (Q)")
                     break
 
@@ -347,11 +381,10 @@ class RatDetector(BaseModule):
                 es = LABEL_ES.get(last_label, last_label)
                 print(f"   Frame {frame_idx:>6}  |  {last_label:<22}  ({es})", end="\r")
 
+        cap_proc.release()
         if self.show_preview:
             cv2.destroyAllWindows()
         vid_out.release()
         csv_out.close()
         print(f"\n[+] Finalizado. {frame_idx} frames -> {paths.output_video.name}")
-        if vid_out.clean_path is not None:
-            print(f"    Limpio    : {vid_out.clean_path.name}")
         print(f"    CSV: {csv_out.path.name}")

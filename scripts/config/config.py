@@ -24,9 +24,12 @@ try:
 except ImportError:
     _DEFAULT_DEVICE: str = "cpu"
 
-# Raiz del proyecto: scripts/config/config.py -> scripts/config -> scripts -> raiz
-FILE_PATH: Path = Path(__file__).resolve()
-PROJECT_ROOT: Path = FILE_PATH.parent.parent.parent
+# Raiz del proyecto
+if getattr(sys, "frozen", False):
+    PROJECT_ROOT: Path = Path(sys.executable).parent
+else:
+    FILE_PATH: Path = Path(__file__).resolve()
+    PROJECT_ROOT: Path = FILE_PATH.parent.parent.parent
 
 
 @dataclass

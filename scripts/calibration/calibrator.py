@@ -2,12 +2,13 @@
 Calibrador visual de zonas sobre el primer frame de un video.
 
 Permite marcar manualmente:
-  1. BORDE EXTERIOR - 2 esquinas opuestas (rectangulo rojo)
-  2. BORDE INTERIOR - 2 esquinas opuestas (rectangulo azul)
-  3. AGUJEROS       - 4 centros (circulos verdes)
+  1. BORDE EXTERIOR  - 2 esquinas opuestas (rectangulo rojo)
+  2. BORDE INTERIOR  - 2 esquinas opuestas (rectangulo azul)
+  3. AGUJEROS        - 4 centros (circulos verdes)
+  4. ZONA CENTRAL    - 2 esquinas opuestas (rectangulo amarillo, OPCIONAL)
 
 Guarda coords.json con: exterior, interior, holes, hole_radius,
-limits_inner y limits_outer.
+limits_inner, limits_outer y (si se define) center_zone, limits_center.
 
 Clases:
     ZoneCalibrator - calibrador interactivo sobre primer frame de video.
@@ -15,7 +16,7 @@ Clases:
 Controles de la ventana:
     Clic izquierdo - anadir punto
     R              - resetear todos los puntos
-    Q              - guardar (si completo) y salir
+    Q              - guardar (si completo al menos hasta agujeros) y salir
 """
 
 import cv2
@@ -30,17 +31,19 @@ HOLE_RADIUS:   int = 20
 DISPLAY_WIDTH: int = 1000   # ancho maximo de la ventana en pantalla (px)
 WIN_NAME:      str = "CALIBRADOR"
 
-RED   = (0,   0,   255)
-BLUE  = (255, 0,   0)
-GREEN = (0,   255, 0)
-GRAY  = (210, 210, 210)
-BLACK = (0,   0,   0)
+RED    = (0,   0,   255)
+BLUE   = (255, 0,   0)
+GREEN  = (0,   255, 0)
+YELLOW = (0,   220, 220)
+GRAY   = (210, 210, 210)
+BLACK  = (0,   0,   0)
 
 
 class ZoneCalibrator(BaseModule):
     """
     Calibrador interactivo que abre el primer frame de un video y permite
-    al usuario marcar: borde exterior, borde interior y 4 agujeros.
+    al usuario marcar: borde exterior, borde interior, 4 agujeros y
+    (opcionalmente) un cuadrado central.
 
     Los puntos se guardan en coordenadas de la imagen ORIGINAL, no de la
     pantalla, para que SpatialAnalyzer pueda usarlos directamente contra
@@ -54,6 +57,7 @@ class ZoneCalibrator(BaseModule):
         self.exterior: list = []   # 2 puntos: esquinas opuestas del rectangulo exterior
         self.interior: list = []   # 2 puntos: esquinas opuestas del rectangulo interior
         self.holes:    list = []   # 4 puntos: centros de los agujeros
+        self.center:   list = []   # 2 puntos: esquinas de la zona central (opcional)
 
         self.img_raw: np.ndarray | None = None  # frame original sin modificar
         self.scale_x: float = 1.0               # factor display -> original (ancho)
@@ -71,7 +75,6 @@ class ZoneCalibrator(BaseModule):
         if event != cv2.EVENT_LBUTTONDOWN:
             return
 
-        # Convertir de espacio display a espacio original del video
         ox, oy = self._to_orig(x, y)
 
         if len(self.exterior) < 2:
@@ -83,6 +86,9 @@ class ZoneCalibrator(BaseModule):
         elif len(self.holes) < 4:
             self.holes.append([ox, oy])
             print(f"[+] Agujero {len(self.holes)}: ({ox}, {oy})")
+        elif len(self.center) < 2:
+            self.center.append([ox, oy])
+            print(f"[+] Zona central punto {len(self.center)}: ({ox}, {oy})")
 
         self._refresh()
 
@@ -90,9 +96,6 @@ class ZoneCalibrator(BaseModule):
         """
         Dibuja una cuadricula semitransparente sobre img para facilitar
         la alineacion de los puntos con los bordes fisicos de la caja.
-
-        divisions: numero de celdas por lado (12 -> cuadricula 12x12).
-        alpha=0.15: la cuadricula es muy sutil para no tapar al raton.
         """
         h, w = img.shape[:2]
         overlay = img.copy()
@@ -112,16 +115,12 @@ class ZoneCalibrator(BaseModule):
         if self.img_raw is None:
             return
 
-        # 1. Partir de la imagen original y escalarla al tamano de pantalla
         h_orig, w_orig = self.img_raw.shape[:2]
         display_h = int(DISPLAY_WIDTH * h_orig / w_orig)
         img = cv2.resize(self.img_raw, (DISPLAY_WIDTH, display_h))
 
-        # 2. Cuadricula sutil (se dibuja sobre la imagen ya escalada)
         self._draw_grid(img)
 
-        # 3. Para dibujar los puntos en pantalla hay que escalarlos de vuelta
-        #    (los puntos estan guardados en coordenadas originales)
         def to_disp(p):
             return (int(round(p[0] / self.scale_x)), int(round(p[1] / self.scale_y)))
 
@@ -139,33 +138,43 @@ class ZoneCalibrator(BaseModule):
             cv2.rectangle(img, to_disp(self.interior[0]),
                           to_disp(self.interior[1]), BLUE, 2)
 
-        # Agujeros (verde) - el radio se dibuja a escala de pantalla
+        # Agujeros (verde)
         r_disp = max(5, int(HOLE_RADIUS / self.scale_x))
         for pt in self.holes:
             cv2.circle(img, to_disp(pt), 5, GREEN, -1)
             cv2.circle(img, to_disp(pt), r_disp, GREEN, 2)
 
-        # 4. Banner de instrucciones en la franja inferior
-        self._draw_header(img)
+        # Zona central (amarillo, opcional)
+        for pt in self.center:
+            cv2.circle(img, to_disp(pt), 6, YELLOW, -1)
+        if len(self.center) == 2:
+            cv2.rectangle(img, to_disp(self.center[0]),
+                          to_disp(self.center[1]), YELLOW, 2)
 
+        self._draw_header(img)
         cv2.imshow(WIN_NAME, img)
 
     def _draw_header(self, img: np.ndarray) -> None:
         """Dibuja el banner de instrucciones en la parte inferior de img."""
-        total = len(self.exterior) + len(self.interior) + len(self.holes)
+        mandatory = len(self.exterior) + len(self.interior) + len(self.holes)
+        total     = mandatory + len(self.center)
         h = img.shape[0]
 
-        if total < 2:
-            msg   = f"PASO 1/3 - BORDE EXTERIOR (pared): [{len(self.exterior)}/2] clics"
+        if mandatory < 2:
+            msg   = f"PASO 1/4 - BORDE EXTERIOR (pared): [{len(self.exterior)}/2] clics"
             color = RED
-        elif total < 4:
-            msg   = f"PASO 2/3 - BORDE INTERIOR (suelo): [{len(self.interior)}/2] clics"
+        elif mandatory < 4:
+            msg   = f"PASO 2/4 - BORDE INTERIOR (suelo): [{len(self.interior)}/2] clics"
             color = BLUE
-        elif total < 8:
-            msg   = f"PASO 3/3 - AGUJEROS (centra el clic): [{len(self.holes)}/4] clics"
+        elif mandatory < 8:
+            msg   = f"PASO 3/4 - AGUJEROS (centra el clic): [{len(self.holes)}/4] clics"
             color = GREEN
+        elif len(self.center) < 2:
+            n_c   = len(self.center)
+            msg   = f"PASO 4/4 - ZONA CENTRAL (OPCIONAL): [{n_c}/2] clics  |  Q para omitir"
+            color = YELLOW
         else:
-            msg   = "Completo - pulsa  Q  para guardar y salir   |   R  para repetir"
+            msg   = "Completo con zona central - pulsa  Q  para guardar"
             color = (0, 220, 0)
 
         hint = "  R = resetear     Q = guardar y salir"
@@ -182,8 +191,7 @@ class ZoneCalibrator(BaseModule):
     def _save(self) -> None:
         """
         Serializa los puntos marcados a coords.json.
-        Los limites (limits_inner/outer) son el formato rapido que usa
-        SpatialAnalyzer para comprobar si un punto esta dentro de un rectangulo.
+        La zona central es opcional: se guarda solo si se marcaron 2 puntos.
         """
         e = self.exterior
         i = self.interior
@@ -201,19 +209,33 @@ class ZoneCalibrator(BaseModule):
                 "y_min": min(e[0][1], e[1][1]), "y_max": max(e[0][1], e[1][1]),
             },
         }
+        if len(self.center) == 2:
+            c = self.center
+            data["center_zone"] = c
+            data["limits_center"] = {
+                "x_min": min(c[0][0], c[1][0]), "x_max": max(c[0][0], c[1][0]),
+                "y_min": min(c[0][1], c[1][1]), "y_max": max(c[0][1], c[1][1]),
+            }
+
         self.output_json.parent.mkdir(parents=True, exist_ok=True)
         with open(self.output_json, "w") as f:
             json.dump(data, f, indent=4)
+
         print(f"\n[OK] Calibracion guardada en: {self.output_json}")
-        print(f"     Exterior: {e}")
-        print(f"     Interior: {i}")
-        print(f"     Agujeros: {self.holes}")
+        print(f"     Exterior : {e}")
+        print(f"     Interior : {i}")
+        print(f"     Agujeros : {self.holes}")
+        if len(self.center) == 2:
+            print(f"     Centro   : {self.center}")
+        else:
+            print("     Centro   : no definido (opcional)")
 
     def _reset(self) -> None:
         """Borra todos los puntos marcados y actualiza la ventana."""
         self.exterior = []
         self.interior = []
         self.holes    = []
+        self.center   = []
         print("[R] Puntos reseteados.")
         self._refresh()
 
@@ -226,7 +248,6 @@ class ZoneCalibrator(BaseModule):
             print(f"[!] Video no encontrado: {self.video_path}")
             return
 
-        # Solo necesitamos el primer frame, no reproducir el video completo
         cap = cv2.VideoCapture(str(self.video_path))
         ret, frame = cap.read()
         cap.release()
@@ -239,7 +260,6 @@ class ZoneCalibrator(BaseModule):
         display_h = int(DISPLAY_WIDTH * h_orig / w_orig)
 
         self.img_raw = frame.copy()
-        # Factores para convertir clics en pantalla a coordenadas del frame original
         self.scale_x = w_orig / DISPLAY_WIDTH
         self.scale_y = h_orig / display_h
 
@@ -259,11 +279,11 @@ class ZoneCalibrator(BaseModule):
             key = cv2.waitKey(20) & 0xFF
 
             if key in (ord('q'), ord('Q')):
-                total = len(self.exterior) + len(self.interior) + len(self.holes)
-                if total == 8:
+                mandatory = len(self.exterior) + len(self.interior) + len(self.holes)
+                if mandatory == 8:
                     self._save()
                 else:
-                    print(f"[!] Calibracion incompleta ({total}/8 puntos). Saliendo sin guardar.")
+                    print(f"[!] Calibracion incompleta ({mandatory}/8 puntos obligatorios). Saliendo sin guardar.")
                 break
             elif key in (ord('r'), ord('R')):
                 self._reset()
