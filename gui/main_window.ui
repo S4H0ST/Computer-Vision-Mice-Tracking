@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Mouse Tracker</string>
+   <string>Rat Tracker Pose</string>
   </property>
   <property name="styleSheet">
    <string notr="true">
@@ -237,7 +237,7 @@ QListWidget#list_result_runs::item:selected {
        <item>
         <widget class="QLabel" name="lbl_app_title">
          <property name="text">
-          <string>Mouse Tracker</string>
+          <string>Rat Tracker Pose</string>
          </property>
         </widget>
        </item>

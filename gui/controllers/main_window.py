@@ -55,7 +55,7 @@ _TRANSLATIONS: list[tuple] = [
     ("_nav_compare",          "setText",  "  Comparar Grupos",                "  Compare Groups"),
     ("btn_back_calib",        "setText",  "← Volver",                         "← Back"),
     ("btn_back_detection",    "setText",  "← Volver",                         "← Back"),
-    ("lbl_welcome",           "setText",  "Sistema de Seguimiento de Ratones","Mouse Behaviour Tracking System"),
+    ("lbl_welcome",           "setText",  "Rat Tracker Pose",                 "Rat Tracker Pose"),
     ("lbl_subtitle",          "setText",  "Analisis de comportamiento mediante vision por computador",
                                           "Behaviour analysis using computer vision"),
     ("grp_video",             "setTitle", "Deteccion desde Video",            "Detection from Video"),
@@ -178,8 +178,17 @@ _HELP_CSS = """
 
 _HELP_NAV_HTML = _HELP_CSS + """
 <h2>Application Overview</h2>
-<p>Mouse Tracker analyses mouse behaviour in a Barnes maze arena using computer vision.
-The workflow has four pages: <b>Home → Calibration → Detection → Results</b>.</p>
+<p><b>Rat Tracker Pose</b> analyses rat behaviour in a Barnes maze / holeboard arena
+using computer vision and YOLO-Pose keypoint detection.
+The sidebar gives access to all modules:</p>
+<ul>
+  <li><b>Home</b> — start a detection session (video file or live camera).</li>
+  <li><b>Pre-Labeling</b> — manually label an existing video to generate a training dataset.</li>
+  <li><b>Train</b> — fine-tune the YOLO model on your labelled dataset.</li>
+  <li><b>Results</b> — view trajectory images, heatmaps and generated files.</li>
+  <li><b>Compare Groups</b> — statistical comparison between two experimental groups.</li>
+  <li><b>Label Settings</b> — add, remove or modify behaviour labels and key bindings.</li>
+</ul>
 
 <h2>Home</h2>
 <div class="step">
@@ -191,41 +200,89 @@ The workflow has four pages: <b>Home → Calibration → Detection → Results</
 <h2>Calibration</h2>
 <p>Click 8 points on the arena image to define its geometry:</p>
 <ul>
-  <li><b style="color:#cc0000">Step 1</b> — 2 clicks on opposite corners of the <b>exterior wall</b> (red rectangle).</li>
-  <li><b style="color:#0000cc">Step 2</b> — 2 clicks on opposite corners of the <b>interior floor</b> (blue rectangle).</li>
+  <li><b style="color:#cc0000">Step 1</b> — 2 clicks on opposite corners of the <b>exterior wall</b> (red).</li>
+  <li><b style="color:#0000cc">Step 2</b> — 2 clicks on opposite corners of the <b>interior floor</b> (blue).</li>
   <li><b style="color:#007700">Step 3</b> — 4 clicks on the <b>centre of each hole</b> (green circles).</li>
+  <li><b style="color:#cc9900">Step 4</b> — (optional) 2 clicks for a <b>central zone</b> border (yellow).</li>
 </ul>
 <p>Set the real-world box dimensions (cm) and choose an <b>Output Folder</b> before clicking <b>Next →</b>.</p>
-<div class="tip">Tip: you can reuse a previous calibration via <b>Import Coordinates → Browse…</b>
+<div class="tip">Tip: reuse a previous calibration via <b>Import Coordinates → Browse…</b>
 and selecting a <code>coords_*.json</code> file.</div>
-<div class="tip">Tip: <b>Clear</b> resets all 8 points so you can start over.</div>
+<div class="tip">Tip: <b>Clear</b> resets all points so you can start over. Drag the corner
+handles on hole circles to resize them.</div>
 
 <h2>Detection</h2>
-<p>The model processes each frame and shows:</p>
+<p>The model processes each frame using YOLO-Pose with ByteTrack and shows:</p>
 <ul>
-  <li>Live video feed with behaviour label overlaid.</li>
+  <li>Live video feed with behaviour label and keypoints overlaid.</li>
   <li>Frame count, FPS and video time elapsed.</li>
   <li>Running totals (seconds) per behaviour: Idle, Walking, Sniffing, Climbing, Rearing, Head-dip, Grooming.</li>
 </ul>
-<p>Press <b>Cancel</b> to stop early — partial results will still be saved.<br>
-Use <b>← Back</b> (visible after cancelling) to correct the calibration and re-run.</p>
+<p>Press <b>Cancel</b> to stop early — partial results are still saved.<br>
+Use <b>← Back</b> (visible after cancelling) to fix the calibration and re-run.</p>
 
 <h2>Results</h2>
-<p>Displayed automatically after detection finishes, or navigate here via the sidebar to
-browse a previous run folder.</p>
+<p>Shown automatically after detection, or navigate here via the sidebar to browse a previous run.</p>
 <ul>
-  <li><b>Trajectory</b> tab — colour-coded path of the mouse across the arena.</li>
-  <li><b>Heatmap</b> tab — density map showing where the mouse spent most time.</li>
+  <li><b>Trajectory</b> tab — colour-coded path of the rat across the arena.</li>
+  <li><b>Heatmap</b> tab — density map showing where the rat spent most time.</li>
   <li><b>Generated Files</b> panel — open the stats spreadsheet (.xlsx), annotated video,
       clean trajectory video, or the output folder directly.</li>
+  <li><b>Summary</b> panel — duration, total frames, model name and path distance (px / cm).</li>
 </ul>
 <div class="tip">Tip: click <b>Select Folder</b> in the top-right to load results from any previous run.</div>
+
+<h2>Pre-Labeling</h2>
+<p>Manually label a recorded video to produce a YOLO-Pose training dataset.</p>
+<div class="step">
+  <b>Step 1</b> — Select the video, calibrate the arena (or import existing coords),
+  choose an output dataset folder, then click <b>Next →</b>.<br>
+  <b>Step 2</b> — The model pre-processes all frames (runs inference to extract bounding boxes
+  and keypoints). Progress is shown on screen; press <b>Cancel</b> to abort.<br>
+  <b>Step 3</b> — Use the playback controls to navigate the video.
+  Press the number keys (or click the coloured buttons) to assign a behaviour label
+  to the current frame while playing. Press <b>O</b> to toggle occluded-snout mode for the current frame.
+  Click <b>Finish and Generate Dataset</b> to export.
+</div>
+<p>The dataset is saved under the selected folder with the structure
+<code>train/images</code>, <code>train/labels</code>, <code>valid/images</code>, etc.
+(70 / 20 / 10 split). A <code>data.yaml</code> file is also written.</p>
+<div class="tip">Tip: after finishing one video you are returned to Step 1 automatically —
+you can label another video to the same output folder and the frames accumulate.</div>
+
+<h2>Train</h2>
+<p>Fine-tune the YOLO-Pose model on your labelled dataset.</p>
+<ul>
+  <li>Select the <b>dataset folder</b> (the one that contains <code>data.yaml</code>).</li>
+  <li>Select or confirm the <b>data.yaml</b> path.</li>
+  <li>Enter a <b>model name</b> — the resulting <code>.pt</code> file is saved in <code>models/</code>.</li>
+  <li>Click <b>Train</b>. Training output is streamed to the console panel.</li>
+</ul>
+<div class="tip">Tip: training hyperparameters (epochs, batch size, device) are configured
+in <code>scripts/config/config.py</code> under <code>train_cfg</code>.</div>
+
+<h2>Compare Groups</h2>
+<p>Load two sets of <code>stats_*.xlsx</code> result files (one per group) and compare their
+behaviour distributions with bar charts and statistical tests.</p>
+
+<h2>Label Settings</h2>
+<p>Click <b>Config. Etiquetas</b> in the sidebar to open the label editor. You can:</p>
+<ul>
+  <li>Add a new behaviour label (key, internal name, Spanish/English display text, colour).</li>
+  <li>Remove an existing label.</li>
+  <li>Change the keyboard shortcut (single alphanumeric character).</li>
+  <li>Change the colour by clicking the colour cell.</li>
+</ul>
+<p>Changes are saved to <code>scripts/config/labels.json</code> and take effect the next
+time you open the Pre-Labeling tab.</p>
 
 <h2>Keyboard Shortcuts</h2>
 <ul>
   <li><kbd>Ctrl+N</kbd> — New Detection (from any page)</li>
   <li><kbd>Ctrl+Q</kbd> — Exit the application</li>
   <li><kbd>F1</kbd> — Open this guide</li>
+  <li><kbd>1</kbd>–<kbd>7</kbd> (Pre-Labeling) — assign a behaviour label to the current frame</li>
+  <li><kbd>O</kbd> (Pre-Labeling) — toggle occluded-snout marker</li>
 </ul>
 """
 
@@ -246,14 +303,15 @@ written to <code>outputs/calibration/</code> for convenience.</p>
 
 <h3>What behaviours does the model detect?</h3>
 <ul>
-  <li><b>Idle</b> — mouse is stationary.</li>
+  <li><b>Idle</b> — rat is stationary.</li>
   <li><b>Walking</b> — moving across the arena floor.</li>
   <li><b>Sniffing</b> — nose-down exploration.</li>
-  <li><b>Climbing</b> — moving along the arena wall.</li>
+  <li><b>Climbing</b> — moving along the arena wall (thigmotaxis).</li>
   <li><b>Rearing</b> — standing on hind legs.</li>
   <li><b>Head-dip</b> — head extended into a hole.</li>
   <li><b>Grooming</b> — self-grooming posture.</li>
 </ul>
+<p>You can add custom labels via <b>Config. Etiquetas</b> in the sidebar.</p>
 
 <h3>Can I analyse a video without a connected camera?</h3>
 <p>Yes — use <b>Select Video</b> on the Home page to load any recorded video file.</p>
@@ -261,23 +319,49 @@ written to <code>outputs/calibration/</code> for convenience.</p>
 <h3>The model is shown as "NOT FOUND" in the sidebar. What do I do?</h3>
 <p>Place the YOLO weights file (<code>.pt</code>) in the path shown in
 <code>scripts/config/config.py</code> under <code>yolo_model</code>.
-Detection will not work until the model file is present.</p>
+Detection will not work until the model file is present. You can also click on the
+model status label in the sidebar to browse and select a different <code>.pt</code> file
+from the <code>models/</code> folder.</p>
 
 <h3>Can I stop detection mid-way and still get results?</h3>
 <p>Yes. Press <b>Cancel</b>, confirm the prompt, and the app will save whatever has
 been processed so far — trajectory image, heatmap, annotated video and stats spreadsheet
 will all reflect the partial run.</p>
 
+<h3>How do I create a training dataset?</h3>
+<p>Use the <b>Pre-Labeling</b> module: select a video, calibrate the arena, choose an
+output folder, then label each frame with behaviour keys (1–7 by default).
+When done, click <b>Finish and Generate Dataset</b>. Repeat for more videos —
+frames accumulate in the same dataset folder.</p>
+
+<h3>How do I train the model on my dataset?</h3>
+<p>Go to <b>Train</b>, point it at the dataset folder (where <code>data.yaml</code> lives),
+give the model a name, and click <b>Train</b>. The best checkpoint is saved to
+<code>models/</code> automatically.</p>
+
+<h3>How do I add a new behaviour label?</h3>
+<p>Click <b>Config. Etiquetas</b> in the sidebar. Add a row with a unique key character,
+an internal name, display text (ES / EN) and a colour. Save — the new label appears
+the next time you open Pre-Labeling.</p>
+
 <h3>How do I switch the interface language?</h3>
-<p>Click the <b>ES / EN</b> button at the bottom of the left sidebar to toggle between
-Spanish and English.</p>
+<p>Click the <b>ES / EN</b> button in the sidebar (below <b>Comparar Grupos</b>)
+to toggle between Spanish and English.</p>
 """
 
 _HELP_NAV_HTML_ES = _HELP_CSS + """
 <h2>Descripcion general</h2>
-<p>Mouse Tracker analiza el comportamiento del raton en una arena (Barnes maze / Holeboard)
-mediante vision por computador. El flujo de trabajo tiene cuatro pantallas:
-<b>Inicio → Calibracion → Deteccion → Resultados</b>.</p>
+<p><b>Rat Tracker Pose</b> analiza el comportamiento de ratas en una arena (Barnes maze / Holeboard)
+mediante vision por computador y deteccion de keypoints YOLO-Pose.
+La barra lateral da acceso a todos los modulos:</p>
+<ul>
+  <li><b>Inicio</b> — inicia una sesion de deteccion (video o camara en directo).</li>
+  <li><b>Pre-Etiquetado</b> — etiqueta manualmente un video para generar un dataset de entrenamiento.</li>
+  <li><b>Entrenar</b> — ajusta el modelo YOLO sobre tu dataset etiquetado.</li>
+  <li><b>Resultados</b> — visualiza trayectorias, mapas de calor y archivos generados.</li>
+  <li><b>Comparar Grupos</b> — comparacion estadistica entre dos grupos experimentales.</li>
+  <li><b>Config. Etiquetas</b> — añade, elimina o modifica etiquetas y teclas de comportamiento.</li>
+</ul>
 
 <h2>Inicio</h2>
 <div class="step">
@@ -289,21 +373,22 @@ mediante vision por computador. El flujo de trabajo tiene cuatro pantallas:
 <h2>Calibracion</h2>
 <p>Haz clic sobre la imagen de la arena para definir su geometria:</p>
 <ul>
-  <li><b style="color:#cc0000">Paso 1</b> — 2 clics en esquinas opuestas del <b>borde exterior</b> (rectangulo rojo).</li>
-  <li><b style="color:#0000cc">Paso 2</b> — 2 clics en esquinas opuestas del <b>suelo interior</b> (rectangulo azul).</li>
+  <li><b style="color:#cc0000">Paso 1</b> — 2 clics en esquinas opuestas del <b>borde exterior</b> (rojo).</li>
+  <li><b style="color:#0000cc">Paso 2</b> — 2 clics en esquinas opuestas del <b>suelo interior</b> (azul).</li>
   <li><b style="color:#007700">Paso 3</b> — 4 clics en el <b>centro de cada agujero</b> (circulos verdes).</li>
-  <li><b style="color:#cc9900">Paso 4</b> — (OPCIONAL) 2 clics para el <b>borde central</b> (rectangulo amarillo).</li>
+  <li><b style="color:#cc9900">Paso 4</b> — (OPCIONAL) 2 clics para el <b>borde central</b> (amarillo).</li>
 </ul>
 <p>Introduce las dimensiones reales de la caja (cm) y elige una <b>Carpeta de Salida</b>
 antes de pulsar <b>Siguiente →</b>.</p>
 <div class="tip">Consejo: reutiliza una calibracion anterior con
-<b>Importar Coordenadas → Examinar…</b> y seleccionando un <code>coords_*.json</code>.</div>
-<div class="tip">Consejo: <b>Limpiar</b> restablece todos los puntos para empezar de nuevo.</div>
+<b>Importar Coordenadas → Examinar…</b> y seleccionando un archivo <code>coords_*.json</code>.</div>
+<div class="tip">Consejo: <b>Limpiar</b> restablece todos los puntos para empezar de nuevo.
+Arrastra las esquinas de los circulos de agujero para cambiar su radio.</div>
 
 <h2>Deteccion</h2>
-<p>El modelo procesa cada frame y muestra:</p>
+<p>El modelo procesa cada frame con YOLO-Pose + ByteTrack y muestra:</p>
 <ul>
-  <li>Imagen en vivo con la etiqueta de comportamiento superpuesta.</li>
+  <li>Imagen en vivo con la etiqueta de comportamiento y los keypoints superpuestos.</li>
   <li>Contador de frames, FPS y tiempo de video transcurrido.</li>
   <li>Totales acumulados (s) por comportamiento: Inactivo, Caminando, Olfateando,
       Escalando, Erguido, Asomando, Aseo.</li>
@@ -315,19 +400,66 @@ Usa <b>← Volver</b> (visible tras cancelar) para corregir la calibracion y vol
 <p>Se muestran automaticamente al terminar la deteccion, o navega aqui desde la barra lateral
 para cargar una ejecucion anterior.</p>
 <ul>
-  <li>Pestana <b>Recorrido</b> — trayectoria coloreada del raton sobre la arena.</li>
+  <li>Pestana <b>Recorrido</b> — trayectoria coloreada de la rata sobre la arena.</li>
   <li>Pestana <b>Mapa de Calor</b> — densidad de presencia en cada zona.</li>
   <li>Panel <b>Archivos Generados</b> — abre el Excel (.xlsx), el video anotado,
-      el video de recorrido limpio, o la carpeta de salida.</li>
+      el video de recorrido limpio o la carpeta de salida.</li>
+  <li>Panel <b>Resumen</b> — duracion, frames totales, modelo y distancia recorrida (px / cm).</li>
 </ul>
 <div class="tip">Consejo: haz clic en <b>Seleccionar Carpeta</b> (arriba a la derecha)
 para cargar resultados de cualquier ejecucion anterior.</div>
+
+<h2>Pre-Etiquetado</h2>
+<p>Etiqueta manualmente un video grabado para producir un dataset de entrenamiento YOLO-Pose.</p>
+<div class="step">
+  <b>Paso 1</b> — Selecciona el video, calibra la arena (o importa coordenadas existentes),
+  elige una carpeta de dataset y pulsa <b>Siguiente →</b>.<br>
+  <b>Paso 2</b> — El modelo pre-procesa todos los frames (inferencia para extraer cajas y keypoints).
+  El progreso se muestra en pantalla; pulsa <b>Cancelar</b> para abortar.<br>
+  <b>Paso 3</b> — Usa los controles de reproduccion para navegar el video.
+  Pulsa las teclas numericas (o haz clic en los botones de colores) para asignar una etiqueta
+  al frame actual mientras se reproduce. Pulsa <b>O</b> para marcar el hocico como oculto.
+  Haz clic en <b>Finalizar y Generar Dataset</b> para exportar.
+</div>
+<p>El dataset se guarda con la estructura
+<code>train/images</code>, <code>train/labels</code>, <code>valid/images</code>, etc.
+(reparto 70 / 20 / 10). Se escribe tambien un archivo <code>data.yaml</code>.</p>
+<div class="tip">Consejo: al finalizar un video se vuelve al Paso 1 automaticamente.
+Puedes etiquetar otro video en la misma carpeta y los frames se acumulan.</div>
+
+<h2>Entrenar</h2>
+<p>Ajusta el modelo YOLO-Pose sobre tu dataset etiquetado.</p>
+<ul>
+  <li>Selecciona la <b>carpeta del dataset</b> (la que contiene <code>data.yaml</code>).</li>
+  <li>Selecciona o confirma la ruta del archivo <b>data.yaml</b>.</li>
+  <li>Introduce un <b>nombre de modelo</b> — el archivo <code>.pt</code> resultante se guarda en <code>models/</code>.</li>
+  <li>Haz clic en <b>Entrenar</b>. La salida del entrenamiento se muestra en la consola.</li>
+</ul>
+<div class="tip">Consejo: los hiperparametros de entrenamiento (epochs, batch size, device)
+se configuran en <code>scripts/config/config.py</code> bajo <code>train_cfg</code>.</div>
+
+<h2>Comparar Grupos</h2>
+<p>Carga dos conjuntos de archivos <code>stats_*.xlsx</code> (uno por grupo) y compara
+sus distribuciones de comportamiento con graficas de barras y pruebas estadisticas.</p>
+
+<h2>Configurar Etiquetas</h2>
+<p>Haz clic en <b>Config. Etiquetas</b> en la barra lateral para abrir el editor. Puedes:</p>
+<ul>
+  <li>Añadir una nueva etiqueta (tecla, nombre interno, texto ES / EN, color).</li>
+  <li>Eliminar una etiqueta existente.</li>
+  <li>Cambiar el atajo de teclado (un solo caracter alfanumerico).</li>
+  <li>Cambiar el color haciendo clic en la celda de color.</li>
+</ul>
+<p>Los cambios se guardan en <code>scripts/config/labels.json</code> y se aplican la proxima
+vez que abres la pestana Pre-Etiquetado.</p>
 
 <h2>Atajos de teclado</h2>
 <ul>
   <li><kbd>Ctrl+N</kbd> — Nueva Deteccion (desde cualquier pantalla)</li>
   <li><kbd>Ctrl+Q</kbd> — Salir de la aplicacion</li>
   <li><kbd>F1</kbd> — Abrir esta guia</li>
+  <li><kbd>1</kbd>–<kbd>7</kbd> (Pre-Etiquetado) — asignar etiqueta de comportamiento al frame actual</li>
+  <li><kbd>O</kbd> (Pre-Etiquetado) — alternar marcador de hocico oculto</li>
 </ul>
 """
 
@@ -348,7 +480,7 @@ importarlo en la siguiente sesion con <b>Importar Coordenadas → Examinar…</b
 
 <h3>¿Que comportamientos detecta el modelo?</h3>
 <ul>
-  <li><b>Inactivo</b> — el raton esta quieto.</li>
+  <li><b>Inactivo</b> — la rata esta quieta.</li>
   <li><b>Caminando</b> — se desplaza por el suelo de la arena.</li>
   <li><b>Olfateando</b> — exploracion con el hocico hacia abajo.</li>
   <li><b>Escalando</b> — se mueve por la pared de la arena (thigmotaxis).</li>
@@ -356,6 +488,7 @@ importarlo en la siguiente sesion con <b>Importar Coordenadas → Examinar…</b
   <li><b>Asomando</b> — introduce la cabeza en un agujero (head-dip).</li>
   <li><b>Aseo</b> — postura de acicalamiento (grooming).</li>
 </ul>
+<p>Puedes añadir etiquetas personalizadas desde <b>Config. Etiquetas</b> en la barra lateral.</p>
 
 <h3>¿Puedo analizar un video sin camara conectada?</h3>
 <p>Si — usa <b>Seleccionar Video</b> en la pantalla de Inicio para cargar cualquier video grabado.</p>
@@ -363,14 +496,32 @@ importarlo en la siguiente sesion con <b>Importar Coordenadas → Examinar…</b
 <h3>El modelo aparece como "NOT FOUND" en la barra lateral. ¿Que hago?</h3>
 <p>Coloca el archivo de pesos YOLO (<code>.pt</code>) en la ruta indicada en
 <code>scripts/config/config.py</code> bajo <code>yolo_model</code>.
-La deteccion no funcionara hasta que el archivo este presente.</p>
+La deteccion no funcionara hasta que el archivo este presente. Tambien puedes hacer clic
+en el texto del modelo en la barra lateral para seleccionar un archivo <code>.pt</code>
+diferente de la carpeta <code>models/</code>.</p>
 
 <h3>¿Puedo detener la deteccion a mitad y obtener igualmente los resultados?</h3>
 <p>Si. Pulsa <b>Cancelar</b>, confirma el dialogo, y la app guardara todo lo procesado:
 trayectoria, mapa de calor, video anotado y Excel reflejaran la ejecucion parcial.</p>
 
+<h3>¿Como creo un dataset de entrenamiento?</h3>
+<p>Usa el modulo <b>Pre-Etiquetado</b>: selecciona un video, calibra la arena, elige una
+carpeta de salida y etiqueta cada frame con las teclas de comportamiento (1–7 por defecto).
+Al terminar, pulsa <b>Finalizar y Generar Dataset</b>. Repite con mas videos —
+los frames se acumulan en la misma carpeta de dataset.</p>
+
+<h3>¿Como entreno el modelo con mi dataset?</h3>
+<p>Ve a <b>Entrenar</b>, indica la carpeta del dataset (donde esta <code>data.yaml</code>),
+pon un nombre al modelo y pulsa <b>Entrenar</b>. El mejor checkpoint se guarda en
+<code>models/</code> automaticamente.</p>
+
+<h3>¿Como añado una nueva etiqueta de comportamiento?</h3>
+<p>Haz clic en <b>Config. Etiquetas</b> en la barra lateral. Añade una fila con tecla,
+nombre interno, texto de visualizacion (ES / EN) y color. Guarda — la nueva etiqueta
+aparecera la proxima vez que abras Pre-Etiquetado.</p>
+
 <h3>¿Como cambio el idioma de la interfaz?</h3>
-<p>Haz clic en el boton <b>ES / EN</b> en la parte inferior de la barra lateral izquierda.</p>
+<p>Haz clic en el boton <b>ES / EN</b> en la barra lateral izquierda (debajo de Comparar Grupos).</p>
 """
 
 
@@ -452,6 +603,7 @@ class MainWindow(QMainWindow):
         self.nav_train.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(5))
         self.nav_results.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(3))
         self._nav_compare.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(6))
+        self._btn_label_settings.clicked.connect(self._on_label_settings)
 
         # Home
         self.btn_video.clicked.connect(self._on_select_video)
@@ -560,12 +712,12 @@ class MainWindow(QMainWindow):
         dlg = QDialog(self)
         dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         if self._lang == "es":
-            dlg.setWindowTitle("Guia de uso — Mouse Tracker")
+            dlg.setWindowTitle("Guia de uso — Rat Tracker Pose")
             nav_html = _HELP_NAV_HTML_ES
             faq_html = _HELP_FAQ_HTML_ES
             nav_tab  = "Navegacion"
         else:
-            dlg.setWindowTitle("User Guide — Mouse Tracker")
+            dlg.setWindowTitle("User Guide — Rat Tracker Pose")
             nav_html = _HELP_NAV_HTML
             faq_html = _HELP_FAQ_HTML
             nav_tab  = "Navigation"
@@ -594,11 +746,18 @@ class MainWindow(QMainWindow):
     def _show_about_dialog(self) -> None:
         QMessageBox.about(
             self,
-            "About Mouse Tracker",
-            "<b>Mouse Tracker v2.0</b><br><br>"
-            "Automated mouse behaviour analysis using computer vision.<br><br>"
+            "About Rat Tracker Pose",
+            "<b>Rat Tracker Pose v2.0</b><br><br>"
+            "Automated rat behaviour analysis using computer vision and YOLO-Pose.<br><br>"
             "<small style='color:#7f8c8d;'>Universidad Rey Juan Carlos, 2026</small>",
         )
+
+    def _on_label_settings(self) -> None:
+        from gui.controllers.prelabel_page import LabelSettingsDialog
+        dlg = LabelSettingsDialog(self, lang=self._lang)
+        if dlg.exec_() == QDialog.Accepted:
+            if hasattr(self, "_prelabel_page"):
+                self._prelabel_page.rebuild_label_ui()
 
     # ------------------------------------------------------------------
     # Pagina inicio
@@ -1477,6 +1636,23 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_prelabel_page"):
             self._prelabel_page.apply_language(self._lang)
 
+        if hasattr(self, "_train_page"):
+            self._train_page.apply_language(self._lang)
+
+        if hasattr(self, "_compare_page"):
+            self._compare_page.apply_language(self._lang)
+
+        if hasattr(self, "_btn_label_settings"):
+            try:
+                import json as _j
+                with open(PROJECT_ROOT / "scripts" / "config" / "translations.json",
+                          "r", encoding="utf-8") as _f:
+                    _sb = _j.load(_f).get("sidebar", {})
+                txt = _sb.get("label_settings", {}).get(self._lang, "  Config. Etiquetas")
+                self._btn_label_settings.setText(txt)
+            except Exception:
+                pass
+
         if hasattr(self, "_grp_calib_hole_size"):
             self._grp_calib_hole_size.setTitle(
                 "Radio agujeros" if self._lang == "es" else "Hole radius"
@@ -1530,7 +1706,6 @@ class MainWindow(QMainWindow):
 
     def _update_traj_legend(self) -> None:
         """Leyenda de colores de trayectoria debajo del resumen en la pagina de resultados."""
-        # Colores en hex (RGB) para HTML — mismo esquema que stats_generator._TRAJ_COLORS
         items = [
             ("#b4b4b4", "Inmovil"        if self._lang == "es" else "Idle"),
             ("#ffff00", "Caminando"      if self._lang == "es" else "Walking"),
@@ -1540,16 +1715,23 @@ class MainWindow(QMainWindow):
             ("#00ff00", "Erguido"        if self._lang == "es" else "Rearing"),
             ("#b4ffb4", "Acicalamiento"  if self._lang == "es" else "Grooming"),
         ]
-        lines = []
+        hdr = "Trayectoria:" if self._lang == "es" else "Trajectory:"
+        rows_html = ""
         for i in range(0, len(items), 2):
             c1, t1 = items[i]
-            c2, t2 = items[i + 1] if i + 1 < len(items) else (None, None)
-            row = f'<font color="{c1}">■</font> {t1}'
-            if c2:
-                row += f' &nbsp;&nbsp; <font color="{c2}">■</font> {t2}'
-            lines.append(row)
-        hdr = "Trayectoria:" if self._lang == "es" else "Trajectory:"
-        self.lbl_traj_legend.setText(f"<b>{hdr}</b><br>" + "<br>".join(lines))
+            cell1 = f'<td><font color="{c1}"><big>■</big></font>&nbsp;{t1}</td>'
+            if i + 1 < len(items):
+                c2, t2 = items[i + 1]
+                cell2 = f'<td width="14">&nbsp;</td><td><font color="{c2}"><big>■</big></font>&nbsp;{t2}</td>'
+            else:
+                cell2 = '<td></td><td></td>'
+            rows_html += f'<tr>{cell1}{cell2}</tr>'
+        self.lbl_traj_legend.setText(
+            f'<div style="font-size:14px;">'
+            f'<b>{hdr}</b><br>'
+            f'<table cellpadding="3" cellspacing="0">{rows_html}</table>'
+            f'</div>'
+        )
 
     def _update_behavior_legend(self) -> None:
         """Construye la leyenda de colores de comportamiento en el idioma activo."""
@@ -1563,6 +1745,7 @@ class MainWindow(QMainWindow):
                 ("#ffa500", "Asomando"),
                 ("#b4ffb4", "Aseo"),
             ]
+            header = "Comportamiento:"
         else:
             items = [
                 ("#b4b4b4", "Idle"),
@@ -1573,9 +1756,22 @@ class MainWindow(QMainWindow):
                 ("#ffa500", "Head-dip"),
                 ("#b4ffb4", "Grooming"),
             ]
-        lines = [f'<font color="{c}">■</font> {t}' for c, t in items]
+            header = "Behaviour:"
+        rows_html = ""
+        for i in range(0, len(items), 2):
+            c1, t1 = items[i]
+            cell1 = f'<td><font color="{c1}"><big>■</big></font>&nbsp;{t1}</td>'
+            if i + 1 < len(items):
+                c2, t2 = items[i + 1]
+                cell2 = f'<td width="14">&nbsp;</td><td><font color="{c2}"><big>■</big></font>&nbsp;{t2}</td>'
+            else:
+                cell2 = '<td></td><td></td>'
+            rows_html += f'<tr>{cell1}{cell2}</tr>'
         self.lbl_behavior_legend.setText(
-            '<span style="font-size:13px">' + "<br>".join(lines) + "</span>"
+            f'<div style="font-size:14px;">'
+            f'<b>{header}</b><br>'
+            f'<table cellpadding="3" cellspacing="0">{rows_html}</table>'
+            f'</div>'
         )
 
     # ------------------------------------------------------------------
@@ -1599,14 +1795,44 @@ class MainWindow(QMainWindow):
         self.stackedWidget.insertWidget(4, self._prelabel_page)
 
     def _setup_nav_compare(self) -> None:
-        """Añade el boton 'Comparar Grupos' al sidebar y la pagina correspondiente."""
+        """Añade Comparar Grupos + Config. Etiquetas al sidebar y reordena idioma."""
         from PyQt5.QtWidgets import QPushButton as _QPB
+        from PyQt5.QtCore import QSize as _QSize
+
+        sbl = self.sidebar.layout()
+
+        # Locate nav_results (index 6 in the original .ui layout) and insert
+        # _nav_compare right after it so nav buttons stay together at the top.
+        # .ui order: 0=title, 1=model, 2=line, 3=home, 4=prelabeling, 5=train, 6=results,
+        #             7=spacer, 8=btn_lang, 9=version
         self._nav_compare = _QPB("  Comparar Grupos", self.sidebar)
         self._nav_compare.setFlat(True)
         self._nav_compare.setObjectName("nav_compare")
-        # Insertar antes del ultimo elemento del layout (spacer vertical)
-        sbl = self.sidebar.layout()
-        sbl.insertWidget(sbl.count() - 1, self._nav_compare)
+        sbl.insertWidget(7, self._nav_compare)
+        # Layout is now: 0-6 original, 7=compare, 8=spacer, 9=btn_lang, 10=version
+
+        # Move btn_lang: remove from its current slot and re-insert before lbl_version
+        sbl.removeWidget(self.btn_lang)
+        # Layout is now: 0-7 + spacer + lbl_version (count=10)
+        # Insert btn_lang at count-1 = before lbl_version
+        sbl.insertWidget(sbl.count() - 1, self.btn_lang)
+        # Layout: 0-8=spacer, 9=btn_lang, 10=version
+
+        # Add label settings button between btn_lang and lbl_version
+        self._btn_label_settings = _QPB("  Config. Etiquetas", self.sidebar)
+        self._btn_label_settings.setFlat(True)
+        self._btn_label_settings.setObjectName("btn_label_settings")
+        self._btn_label_settings.setIcon(
+            self.style().standardIcon(QStyle.SP_FileDialogDetailedView)
+        )
+        self._btn_label_settings.setIconSize(_QSize(16, 16))
+        self._btn_label_settings.setStyleSheet(
+            "QPushButton { background-color: #1a5276; color: #aed6f1; "
+            "text-align: left; padding: 10px 20px; font-size: 13px; border: none; }"
+            "QPushButton:hover { background-color: #21618c; color: white; }"
+        )
+        sbl.insertWidget(sbl.count() - 1, self._btn_label_settings)
+        # Final order: nav buttons → compare → spacer → btn_lang → label_settings → version
 
     def _setup_compare_page(self) -> None:
         from gui.controllers.group_stats_page import GroupStatsPage
@@ -1632,29 +1858,37 @@ class MainWindow(QMainWindow):
 
     def _on_model_status_click(self, event) -> None:
         """Permite al usuario cambiar el modelo .pt activo desde la barra lateral."""
+        _M = {
+            "no_folder_t": {"es": "Sin modelos",               "en": "No models"},
+            "no_folder":   {"es": "La carpeta de modelos no existe todavia.",
+                            "en": "The models folder does not exist yet."},
+            "none":        {"es": "No hay archivos .pt en la carpeta de modelos.",
+                            "en": "No .pt files found in the models folder."},
+            "one_t":       {"es": "Solo un modelo disponible", "en": "Only one model available"},
+            "one":         {"es": "Solo hay un modelo disponible:\n{n}",
+                            "en": "Only one model available:\n{n}"},
+            "dlg":         {"es": "Seleccionar modelo YOLO (.pt)", "en": "Select YOLO model (.pt)"},
+            "flt":         {"es": "Modelos YOLO (*.pt);;Todos los archivos (*.*)",
+                            "en": "YOLO models (*.pt);;All files (*.*)"},
+        }
+        L = self._lang
         models_dir = paths.models_dir
         if not models_dir.exists():
-            QMessageBox.information(self, "Sin modelos", "La carpeta de modelos no existe todavia.")
+            QMessageBox.information(self, _M["no_folder_t"][L], _M["no_folder"][L])
             return
 
         available = list(models_dir.glob("*.pt"))
         if not available:
-            QMessageBox.information(self, "Sin modelos", "No hay archivos .pt en la carpeta de modelos.")
+            QMessageBox.information(self, _M["no_folder_t"][L], _M["none"][L])
             return
 
         if len(available) == 1:
-            QMessageBox.information(
-                self,
-                "Solo un modelo disponible",
-                f"Solo hay un modelo disponible:\n{available[0].name}",
-            )
+            QMessageBox.information(self, _M["one_t"][L],
+                                    _M["one"][L].format(n=available[0].name))
             return
 
         selected, _ = QFileDialog.getOpenFileName(
-            self,
-            "Seleccionar modelo YOLO (.pt)",
-            str(models_dir),
-            "Modelos YOLO (*.pt);;Todos los archivos (*.*)",
+            self, _M["dlg"][L], str(models_dir), _M["flt"][L],
         )
         if selected:
             paths.yolo_model = Path(selected)
