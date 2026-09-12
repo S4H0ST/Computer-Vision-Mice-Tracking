@@ -16,6 +16,7 @@ Flujo de calibracion (8 clics, equivalente a ImageCalibrator):
 
 import os
 import sys
+import math
 import json
 import cv2
 import numpy as np
@@ -36,14 +37,22 @@ from config.config import paths
 from gui.controllers.detect_worker import DetectionWorker
 
 
-UI_PATH = Path(__file__).parent.parent / "main_window.ui"
+if getattr(sys, "frozen", False):
+    UI_PATH = Path(sys._MEIPASS) / "gui" / "main_window.ui"
+else:
+    UI_PATH = Path(__file__).parent.parent / "main_window.ui"
 
 HOLE_RADIUS: int = 15
+_MW_HANDLE_HIT_PX = 18
+_MW_HANDLE_SIZE   = 5
 
 # (widget_name, method, text_es, text_en)
 _TRANSLATIONS: list[tuple] = [
     ("nav_home",              "setText",  "  Inicio",                         "  Home"),
+    ("nav_prelabeling",       "setText",  "  Pre-Etiquetado",                 "  Pre-Labeling"),
+    ("nav_train",             "setText",  "  Entrenar",                       "  Train"),
     ("nav_results",           "setText",  "  Resultados",                     "  Results"),
+    ("_nav_compare",          "setText",  "  Comparar Grupos",                "  Compare Groups"),
     ("btn_back_calib",        "setText",  "← Volver",                         "← Back"),
     ("btn_back_detection",    "setText",  "← Volver",                         "← Back"),
     ("lbl_welcome",           "setText",  "Sistema de Seguimiento de Ratones","Mouse Behaviour Tracking System"),
@@ -110,6 +119,8 @@ _TRANSLATIONS: list[tuple] = [
     ("btn_open_video2",       "setText",  "Abrir",                            "Open"),
     ("btn_open_folder",       "setText",  "Abrir",                            "Open"),
     ("btn_new_detection",     "setText",  "Nueva Deteccion",                  "New Detection"),
+    ("s_lbl_res_dist_px",    "setText",  "Distancia (px):",                  "Distance (px):"),
+    ("s_lbl_res_dist_cm",    "setText",  "Distancia (cm):",                  "Distance (cm):"),
     ("tab_images",            None,       None,                               None),
     # Avisos de validacion (el texto lo gestiona _update_confirm_state directamente)
     ("lbl_warn_output",       None,       None,                               None),
@@ -133,15 +144,17 @@ _TAB_LABELS = {
 
 _CALIB_INSTRUCTIONS = {
     "es": [
-        "Paso 1/3 — Clic en BORDE EXTERIOR: 2 esquinas opuestas de la pared exterior ({n}/2)",
-        "Paso 2/3 — Clic en BORDE INTERIOR: 2 esquinas opuestas del suelo interior ({n}/2)",
-        "Paso 3/3 — Clic en los 4 AGUJEROS (centra el clic en cada uno) ({n}/4)",
+        "Paso 1/4 — Clic en BORDE EXTERIOR: 2 esquinas opuestas de la pared exterior ({n}/2)",
+        "Paso 2/4 — Clic en BORDE INTERIOR: 2 esquinas opuestas del suelo interior ({n}/2)",
+        "Paso 3/4 — Clic en los 4 AGUJEROS (centra el clic en cada uno) ({n}/4)",
+        "Paso 4/4 — BORDE CENTRAL (OPCIONAL): 2 esquinas opuestas ({n}/2)  |  Confirmar para omitir",
         "Calibracion completa — pulsa Confirmar para guardar",
     ],
     "en": [
-        "Step 1/3 — Click EXTERIOR border: 2 opposite corners of the outer wall ({n}/2)",
-        "Step 2/3 — Click INTERIOR border: 2 opposite corners of the inner floor ({n}/2)",
-        "Step 3/3 — Click 4 HOLE centers (click the center of each hole) ({n}/4)",
+        "Step 1/4 — Click EXTERIOR border: 2 opposite corners of the outer wall ({n}/2)",
+        "Step 2/4 — Click INTERIOR border: 2 opposite corners of the inner floor ({n}/2)",
+        "Step 3/4 — Click 4 HOLE centers (click the center of each hole) ({n}/4)",
+        "Step 4/4 — CENTRAL BORDER (OPTIONAL): 2 opposite corners ({n}/2)  |  Confirm to skip",
         "Calibration complete — press Confirm to save",
     ],
 }
@@ -260,6 +273,106 @@ will all reflect the partial run.</p>
 Spanish and English.</p>
 """
 
+_HELP_NAV_HTML_ES = _HELP_CSS + """
+<h2>Descripcion general</h2>
+<p>Mouse Tracker analiza el comportamiento del raton en una arena (Barnes maze / Holeboard)
+mediante vision por computador. El flujo de trabajo tiene cuatro pantallas:
+<b>Inicio → Calibracion → Deteccion → Resultados</b>.</p>
+
+<h2>Inicio</h2>
+<div class="step">
+  <b>Seleccionar Video</b> — carga un fichero de video (.mp4, .avi, .mov, .mkv).<br>
+  <b>Iniciar Camara</b> — abre la camara por defecto para analisis en tiempo real.
+</div>
+<p>Cualquiera de los dos botones avanza automaticamente a la pantalla de <b>Calibracion</b>.</p>
+
+<h2>Calibracion</h2>
+<p>Haz clic sobre la imagen de la arena para definir su geometria:</p>
+<ul>
+  <li><b style="color:#cc0000">Paso 1</b> — 2 clics en esquinas opuestas del <b>borde exterior</b> (rectangulo rojo).</li>
+  <li><b style="color:#0000cc">Paso 2</b> — 2 clics en esquinas opuestas del <b>suelo interior</b> (rectangulo azul).</li>
+  <li><b style="color:#007700">Paso 3</b> — 4 clics en el <b>centro de cada agujero</b> (circulos verdes).</li>
+  <li><b style="color:#cc9900">Paso 4</b> — (OPCIONAL) 2 clics para el <b>borde central</b> (rectangulo amarillo).</li>
+</ul>
+<p>Introduce las dimensiones reales de la caja (cm) y elige una <b>Carpeta de Salida</b>
+antes de pulsar <b>Siguiente →</b>.</p>
+<div class="tip">Consejo: reutiliza una calibracion anterior con
+<b>Importar Coordenadas → Examinar…</b> y seleccionando un <code>coords_*.json</code>.</div>
+<div class="tip">Consejo: <b>Limpiar</b> restablece todos los puntos para empezar de nuevo.</div>
+
+<h2>Deteccion</h2>
+<p>El modelo procesa cada frame y muestra:</p>
+<ul>
+  <li>Imagen en vivo con la etiqueta de comportamiento superpuesta.</li>
+  <li>Contador de frames, FPS y tiempo de video transcurrido.</li>
+  <li>Totales acumulados (s) por comportamiento: Inactivo, Caminando, Olfateando,
+      Escalando, Erguido, Asomando, Aseo.</li>
+</ul>
+<p>Pulsa <b>Cancelar</b> para detener — los resultados parciales se guardan igualmente.<br>
+Usa <b>← Volver</b> (visible tras cancelar) para corregir la calibracion y volver a ejecutar.</p>
+
+<h2>Resultados</h2>
+<p>Se muestran automaticamente al terminar la deteccion, o navega aqui desde la barra lateral
+para cargar una ejecucion anterior.</p>
+<ul>
+  <li>Pestana <b>Recorrido</b> — trayectoria coloreada del raton sobre la arena.</li>
+  <li>Pestana <b>Mapa de Calor</b> — densidad de presencia en cada zona.</li>
+  <li>Panel <b>Archivos Generados</b> — abre el Excel (.xlsx), el video anotado,
+      el video de recorrido limpio, o la carpeta de salida.</li>
+</ul>
+<div class="tip">Consejo: haz clic en <b>Seleccionar Carpeta</b> (arriba a la derecha)
+para cargar resultados de cualquier ejecucion anterior.</div>
+
+<h2>Atajos de teclado</h2>
+<ul>
+  <li><kbd>Ctrl+N</kbd> — Nueva Deteccion (desde cualquier pantalla)</li>
+  <li><kbd>Ctrl+Q</kbd> — Salir de la aplicacion</li>
+  <li><kbd>F1</kbd> — Abrir esta guia</li>
+</ul>
+"""
+
+_HELP_FAQ_HTML_ES = _HELP_CSS + """
+<h2>Preguntas Frecuentes</h2>
+
+<h3>¿Que formatos de video se admiten?</h3>
+<p>MP4, AVI, MOV y MKV. Cualquier formato que OpenCV pueda decodificar en tu sistema funcionara.</p>
+
+<h3>¿Hay que calibrar en cada sesion?</h3>
+<p>No. Guarda el <code>coords_*.json</code> generado en la carpeta de salida y vuelve a
+importarlo en la siguiente sesion con <b>Importar Coordenadas → Examinar…</b>.</p>
+
+<h3>¿Donde se guardan los archivos de salida?</h3>
+<p>En la carpeta elegida durante la calibracion, dentro de una subcarpeta con marca de tiempo
+(p. ej. <code>mivideo_20250101_120000/</code>). Tambien se copia el JSON en
+<code>outputs/calibration/</code> para mayor comodidad.</p>
+
+<h3>¿Que comportamientos detecta el modelo?</h3>
+<ul>
+  <li><b>Inactivo</b> — el raton esta quieto.</li>
+  <li><b>Caminando</b> — se desplaza por el suelo de la arena.</li>
+  <li><b>Olfateando</b> — exploracion con el hocico hacia abajo.</li>
+  <li><b>Escalando</b> — se mueve por la pared de la arena (thigmotaxis).</li>
+  <li><b>Erguido</b> — se sostiene sobre las patas traseras.</li>
+  <li><b>Asomando</b> — introduce la cabeza en un agujero (head-dip).</li>
+  <li><b>Aseo</b> — postura de acicalamiento (grooming).</li>
+</ul>
+
+<h3>¿Puedo analizar un video sin camara conectada?</h3>
+<p>Si — usa <b>Seleccionar Video</b> en la pantalla de Inicio para cargar cualquier video grabado.</p>
+
+<h3>El modelo aparece como "NOT FOUND" en la barra lateral. ¿Que hago?</h3>
+<p>Coloca el archivo de pesos YOLO (<code>.pt</code>) en la ruta indicada en
+<code>scripts/config/config.py</code> bajo <code>yolo_model</code>.
+La deteccion no funcionara hasta que el archivo este presente.</p>
+
+<h3>¿Puedo detener la deteccion a mitad y obtener igualmente los resultados?</h3>
+<p>Si. Pulsa <b>Cancelar</b>, confirma el dialogo, y la app guardara todo lo procesado:
+trayectoria, mapa de calor, video anotado y Excel reflejaran la ejecucion parcial.</p>
+
+<h3>¿Como cambio el idioma de la interfaz?</h3>
+<p>Haz clic en el boton <b>ES / EN</b> en la parte inferior de la barra lateral izquierda.</p>
+"""
+
 
 class MainWindow(QMainWindow):
 
@@ -267,17 +380,23 @@ class MainWindow(QMainWindow):
         super().__init__()
         uic.loadUi(str(UI_PATH), self)
 
-        self._lang: str = "en"
+        self._lang: str = "es"
 
-        # Calibration state: 3-phase (exterior 2pts, interior 2pts, holes 4pts)
+        # Calibration state: 4-phase (exterior 2pts, interior 2pts, holes 4pts, center 2pts optional)
         self._calib_exterior: list[tuple[int, int]] = []
         self._calib_interior: list[tuple[int, int]] = []
         self._calib_holes:    list[tuple[int, int]] = []
+        self._calib_center:   list[tuple[int, int]] = []
         self._calib_frame: np.ndarray | None = None
         self._calib_scale_x: float = 1.0
         self._calib_scale_y: float = 1.0
         self._calib_offset_x: int = 0
         self._calib_offset_y: int = 0
+        self._calib_edit_zone: int | None = None
+        self._calib_zone_btns: list = []
+        self._calib_hole_radius: int = HOLE_RADIUS
+        self._calib_drag_hole_idx: int = -1
+        self._calib_drag_handle:   int = -1
 
         # Runtime state
         self._video_source = None
@@ -297,13 +416,17 @@ class MainWindow(QMainWindow):
         self._timer.timeout.connect(self._tick_timer)
 
         self._setup_model_status()
+        self._setup_nav_compare()
         self._connect_signals()
         # Evitar bucle de retroalimentacion donde el pixmap aumenta el sizeHint del label
         self.lbl_frame_display.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.lbl_trajectory_img.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.lbl_heatmap_img.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
         self.statusbar.setVisible(False)
-        self._apply_language()  # idioma por defecto: ingles
+        self._setup_train_page()
+        self._setup_prelabel_page()
+        self._setup_compare_page()
+        self._apply_language()  # idioma por defecto: espanol
         self._update_confirm_state()
 
     # ------------------------------------------------------------------
@@ -322,26 +445,23 @@ class MainWindow(QMainWindow):
     # Configuracion inicial
     # ------------------------------------------------------------------
 
-    def _setup_model_status(self) -> None:
-        ok = paths.yolo_model.exists()
-        status = paths.yolo_model.name if ok else "NOT FOUND"
-        color  = "#2ecc71" if ok else "#e74c3c"
-        self.lbl_model_status.setText(f"Model: {status}")
-        self.lbl_model_status.setStyleSheet(
-            f"font-size: 10px; color: {color}; padding: 0px 8px 14px 12px;"
-        )
-
     def _connect_signals(self) -> None:
         # Sidebar navigation
         self.nav_home.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(0))
+        self.nav_prelabeling.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(4))
+        self.nav_train.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(5))
         self.nav_results.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(3))
+        self._nav_compare.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(6))
 
         # Home
         self.btn_video.clicked.connect(self._on_select_video)
         self.btn_camera.clicked.connect(self._on_select_camera)
 
         # Calibration
-        self.lbl_frame_display.mousePressEvent = self._on_calib_click
+        self.lbl_frame_display.mousePressEvent   = self._on_calib_click
+        self.lbl_frame_display.mouseMoveEvent    = self._on_calib_mouse_move
+        self.lbl_frame_display.mouseReleaseEvent = self._on_calib_mouse_release
+        self.lbl_frame_display.setMouseTracking(True)
         self.btn_back_calib.clicked.connect(self._on_back_calib_to_home)
         self.btn_clear_calib.clicked.connect(self._on_clear_calib)
         self.btn_confirm_calib.clicked.connect(self._on_confirm_calib)
@@ -364,6 +484,61 @@ class MainWindow(QMainWindow):
         self.btn_new_detection.clicked.connect(self._on_new_detection)
         self.tab_images.currentChanged.connect(self._on_result_tab_changed)
 
+        # Checkbox temporal: correccion de intercambio snout<->tail
+        from PyQt5.QtWidgets import QCheckBox, QHBoxLayout
+        self._chk_kp_swap = QCheckBox()
+        self._chk_kp_swap.setChecked(True)
+        self._chk_kp_swap.setStyleSheet(
+            "font-size: 11px; color: #555; padding: 0 4px;"
+        )
+        topbar = self.findChild(QHBoxLayout, "detectionTopBar")
+        if topbar is not None:
+            topbar.insertWidget(topbar.count() - 1, self._chk_kp_swap)
+
+        # Botones de re-edicion de zona de calibracion
+        from PyQt5.QtWidgets import QPushButton
+        _ZONE_DEFS_MW = [
+            ("Borde Exterior", "Exterior Border", "#e74c3c"),
+            ("Borde Interior", "Interior Border", "#3498db"),
+            ("Agujeros",       "Holes",           "#27ae60"),
+            ("Borde Central",  "Central Border",  "#d4ac0d"),
+        ]
+        zone_row_mw = QHBoxLayout()
+        zone_row_mw.setSpacing(6)
+        self._calib_zone_btns = []
+        for i, (es_txt, _en_txt, color) in enumerate(_ZONE_DEFS_MW):
+            btn = QPushButton(es_txt)
+            btn.setCheckable(True)
+            btn.setStyleSheet(
+                f"QPushButton {{ border: 1.5px solid {color}; color: {color}; background: transparent; "
+                f"border-radius: 3px; padding: 3px 8px; font-size: 11px; }}"
+                f"QPushButton:checked {{ background-color: {color}; color: white; }}"
+                f"QPushButton:hover:!checked {{ background-color: rgba(0,0,0,0.04); }}"
+            )
+            btn.clicked.connect(lambda checked, z=i: self._on_calib_zone_btn(z, checked))
+            self._calib_zone_btns.append(btn)
+            zone_row_mw.addWidget(btn)
+        zone_row_mw.addStretch()
+        calib_outer = self.findChild(QVBoxLayout, "calibOuterLayout")
+        if calib_outer is not None:
+            calib_outer.insertLayout(calib_outer.count() - 1, zone_row_mw)
+
+        # Spinbox de radio de agujero inyectado en calibControlsLayout
+        from PyQt5.QtWidgets import QGroupBox, QFormLayout, QSpinBox, QLabel
+        self._grp_calib_hole_size = QGroupBox("Radio agujeros")
+        grp_r_layout = QFormLayout(self._grp_calib_hole_size)
+        grp_r_layout.setSpacing(4)
+        self._lbl_calib_hole_radius = QLabel("Radio:")
+        self._spin_calib_hole_radius = QSpinBox()
+        self._spin_calib_hole_radius.setRange(5, 200)
+        self._spin_calib_hole_radius.setValue(self._calib_hole_radius)
+        self._spin_calib_hole_radius.setSuffix(" px")
+        self._spin_calib_hole_radius.valueChanged.connect(self._on_calib_hole_radius_changed)
+        grp_r_layout.addRow(self._lbl_calib_hole_radius, self._spin_calib_hole_radius)
+        ctrl_layout = self.findChild(QVBoxLayout, "calibControlsLayout")
+        if ctrl_layout is not None:
+            ctrl_layout.insertWidget(3, self._grp_calib_hole_size)
+
         # Language
         self.btn_lang.clicked.connect(self._toggle_language)
 
@@ -384,18 +559,27 @@ class MainWindow(QMainWindow):
     def _show_help_dialog(self) -> None:
         dlg = QDialog(self)
         dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
-        dlg.setWindowTitle("User Guide — Mouse Tracker")
+        if self._lang == "es":
+            dlg.setWindowTitle("Guia de uso — Mouse Tracker")
+            nav_html = _HELP_NAV_HTML_ES
+            faq_html = _HELP_FAQ_HTML_ES
+            nav_tab  = "Navegacion"
+        else:
+            dlg.setWindowTitle("User Guide — Mouse Tracker")
+            nav_html = _HELP_NAV_HTML
+            faq_html = _HELP_FAQ_HTML
+            nav_tab  = "Navigation"
         dlg.setMinimumSize(680, 520)
 
         tabs = QTabWidget()
 
         nav = QTextBrowser()
-        nav.setHtml(_HELP_NAV_HTML)
+        nav.setHtml(nav_html)
         nav.setOpenExternalLinks(False)
-        tabs.addTab(nav, self.style().standardIcon(QStyle.SP_DialogHelpButton), "Navigation")
+        tabs.addTab(nav, self.style().standardIcon(QStyle.SP_DialogHelpButton), nav_tab)
 
         faq = QTextBrowser()
-        faq.setHtml(_HELP_FAQ_HTML)
+        faq.setHtml(faq_html)
         faq.setOpenExternalLinks(False)
         tabs.addTab(faq, self.style().standardIcon(QStyle.SP_MessageBoxQuestion), "FAQ")
 
@@ -459,6 +643,12 @@ class MainWindow(QMainWindow):
         self._calib_exterior = []
         self._calib_interior = []
         self._calib_holes = []
+        self._calib_center = []
+        self._calib_edit_zone = None
+        for btn in self._calib_zone_btns:
+            btn.setChecked(False)
+        self._calib_drag_hole_idx = -1
+        self._calib_drag_handle   = -1
         self._update_calib_fields()
         self._update_calib_instruction()
 
@@ -467,7 +657,9 @@ class MainWindow(QMainWindow):
             return 0
         if len(self._calib_interior) < 2:
             return 1
-        return 2
+        if len(self._calib_holes) < 4:
+            return 2
+        return 3
 
     def _calib_done(self) -> bool:
         return (
@@ -475,6 +667,44 @@ class MainWindow(QMainWindow):
             and len(self._calib_interior) == 2
             and len(self._calib_holes) == 4
         )
+
+    def _calib_hole_corner_handles(self, hole_idx: int) -> list[tuple[float, float]]:
+        hx, hy = self._calib_holes[hole_idx]
+        d = self._calib_hole_radius * 0.707
+        return [(hx - d, hy - d), (hx + d, hy - d), (hx - d, hy + d), (hx + d, hy + d)]
+
+    def _find_calib_handle_hit(self, ox: int, oy: int) -> tuple[int, int]:
+        for hi, _ in enumerate(self._calib_holes):
+            for hndl_i, (hx, hy) in enumerate(self._calib_hole_corner_handles(hi)):
+                if math.hypot(ox - hx, oy - hy) < _MW_HANDLE_HIT_PX:
+                    return hi, hndl_i
+        return -1, -1
+
+    def _on_calib_hole_radius_changed(self, value: int) -> None:
+        self._calib_hole_radius = value
+        self._display_calib_frame()
+
+    def _on_calib_mouse_move(self, event) -> None:
+        if self._calib_drag_hole_idx < 0 or self._calib_frame is None:
+            return
+        lx = event.x() - self._calib_offset_x
+        ly = event.y() - self._calib_offset_y
+        if lx < 0 or ly < 0:
+            return
+        orig_x = int(lx * self._calib_scale_x)
+        orig_y = int(ly * self._calib_scale_y)
+        hx, hy = self._calib_holes[self._calib_drag_hole_idx]
+        new_r = max(5, int(math.hypot(orig_x - hx, orig_y - hy)))
+        self._calib_hole_radius = new_r
+        if hasattr(self, "_spin_calib_hole_radius"):
+            self._spin_calib_hole_radius.blockSignals(True)
+            self._spin_calib_hole_radius.setValue(new_r)
+            self._spin_calib_hole_radius.blockSignals(False)
+        self._display_calib_frame()
+
+    def _on_calib_mouse_release(self, event) -> None:
+        self._calib_drag_hole_idx = -1
+        self._calib_drag_handle   = -1
 
     def _load_calib_frame_from_video(self) -> None:
         cap = cv2.VideoCapture(str(self._video_source))
@@ -518,10 +748,28 @@ class MainWindow(QMainWindow):
             xs = [p[0] for p in self._calib_interior]
             ys = [p[1] for p in self._calib_interior]
             cv2.rectangle(frame, (min(xs), min(ys)), (max(xs), max(ys)), (255, 0, 0), 2)
-        # Agujeros (verde)
-        for pt in self._calib_holes:
-            cv2.circle(frame, pt, HOLE_RADIUS, (0, 255, 0), 2)
+        # Agujeros (verde) con handles de esquina redimensionables
+        r = self._calib_hole_radius
+        for hi, pt in enumerate(self._calib_holes):
+            cv2.circle(frame, pt, r, (0, 255, 0), 2)
             cv2.circle(frame, pt, 5, (0, 255, 0), -1)
+            for hx, hy in self._calib_hole_corner_handles(hi):
+                hxi, hyi = int(hx), int(hy)
+                cv2.rectangle(frame,
+                               (hxi - _MW_HANDLE_SIZE, hyi - _MW_HANDLE_SIZE),
+                               (hxi + _MW_HANDLE_SIZE, hyi + _MW_HANDLE_SIZE),
+                               (0, 200, 255), -1)
+                cv2.rectangle(frame,
+                               (hxi - _MW_HANDLE_SIZE, hyi - _MW_HANDLE_SIZE),
+                               (hxi + _MW_HANDLE_SIZE, hyi + _MW_HANDLE_SIZE),
+                               (0, 0, 0), 1)
+        # Centro (amarillo, opcional)
+        for pt in self._calib_center:
+            cv2.circle(frame, pt, 8, (0, 220, 220), -1)
+        if len(self._calib_center) == 2:
+            xs = [p[0] for p in self._calib_center]
+            ys = [p[1] for p in self._calib_center]
+            cv2.rectangle(frame, (min(xs), min(ys)), (max(xs), max(ys)), (0, 220, 220), 2)
 
         # 2. Escalar al tamano del label
         label = self.lbl_frame_display
@@ -554,9 +802,9 @@ class MainWindow(QMainWindow):
         label.setPixmap(canvas)
 
     def _on_calib_click(self, event) -> None:
-        if self._calib_done():
-            return
         if self._calib_frame is None:
+            return
+        if self._calib_edit_zone is None and self._calib_done() and len(self._calib_center) >= 2:
             return
 
         lx = event.x() - self._calib_offset_x
@@ -570,13 +818,32 @@ class MainWindow(QMainWindow):
         orig_x = max(0, min(orig_x, ow - 1))
         orig_y = max(0, min(orig_y, oh - 1))
 
-        phase = self._calib_phase()
-        if phase == 0:
-            self._calib_exterior.append((orig_x, orig_y))
-        elif phase == 1:
-            self._calib_interior.append((orig_x, orig_y))
+        if len(self._calib_holes) > 0:
+            hi, hndl_i = self._find_calib_handle_hit(orig_x, orig_y)
+            if hi >= 0:
+                self._calib_drag_hole_idx = hi
+                self._calib_drag_handle   = hndl_i
+                return
+
+        if self._calib_edit_zone is not None:
+            z = self._calib_edit_zone
+            targets  = [self._calib_exterior, self._calib_interior, self._calib_holes, self._calib_center]
+            capacity = [2, 2, 4, 2]
+            if len(targets[z]) < capacity[z]:
+                targets[z].append((orig_x, orig_y))
+            if len(targets[z]) >= capacity[z]:
+                self._calib_zone_btns[z].setChecked(False)
+                self._calib_edit_zone = None
         else:
-            self._calib_holes.append((orig_x, orig_y))
+            phase = self._calib_phase()
+            if phase == 0:
+                self._calib_exterior.append((orig_x, orig_y))
+            elif phase == 1:
+                self._calib_interior.append((orig_x, orig_y))
+            elif phase == 2:
+                self._calib_holes.append((orig_x, orig_y))
+            elif phase == 3 and len(self._calib_center) < 2:
+                self._calib_center.append((orig_x, orig_y))
 
         self._update_calib_fields()
         self._update_calib_instruction()
@@ -603,8 +870,10 @@ class MainWindow(QMainWindow):
     def _update_calib_instruction(self) -> None:
         msgs = _CALIB_INSTRUCTIONS[self._lang]
         phase = self._calib_phase()
-        if self._calib_done():
-            txt = msgs[3]
+        if len(self._calib_center) == 2:
+            txt = msgs[4]
+        elif self._calib_done():
+            txt = msgs[3].format(n=len(self._calib_center))
         elif phase == 0:
             txt = msgs[0].format(n=len(self._calib_exterior))
         elif phase == 1:
@@ -648,6 +917,21 @@ class MainWindow(QMainWindow):
         self._display_calib_frame()
         self._update_confirm_state()
 
+    def _on_calib_zone_btn(self, zone: int, checked: bool) -> None:
+        if checked:
+            for i, btn in enumerate(self._calib_zone_btns):
+                if i != zone:
+                    btn.setChecked(False)
+            targets = [self._calib_exterior, self._calib_interior, self._calib_holes, self._calib_center]
+            targets[zone].clear()
+            self._calib_edit_zone = zone
+        else:
+            self._calib_edit_zone = None
+        self._update_calib_fields()
+        self._update_calib_instruction()
+        self._display_calib_frame()
+        self._update_confirm_state()
+
     def _on_import_coords(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "Import Coordinates", "", "JSON Files (*.json);;All Files (*.*)"
@@ -661,6 +945,7 @@ class MainWindow(QMainWindow):
             ext = data.get("exterior", [])
             intr = data.get("interior", [])
             holes = data.get("holes", [])
+            center = data.get("center_zone", [])
 
             if len(ext) >= 2:
                 self._calib_exterior = [(int(p[0]), int(p[1])) for p in ext[:2]]
@@ -668,11 +953,21 @@ class MainWindow(QMainWindow):
                 self._calib_interior = [(int(p[0]), int(p[1])) for p in intr[:2]]
             if holes:
                 self._calib_holes = [(int(p[0]), int(p[1])) for p in holes[:4]]
+            if len(center) >= 2:
+                self._calib_center = [(int(p[0]), int(p[1])) for p in center[:2]]
+            else:
+                self._calib_center = []
 
             if "box_width_cm" in data:
                 self.spin_width_cm.setValue(float(data["box_width_cm"]))
             if "box_height_cm" in data:
                 self.spin_height_cm.setValue(float(data["box_height_cm"]))
+            if "hole_radius" in data:
+                self._calib_hole_radius = int(data["hole_radius"])
+                if hasattr(self, "_spin_calib_hole_radius"):
+                    self._spin_calib_hole_radius.blockSignals(True)
+                    self._spin_calib_hole_radius.setValue(self._calib_hole_radius)
+                    self._spin_calib_hole_radius.blockSignals(False)
 
             self._update_calib_fields()
             self._update_calib_instruction()
@@ -706,7 +1001,7 @@ class MainWindow(QMainWindow):
             "exterior":   e,
             "interior":   i,
             "holes":      h,
-            "hole_radius": HOLE_RADIUS,
+            "hole_radius": self._calib_hole_radius,
             "limits_inner": {
                 "x_min": min(i[0][0], i[1][0]), "x_max": max(i[0][0], i[1][0]),
                 "y_min": min(i[0][1], i[1][1]), "y_max": max(i[0][1], i[1][1]),
@@ -718,6 +1013,13 @@ class MainWindow(QMainWindow):
             "box_width_cm":  cm_w,
             "box_height_cm": cm_h,
         }
+        if len(self._calib_center) == 2:
+            c = [[p[0], p[1]] for p in self._calib_center]
+            coords_data["center_zone"] = c
+            coords_data["limits_center"] = {
+                "x_min": min(c[0][0], c[1][0]), "x_max": max(c[0][0], c[1][0]),
+                "y_min": min(c[0][1], c[1][1]), "y_max": max(c[0][1], c[1][1]),
+            }
 
         is_camera = isinstance(self._video_source, int)
         stem = "camara" if is_camera else Path(self._video_source).stem
@@ -771,6 +1073,10 @@ class MainWindow(QMainWindow):
         return f"{s // 60}:{s % 60:02d}"
 
     def _start_detection(self) -> None:
+        if self._worker and self._worker.isRunning():
+            self._worker.request_stop()
+            self._worker.wait(5000)
+
         is_camera = isinstance(self._video_source, int)
         source_name = f"Camera [{self._video_source}]" if is_camera else Path(self._video_source).name
         self.lbl_source.setText(f"Source: {source_name}")
@@ -806,7 +1112,11 @@ class MainWindow(QMainWindow):
         self._elapsed_s = 0
         self._timer.start(1000)
 
-        self._worker = DetectionWorker(self._video_source, self._output_dir, self._coords_json)
+        kp_swap = getattr(self, "_chk_kp_swap", None)
+        self._worker = DetectionWorker(
+            self._video_source, self._output_dir, self._coords_json,
+            kp_swap_fix=kp_swap.isChecked() if kp_swap is not None else False,
+        )
         self._worker.frame_ready.connect(self._on_frame_ready)
         self._worker.log_msg.connect(self._on_log_msg)
         self._worker.finished.connect(self._on_detection_finished)
@@ -906,6 +1216,55 @@ class MainWindow(QMainWindow):
     # Resultados
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _compute_path_distance(csv_path, coords_json_path) -> tuple[float, float | None]:
+        """Devuelve (pixeles_recorridos, cm_recorridos_o_None) a partir del CSV."""
+        import csv as csv_mod
+        if not csv_path or not Path(csv_path).exists():
+            return 0.0, None
+        try:
+            with open(csv_path, newline="", encoding="utf-8") as f:
+                rows = list(csv_mod.DictReader(f))
+        except Exception:
+            return 0.0, None
+
+        pts: list[tuple[float, float]] = []
+        for r in rows:
+            try:
+                tx = float(r.get("tail_x", -1))
+                ty = float(r.get("tail_y", -1))
+            except ValueError:
+                continue
+            if tx > 0 and ty > 0:
+                pts.append((tx, ty))
+
+        if len(pts) < 2:
+            return 0.0, None
+
+        px_dist = float(sum(
+            np.linalg.norm(np.array(pts[i + 1]) - np.array(pts[i]))
+            for i in range(len(pts) - 1)
+        ))
+
+        cm_dist: float | None = None
+        if coords_json_path and Path(coords_json_path).exists():
+            try:
+                with open(coords_json_path) as f:
+                    data = json.load(f)
+                box_w_cm = data.get("box_width_cm")
+                box_h_cm = data.get("box_height_cm")
+                lim = data.get("limits_outer")
+                if box_w_cm and box_h_cm and lim:
+                    px_w = lim["x_max"] - lim["x_min"]
+                    px_h = lim["y_max"] - lim["y_min"]
+                    px_per_cm = ((px_w / box_w_cm) + (px_h / box_h_cm)) / 2
+                    if px_per_cm > 0:
+                        cm_dist = px_dist / px_per_cm
+            except Exception:
+                pass
+
+        return px_dist, cm_dist
+
     def _on_browse_results(self) -> None:
         default = str(paths.detect_dir) if paths.detect_dir.exists() else str(Path.home())
         folder = QFileDialog.getExistingDirectory(self, "Select Results Folder", default)
@@ -961,7 +1320,9 @@ class MainWindow(QMainWindow):
             "trajectory":      first(sd.glob("trajectory_*.png")) or first(run_dir.glob("trajectory_*.png")),
             "heatmap":         first(sd.glob("heatmap_*.png")) or first(run_dir.glob("heatmap_*.png")),
             "video_annotated": first(run_dir.glob("*_anotado.mp4")),
-            "video_clean":     first(run_dir.glob("*_clean.mp4")),
+            "video_clean":     None,
+            "csv":             first(run_dir.glob("*.csv")),
+            "coords_json":     first(run_dir.glob("coords_*.json")),
             "folder":          run_dir,
             "frame_count":     0,
             "duration_s":      0,
@@ -980,6 +1341,23 @@ class MainWindow(QMainWindow):
         from config.config import paths as cfg_paths
         self.lbl_res_model.setText(cfg_paths.yolo_model.name)
 
+        # Distancia recorrida (calculada desde el CSV si esta disponible)
+        csv_p    = paths_dict.get("csv")
+        coords_p = paths_dict.get("coords_json")
+        if not csv_p:
+            folder = paths_dict.get("folder")
+            if folder:
+                csvs = list(Path(folder).glob("*.csv"))
+                csv_p = csvs[0] if csvs else None
+        if not coords_p:
+            folder = paths_dict.get("folder")
+            if folder:
+                cjs = list(Path(folder).glob("coords_*.json"))
+                coords_p = cjs[0] if cjs else None
+        px_dist, cm_dist = self._compute_path_distance(csv_p, coords_p)
+        self.lbl_res_dist_px.setText(f"{int(px_dist):,}" if px_dist > 0 else "—")
+        self.lbl_res_dist_cm.setText(f"{cm_dist:.1f}" if cm_dist is not None else "—")
+
         def short_name(p):
             return Path(p).name if p else "—"
 
@@ -997,6 +1375,7 @@ class MainWindow(QMainWindow):
 
         self._load_result_image(self.lbl_trajectory_img, paths_dict.get("trajectory"))
         self._load_result_image(self.lbl_heatmap_img,    paths_dict.get("heatmap"))
+        self._update_traj_legend()
 
     def _load_result_image(self, label, img_path) -> None:
         na = "No disponible" if self._lang == "es" else "Not available"
@@ -1093,6 +1472,42 @@ class MainWindow(QMainWindow):
         self.edit_output_folder.setPlaceholderText(ph)
 
         self._update_behavior_legend()
+        self._update_traj_legend()
+
+        if hasattr(self, "_prelabel_page"):
+            self._prelabel_page.apply_language(self._lang)
+
+        if hasattr(self, "_grp_calib_hole_size"):
+            self._grp_calib_hole_size.setTitle(
+                "Radio agujeros" if self._lang == "es" else "Hole radius"
+            )
+            self._lbl_calib_hole_radius.setText(
+                "Radio:" if self._lang == "es" else "Radius:"
+            )
+
+        if hasattr(self, "_calib_zone_btns") and self._calib_zone_btns:
+            _ZONE_TEXTS_MW = [
+                ("Borde Exterior", "Exterior Border"),
+                ("Borde Interior", "Interior Border"),
+                ("Agujeros",       "Holes"),
+                ("Borde Central",  "Central Border"),
+            ]
+            for btn, (es, en) in zip(self._calib_zone_btns, _ZONE_TEXTS_MW):
+                btn.setText(es if self._lang == "es" else en)
+
+        if hasattr(self, "_chk_kp_swap"):
+            if self._lang == "es":
+                self._chk_kp_swap.setText("Corregir intercambio KP (temporal)")
+                self._chk_kp_swap.setToolTip(
+                    "Corrige el intercambio snout↔tail durante movimiento rapido.\n"
+                    "Heuristica temporal: activa hasta ampliar el dataset de entrenamiento."
+                )
+            else:
+                self._chk_kp_swap.setText("Fix KP swap (temp.)")
+                self._chk_kp_swap.setToolTip(
+                    "Corrects snout↔tail keypoint swap during fast movement.\n"
+                    "Temporary heuristic until training dataset is expanded."
+                )
 
     def _update_calib_legend(self) -> None:
         """Leyenda de colores de calibracion debajo de la imagen (fuera del frame)."""
@@ -1101,24 +1516,48 @@ class MainWindow(QMainWindow):
                 ("#ff0000", "Borde exterior"),
                 ("#0000ff", "Borde interior"),
                 ("#00ff00", "Agujeros"),
+                ("#00dcdc", "Borde central (opcional)"),
             ]
         else:
             items = [
                 ("#ff0000", "Exterior border"),
                 ("#0000ff", "Interior border"),
                 ("#00ff00", "Holes"),
+                ("#00dcdc", "Central border (optional)"),
             ]
         parts = [f'<font color="{c}">■</font> {t}' for c, t in items]
         self.lbl_calib_legend.setText(" &nbsp;&nbsp; ".join(parts))
 
+    def _update_traj_legend(self) -> None:
+        """Leyenda de colores de trayectoria debajo del resumen en la pagina de resultados."""
+        # Colores en hex (RGB) para HTML — mismo esquema que stats_generator._TRAJ_COLORS
+        items = [
+            ("#b4b4b4", "Inmovil"        if self._lang == "es" else "Idle"),
+            ("#ffff00", "Caminando"      if self._lang == "es" else "Walking"),
+            ("#00c8ff", "Olfateando"     if self._lang == "es" else "Sniffing"),
+            ("#ff00ff", "Escalando"      if self._lang == "es" else "Climbing"),
+            ("#ffa500", "Agujero"        if self._lang == "es" else "Head-dip"),
+            ("#00ff00", "Erguido"        if self._lang == "es" else "Rearing"),
+            ("#b4ffb4", "Acicalamiento"  if self._lang == "es" else "Grooming"),
+        ]
+        lines = []
+        for i in range(0, len(items), 2):
+            c1, t1 = items[i]
+            c2, t2 = items[i + 1] if i + 1 < len(items) else (None, None)
+            row = f'<font color="{c1}">■</font> {t1}'
+            if c2:
+                row += f' &nbsp;&nbsp; <font color="{c2}">■</font> {t2}'
+            lines.append(row)
+        hdr = "Trayectoria:" if self._lang == "es" else "Trajectory:"
+        self.lbl_traj_legend.setText(f"<b>{hdr}</b><br>" + "<br>".join(lines))
+
     def _update_behavior_legend(self) -> None:
         """Construye la leyenda de colores de comportamiento en el idioma activo."""
-        # Colores en formato RGB (despues de conversion BGR->RGB al mostrar en Qt)
         if self._lang == "es":
             items = [
-                ("#b4b4b4", "Inmovil"),
+                ("#b4b4b4", "Inactivo"),
                 ("#ffff00", "Caminando"),
-                ("#ffc800", "Olfateando"),
+                ("#ffc800", "Olisqueando"),
                 ("#ff00ff", "Escalando"),
                 ("#00ff00", "Erguido"),
                 ("#ffa500", "Asomando"),
@@ -1134,15 +1573,92 @@ class MainWindow(QMainWindow):
                 ("#ffa500", "Head-dip"),
                 ("#b4ffb4", "Grooming"),
             ]
-        lines = []
-        for i in range(0, len(items), 2):
-            c1, t1 = items[i]
-            c2, t2 = items[i + 1] if i + 1 < len(items) else (None, None)
-            row = f'<font color="{c1}">■</font> {t1}'
-            if c2:
-                row += f' &nbsp;&nbsp; <font color="{c2}">■</font> {t2}'
-            lines.append(row)
-        self.lbl_behavior_legend.setText("<br>".join(lines))
+        lines = [f'<font color="{c}">■</font> {t}' for c, t in items]
+        self.lbl_behavior_legend.setText(
+            '<span style="font-size:13px">' + "<br>".join(lines) + "</span>"
+        )
+
+    # ------------------------------------------------------------------
+    # Paginas de entrenamiento y pre-etiquetado
+    # ------------------------------------------------------------------
+
+    def _setup_train_page(self) -> None:
+        from gui.controllers.train_page import TrainPage
+        old = self.stackedWidget.widget(5)
+        self.stackedWidget.removeWidget(old)
+        old.deleteLater()
+        self._train_page = TrainPage(parent=self)
+        self.stackedWidget.insertWidget(5, self._train_page)
+
+    def _setup_prelabel_page(self) -> None:
+        from gui.controllers.prelabel_page import PrelabelPage
+        old = self.stackedWidget.widget(4)
+        self.stackedWidget.removeWidget(old)
+        old.deleteLater()
+        self._prelabel_page = PrelabelPage(parent=self)
+        self.stackedWidget.insertWidget(4, self._prelabel_page)
+
+    def _setup_nav_compare(self) -> None:
+        """Añade el boton 'Comparar Grupos' al sidebar y la pagina correspondiente."""
+        from PyQt5.QtWidgets import QPushButton as _QPB
+        self._nav_compare = _QPB("  Comparar Grupos", self.sidebar)
+        self._nav_compare.setFlat(True)
+        self._nav_compare.setObjectName("nav_compare")
+        # Insertar antes del ultimo elemento del layout (spacer vertical)
+        sbl = self.sidebar.layout()
+        sbl.insertWidget(sbl.count() - 1, self._nav_compare)
+
+    def _setup_compare_page(self) -> None:
+        from gui.controllers.group_stats_page import GroupStatsPage
+        self._compare_page = GroupStatsPage(parent=self)
+        self.stackedWidget.addWidget(self._compare_page)   # indice 6
+
+    # ------------------------------------------------------------------
+    # Selector de modelo desde la barra lateral
+    # ------------------------------------------------------------------
+
+    def _setup_model_status(self) -> None:
+        ok = paths.yolo_model.exists()
+        status = paths.yolo_model.name if ok else "NOT FOUND"
+        color  = "#2ecc71" if ok else "#e74c3c"
+        self.lbl_model_status.setText(f"Model: {status}")
+        self.lbl_model_status.setStyleSheet(
+            f"font-size: 10px; color: {color}; padding: 0px 8px 14px 12px;"
+        )
+        # Cursor de mano para indicar que es clicable
+        from PyQt5.QtCore import Qt as _Qt
+        self.lbl_model_status.setCursor(_Qt.PointingHandCursor)
+        self.lbl_model_status.mousePressEvent = self._on_model_status_click
+
+    def _on_model_status_click(self, event) -> None:
+        """Permite al usuario cambiar el modelo .pt activo desde la barra lateral."""
+        models_dir = paths.models_dir
+        if not models_dir.exists():
+            QMessageBox.information(self, "Sin modelos", "La carpeta de modelos no existe todavia.")
+            return
+
+        available = list(models_dir.glob("*.pt"))
+        if not available:
+            QMessageBox.information(self, "Sin modelos", "No hay archivos .pt en la carpeta de modelos.")
+            return
+
+        if len(available) == 1:
+            QMessageBox.information(
+                self,
+                "Solo un modelo disponible",
+                f"Solo hay un modelo disponible:\n{available[0].name}",
+            )
+            return
+
+        selected, _ = QFileDialog.getOpenFileName(
+            self,
+            "Seleccionar modelo YOLO (.pt)",
+            str(models_dir),
+            "Modelos YOLO (*.pt);;Todos los archivos (*.*)",
+        )
+        if selected:
+            paths.yolo_model = Path(selected)
+            self._setup_model_status()
 
     # ------------------------------------------------------------------
     # Cierre de ventana

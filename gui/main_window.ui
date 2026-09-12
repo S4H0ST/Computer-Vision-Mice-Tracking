@@ -264,7 +264,27 @@ QListWidget#list_result_runs::item:selected {
        <item>
         <widget class="QPushButton" name="nav_home">
          <property name="text">
-          <string>  Home</string>
+          <string>  Inicio</string>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="nav_prelabeling">
+         <property name="text">
+          <string>  Pre-Etiquetado</string>
+         </property>
+         <property name="flat">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="nav_train">
+         <property name="text">
+          <string>  Entrenar</string>
          </property>
          <property name="flat">
           <bool>true</bool>
@@ -274,7 +294,7 @@ QListWidget#list_result_runs::item:selected {
        <item>
         <widget class="QPushButton" name="nav_results">
          <property name="text">
-          <string>  Results</string>
+          <string>  Resultados</string>
          </property>
          <property name="flat">
           <bool>true</bool>
@@ -832,7 +852,7 @@ QListWidget#list_result_runs::item:selected {
                   <double>500.000000000000000</double>
                  </property>
                  <property name="value">
-                  <double>40.000000000000000</double>
+                  <double>60.000000000000000</double>
                  </property>
                 </widget>
                </item>
@@ -852,7 +872,7 @@ QListWidget#list_result_runs::item:selected {
                   <double>500.000000000000000</double>
                  </property>
                  <property name="value">
-                  <double>40.000000000000000</double>
+                  <double>60.000000000000000</double>
                  </property>
                 </widget>
                </item>
@@ -1757,7 +1777,48 @@ QListWidget#list_result_runs::item:selected {
                  </property>
                 </widget>
                </item>
+               <item row="3" column="0">
+                <widget class="QLabel" name="s_lbl_res_dist_px">
+                 <property name="text">
+                  <string>Distancia (px):</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="3" column="1">
+                <widget class="QLabel" name="lbl_res_dist_px">
+                 <property name="text">
+                  <string>—</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="0">
+                <widget class="QLabel" name="s_lbl_res_dist_cm">
+                 <property name="text">
+                  <string>Distancia (cm):</string>
+                 </property>
+                </widget>
+               </item>
+               <item row="4" column="1">
+                <widget class="QLabel" name="lbl_res_dist_cm">
+                 <property name="text">
+                  <string>—</string>
+                 </property>
+                </widget>
+               </item>
               </layout>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="lbl_traj_legend">
+              <property name="text">
+               <string></string>
+              </property>
+              <property name="wordWrap">
+               <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+               <string notr="true">font-size: 10px; padding: 4px 0px 0px 2px;</string>
+              </property>
              </widget>
             </item>
             <item>
@@ -1783,6 +1844,44 @@ QListWidget#list_result_runs::item:selected {
            </layout>
           </item>
          </layout>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- ==================== PAGE 4: PRE-ETIQUETADO (placeholder) ==================== -->
+      <widget class="QWidget" name="page_prelabeling">
+       <layout class="QVBoxLayout" name="prelabelingLayout">
+        <item>
+         <widget class="QLabel" name="lbl_prelabeling_placeholder">
+          <property name="text">
+           <string>Pre-Etiquetado — En desarrollo</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font-size: 18px; color: #95a5a6;</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+
+      <!-- ==================== PAGE 5: ENTRENAMIENTO (placeholder) ==================== -->
+      <widget class="QWidget" name="page_train">
+       <layout class="QVBoxLayout" name="trainLayout">
+        <item>
+         <widget class="QLabel" name="lbl_train_placeholder">
+          <property name="text">
+           <string>Entrenamiento — En desarrollo</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+          <property name="styleSheet">
+           <string notr="true">font-size: 18px; color: #95a5a6;</string>
+          </property>
+         </widget>
         </item>
        </layout>
       </widget>
