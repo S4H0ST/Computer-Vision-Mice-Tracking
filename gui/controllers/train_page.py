@@ -7,6 +7,7 @@ Clases:
     TrainPage    — QWidget con formulario + consola para lanzar el entrenamiento.
 """
 
+import platform
 import shutil
 import sys
 from pathlib import Path
@@ -74,15 +75,38 @@ class TrainWorker(QThread):
             f"device={train_cfg.device}"
         )
 
+        # En Windows, DataLoader con workers>0 da problemas de multiprocessing
+        workers = 0 if platform.system() == "Windows" else 8
+
+        # Augmentation geometrico puro (mismos params que YOLOTrainer.run()):
+        #   degrees=180  -> cualquier orientacion valida (camara cenital)
+        #   mosaic=0.0   -> desactivado (fondo negro es parte del dominio)
+        #   hsv_*=0.0    -> sin cambios de color (iluminacion controlada)
+        #   erasing=0.0  -> sin borrado sintetico
         model.train(
             data=str(self._yaml_path),
             epochs=train_cfg.epochs,
             imgsz=train_cfg.imgsz,
             batch=train_cfg.batch_size,
             device=train_cfg.device,
+            workers=workers,
             project=str(runs_dir),
             name="train_exp",
             exist_ok=True,
+            patience=30,
+            dropout=0.2,
+            weight_decay=0.0008,
+            cos_lr=True,
+            degrees=180,
+            translate=0.05,
+            scale=0.4,
+            fliplr=0.5,
+            flipud=0.5,
+            mosaic=0.0,
+            hsv_h=0.0,
+            hsv_s=0.0,
+            hsv_v=0.0,
+            erasing=0.0,
         )
 
         self.log_msg.emit("Entrenamiento finalizado. Buscando best.pt...")
