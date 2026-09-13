@@ -6,6 +6,13 @@ __pycache__/
 # ── Entorno y herramientas IDE ───────────────────────────────────────
 .idea/
 runs/
+venv_build/
+
+# ── Scripts de build local (no forman parte del codigo) ──────────────
+build_cpu.bat
+dist/
+build/
+*.spec
 
 # ── Partes NO empaquetadas (solo desarrollo / entrenamiento) ─────────
 # Dataset de entrenamiento
