@@ -43,7 +43,20 @@ class StatsGenerator:
     CANVAS_SIZE:   int = 700
     CANVAS_MARGIN: int = 50
 
-    def __init__(self, csv_path: Path, coords_json: Path | None = None) -> None:
+    _LABEL_ES: dict[str, str] = {
+        "rat_rearing":       "Erguido (rearing)",
+        "rat_climbing":      "Escalando (climbing)",
+        "rat_grooming":      "Acicalamiento (grooming)",
+        "rat_head_dipping":  "Agujero (head-dipping)",
+        "walking":           "Caminando",
+        "immobile":          "Inmovil",
+        "sniffing":          "Olfateando",
+        "sniffing_walking":  "Olfateando en movimiento",
+        "sniffing_immobile": "Olfateando inmovil",
+    }
+
+    def __init__(self, csv_path: Path, coords_json: Path | None = None,
+                 use_holes_as_center: bool = False) -> None:
         self.csv_path    = Path(csv_path)
         self.coords_json = Path(coords_json) if coords_json else None
 
@@ -55,8 +68,18 @@ class StatsGenerator:
         self.holes:        list[tuple] = []
         self.hole_radius:  int = 20
         self.px_per_cm:    float | None = None
+        self._hole_center_derived: bool = False
 
         self._load()
+
+        if use_holes_as_center and self.limits_center is None and len(self.holes) == 4:
+            xs = [h[0] for h in self.holes]
+            ys = [h[1] for h in self.holes]
+            self.limits_center = {
+                "x_min": min(xs), "x_max": max(xs),
+                "y_min": min(ys), "y_max": max(ys),
+            }
+            self._hole_center_derived = True
 
     # ------------------------------------------------------------------
     # Carga
@@ -379,6 +402,47 @@ class StatsGenerator:
             if lbl == label
         )
 
+    def _count_rearing_by_border(self) -> dict[str, list[int]] | None:
+        """
+        Cuenta frames y bouts de rat_rearing por cada borde de la caja.
+        Devuelve dict {"izquierdo": [frames, bouts], ...} o None si no hay inner_limits.
+        El borde asignado es el del lado del rectangulo interior mas cercano al centroide.
+        """
+        if self.inner_limits is None:
+            return None
+        lim = self.inner_limits
+        borders: dict[str, list[int]] = {
+            "izquierdo": [0, 0],
+            "derecho":   [0, 0],
+            "superior":  [0, 0],
+            "inferior":  [0, 0],
+        }
+        prev_border: str | None = None
+        for r in self.rows:
+            if r.get("final_label") != "rat_rearing":
+                prev_border = None
+                continue
+            try:
+                cx = (float(r["x1"]) + float(r["x2"])) / 2
+                cy = (float(r["y1"]) + float(r["y2"])) / 2
+            except (KeyError, ValueError):
+                prev_border = None
+                continue
+            d_left   = abs(cx - lim["x_min"])
+            d_right  = abs(cx - lim["x_max"])
+            d_top    = abs(cy - lim["y_min"])
+            d_bottom = abs(cy - lim["y_max"])
+            min_d = min(d_left, d_right, d_top, d_bottom)
+            if   min_d == d_left:   border = "izquierdo"
+            elif min_d == d_right:  border = "derecho"
+            elif min_d == d_top:    border = "superior"
+            else:                   border = "inferior"
+            borders[border][0] += 1
+            if border != prev_border:
+                borders[border][1] += 1
+            prev_border = border
+        return borders
+
     def _count_hole_usage(self) -> tuple[dict[int, int], dict[int, int]]:
         """
         Cuenta frames y bouts de head dipping por agujero.
@@ -433,8 +497,8 @@ class StatsGenerator:
         hdr_font = Font(bold=True, color="FFFFFF")
 
         for col, h in enumerate(
-            ["Comportamiento", "Frames", "Duracion (s)", "% Tiempo",
-             "Bouts", "Dur. media por bout (s)"], 1
+            ["Comportamiento", "Fotogramas", "Duracion (s)", "% Tiempo",
+             "Episodios", "Dur. media por episodio (s)"], 1
         ):
             c = ws.cell(row=1, column=col, value=h)
             c.font = hdr_font
@@ -448,8 +512,9 @@ class StatsGenerator:
             pct      = frames / n * 100
             bouts    = bouts_cnt.get(lbl, 0)
             avg_bout = dur / bouts if bouts > 0 else 0.0
+            lbl_es   = self._LABEL_ES.get(lbl, lbl)
             for col, val in enumerate(
-                [lbl, frames, round(dur, 2), round(pct, 1), bouts, round(avg_bout, 2)], 1
+                [lbl_es, frames, round(dur, 2), round(pct, 1), bouts, round(avg_bout, 2)], 1
             ):
                 ws.cell(row=i, column=col, value=val)
 
@@ -461,7 +526,7 @@ class StatsGenerator:
         chart.type  = "col"
         chart.title = "Presupuesto de tiempo conductual"
         chart.y_axis.title = "% Tiempo"
-        chart.x_axis.title = "Comportamiento"
+        chart.x_axis.title = "Conducta"
         chart.style = 10
         chart.width = 20
         chart.height = 13
@@ -473,7 +538,7 @@ class StatsGenerator:
 
         # ---- Hoja 2: Metricas OFT ------------------------------------ #
         ws2 = wb.create_sheet("Metricas OFT")
-        ws2.column_dimensions["A"].width = 46
+        ws2.column_dimensions["A"].width = 52
         ws2.column_dimensions["B"].width = 16
         ws2.column_dimensions["C"].width = 14
 
@@ -611,81 +676,113 @@ class StatsGenerator:
         immobile_pct = round(label_cnt.get("immobile", 0) / n * 100, 1)
         walking_pct  = round(walk_fr / n * 100, 1)
 
+        # Erguido (rearing) por borde
+        rearing_borders = self._count_rearing_by_border()
+        rearing_total_fr = label_cnt.get("rat_rearing", 0)
+        rearing_total_s  = round(rearing_total_fr / self.fps, 2)
+
         # --- Escritura de la hoja OFT ----------------------------------
         r = 1
 
         if self.px_per_cm:
-            dist_val  = round(total_dist  / self.px_per_cm / 100, 2)
-            dist_unit = "m"
-            speed_val = round(avg_speed   / self.px_per_cm, 1)
+            dist_val   = round(total_dist / self.px_per_cm / 100, 2)
+            dist_unit  = "m"
+            speed_val  = round(avg_speed  / self.px_per_cm, 1)
             speed_unit = "cm/s"
         else:
-            dist_val  = round(total_dist, 0)
-            dist_unit = "px"
-            speed_val = avg_speed
+            dist_val   = round(total_dist, 0)
+            dist_unit  = "px"
+            speed_val  = avg_speed
             speed_unit = "px/s"
 
         _s(r, "Duracion y Actividad General"); r += 1
-        _m(r, "Duracion total del video",              round(duration_s, 1), "s");       r += 1
-        _m(r, "Distancia total recorrida (tail)",      dist_val,             dist_unit); r += 1
-        _m(r, "Velocidad media (tail)",                speed_val,            speed_unit); r += 1
-        _m(r, "Walking (deambulacion)",                walking_pct,          "%");    r += 1
-        _m(r, "Transiciones conductuales totales",     transitions,          "");     r += 1
-        _m(r, "Tasa de transicion",                    trans_pm,             "trans/min"); r += 1
+        _m(r, "Duracion total del video",                  round(duration_s, 1), "s");        r += 1
+        _m(r, "Distancia total recorrida (cola)",          dist_val,             dist_unit);  r += 1
+        _m(r, "Velocidad media (cola)",                    speed_val,            speed_unit); r += 1
+        _m(r, "Caminando (deambulacion)",                  walking_pct,          "%");        r += 1
+        _m(r, "Transiciones conductuales totales",         transitions,          "");         r += 1
+        _m(r, "Tasa de transicion",                        trans_pm,             "trans/min"); r += 1
 
         r += 1
-        _s(r, "Head-dipping (Indice Principal de Exploracion)"); r += 1
-        _m(r, "N. de head-dips totales (bouts)",       dipping_b,    "bouts");    r += 1
-        _m(r, "Head-dips por minuto",                  dipping_pm,   "bouts/min"); r += 1
-        _m(r, "Latencia al primer head-dip",           latencia_hd,  "s");        r += 1
-        _m(r, "Duracion total head-dipping",           dipping_dur,  "s");        r += 1
-        _m(r, "Duracion media por head-dip",           dipping_avg,  "s/bout");   r += 1
-        _m(r, "Habituacion — head-dips (1er cuarto)",  hd_q[0],      "bouts");    r += 1
-        _m(r, "Habituacion — head-dips (2o cuarto)",   hd_q[1],      "bouts");    r += 1
-        _m(r, "Habituacion — head-dips (3er cuarto)",  hd_q[2],      "bouts");    r += 1
-        _m(r, "Habituacion — head-dips (4o cuarto)",   hd_q[3],      "bouts");    r += 1
+        _s(r, "Introduccion en Agujeros (Indice Principal de Exploracion)"); r += 1
+        _m(r, "N. de episodios de introduccion (bouts)",   dipping_b,    "episodios");    r += 1
+        _m(r, "Episodios de introduccion por minuto",      dipping_pm,   "episod./min");  r += 1
+        _m(r, "Latencia al primer episodio",               latencia_hd,  "s");            r += 1
+        _m(r, "Duracion total de introduccion",            dipping_dur,  "s");            r += 1
+        _m(r, "Duracion media por episodio",               dipping_avg,  "s/episodio");   r += 1
+        _m(r, "Habituacion — episodios (1er cuarto)",      hd_q[0],      "episodios");    r += 1
+        _m(r, "Habituacion — episodios (2o cuarto)",       hd_q[1],      "episodios");    r += 1
+        _m(r, "Habituacion — episodios (3er cuarto)",      hd_q[2],      "episodios");    r += 1
+        _m(r, "Habituacion — episodios (4o cuarto)",       hd_q[3],      "episodios");    r += 1
 
         # Head-dipping por agujero individual
         if self.holes:
             r += 1
-            _s(r, "Head-dipping por Agujero"); r += 1
+            _s(r, "Introduccion por Agujero"); r += 1
             for i in range(len(self.holes)):
                 fr_h  = hole_frames.get(i, 0)
                 bt_h  = hole_bouts.get(i, 0)
                 dur_h = round(fr_h / self.fps, 2)
-                _m(r, f"  Agujero {i + 1} — bouts",       bt_h,  "bouts"); r += 1
-                _m(r, f"  Agujero {i + 1} — duracion",    dur_h, "s");     r += 1
-                _m(r, f"  Agujero {i + 1} — % tiempo HD", round(fr_h / max(dipping_fr, 1) * 100, 1), "%"); r += 1
+                _m(r, f"  Agujero {i + 1} — episodios",      bt_h,  "episodios"); r += 1
+                _m(r, f"  Agujero {i + 1} — duracion",       dur_h, "s");         r += 1
+                _m(r, f"  Agujero {i + 1} — % del tiempo de introduccion",
+                   round(fr_h / max(dipping_fr, 1) * 100, 1), "%"); r += 1
 
         r += 1
-        _s(r, "Sniffing (Exploracion Olfativa — conducta mayoritaria)"); r += 1
-        _m(r, "Sniffing total",                        sniff_pct,      "%");  r += 1
-        _m(r, "  Sniffing en movimiento",              sniff_walk_pct, "%");  r += 1
-        _m(r, "  Sniffing inmovil",                    sniff_imm_pct,  "%");  r += 1
-        _m(r, "Eficiencia exploratoria (sniff/sniff+walk)", efic_explor, "%"); r += 1
+        _s(r, "Olfateo (Exploracion Olfativa — conducta mayoritaria)"); r += 1
+        _m(r, "Olfateo total",                             sniff_pct,      "%");  r += 1
+        _m(r, "  Olfateo en movimiento",                   sniff_walk_pct, "%");  r += 1
+        _m(r, "  Olfateo inmovil",                         sniff_imm_pct,  "%");  r += 1
+        _m(r, "Eficiencia exploratoria (olfateo/olfateo+caminar)", efic_explor, "%"); r += 1
 
         r += 1
         _s(r, "Distribucion Espacial y Conducta de Pared"); r += 1
-        _m(r, "Thigmotaxis — climbing (conducta de pared)", climbing_pct, "%");    r += 1
-        _m(r, "Climbing (n. bouts)",                    climbing_b,     "bouts");  r += 1
-        _m(r, "Tiempo zona interior (centroide)",        central_pct,    "%");     r += 1
-        _m(r, "Tiempo zona periferica (centroide)",      periph_pct,     "%");     r += 1
+        _m(r, "Thigmotaxis — escalando (conducta de pared)", climbing_pct, "%");   r += 1
+        _m(r, "Escalando (n. episodios)",                  climbing_b,     "episodios"); r += 1
+        _m(r, "Tiempo en zona interior (centroide)",        central_pct,   "%");    r += 1
+        _m(r, "Tiempo en zona periferica (centroide)",      periph_pct,    "%");    r += 1
 
         r += 1
-        _s(r, "Zona Central (cuadrado usuario — deteccion forfox vs control)"); r += 1
-        _m(r, "Tiempo en zona central (cuadrado)",      center_zone_pct, "%"); r += 1
-        _m(r, "Tiempo en zona periferica (fuera cuad.)",periph_zone_pct, "%"); r += 1
+        _s(r, "Erguido en Bordes (Thigmotaxis Dirigida)"); r += 1
+        _m(r, "Erguido — duracion total",                  rearing_total_s, "s"); r += 1
+        if rearing_borders is not None:
+            border_order = [
+                ("izquierdo", "Borde izquierdo"),
+                ("derecho",   "Borde derecho"),
+                ("superior",  "Borde superior"),
+                ("inferior",  "Borde inferior"),
+            ]
+            for key, nombre in border_order:
+                fr_b  = rearing_borders[key][0]
+                bt_b  = rearing_borders[key][1]
+                dur_b = round(fr_b / self.fps, 2)
+                pct_b = round(fr_b / max(rearing_total_fr, 1) * 100, 1)
+                _m(r, f"  {nombre} — episodios",    bt_b,  "episodios"); r += 1
+                _m(r, f"  {nombre} — duracion",     dur_b, "s");         r += 1
+                _m(r, f"  {nombre} — % del tiempo erguido", pct_b, "%"); r += 1
+        else:
+            _m(r, "  (requiere calibracion de zona interior)", na, ""); r += 1
+
+        r += 1
+        center_title = (
+            "Zona Central (area formada por los 4 agujeros — automatica)"
+            if self._hole_center_derived
+            else "Zona Central (cuadrado definido por el usuario)"
+        )
+        _s(r, center_title); r += 1
+        _m(r, "Tiempo en zona central",                    center_zone_pct, "%"); r += 1
+        _m(r, "Tiempo en zona periferica (fuera zona central)", periph_zone_pct, "%"); r += 1
 
         r += 1
         _s(r, "Inactividad y Estado Emocional"); r += 1
-        _m(r, "Inmovilidad total",                     immobile_pct,   "%");  r += 1
-        _m(r, "  Inmovilidad zona interior (freezing)", imm_c_pct,     "%");  r += 1
-        _m(r, "  Inmovilidad zona periferica",          imm_p_pct,     "%");  r += 1
+        _m(r, "Inmovilidad total",                         immobile_pct,   "%");  r += 1
+        _m(r, "  Inmovilidad zona interior (freezing)",    imm_c_pct,      "%");  r += 1
+        _m(r, "  Inmovilidad zona periferica",             imm_p_pct,      "%");  r += 1
 
         r += 1
-        _s(r, "Grooming (Conducta de Desplazamiento de Estres)"); r += 1
-        _m(r, "Grooming (bouts/min)",                  grooming_pm,    "bouts/min"); r += 1
-        _m(r, "Grooming duracion total",               grooming_dur,   "s");         r += 1
-        _m(r, "Grooming duracion media por bout",      grooming_avg,   "s/bout");    r += 1
+        _s(r, "Acicalamiento (Conducta de Desplazamiento de Estres)"); r += 1
+        _m(r, "Acicalamiento (episodios/min)",              grooming_pm,    "episod./min"); r += 1
+        _m(r, "Acicalamiento duracion total",               grooming_dur,   "s");           r += 1
+        _m(r, "Acicalamiento duracion media por episodio",  grooming_avg,   "s/episodio");  r += 1
 
         wb.save(str(out_path))
