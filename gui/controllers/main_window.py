@@ -1271,10 +1271,8 @@ class MainWindow(QMainWindow):
         self._elapsed_s = 0
         self._timer.start(1000)
 
-        kp_swap = getattr(self, "_chk_kp_swap", None)
         self._worker = DetectionWorker(
             self._video_source, self._output_dir, self._coords_json,
-            kp_swap_fix=kp_swap.isChecked() if kp_swap is not None else False,
         )
         self._worker.frame_ready.connect(self._on_frame_ready)
         self._worker.log_msg.connect(self._on_log_msg)

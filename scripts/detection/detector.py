@@ -37,27 +37,19 @@ KP_SPINE: int = 1
 KP_TAIL: int  = 2
 
 
-def _kp_swap_fix(
-    snout_kp:   "np.ndarray | None",
-    tail_kp:    "np.ndarray | None",
-    prev_snout: "np.ndarray | None",
-    prev_tail:  "np.ndarray | None",
-) -> tuple:
-    """
-    Corrige el intercambio snout<->tail comparando el coste de asignacion al frame anterior.
-    Solo actua si invertir las asignaciones reduce el coste en mas de un 20%.
-    """
-    if snout_kp is None or tail_kp is None:
-        return snout_kp, tail_kp
-    if prev_snout is None or prev_tail is None:
-        return snout_kp, tail_kp
-    sn, tl = snout_kp[:2], tail_kp[:2]
-    ps, pt = prev_snout[:2], prev_tail[:2]
-    cost_normal  = float(np.linalg.norm(sn - ps) + np.linalg.norm(tl - pt))
-    cost_swapped = float(np.linalg.norm(sn - pt) + np.linalg.norm(tl - ps))
-    if cost_swapped < cost_normal * 0.80:
-        return np.array([tail_kp[0], tail_kp[1], snout_kp[2]]), snout_kp[:2].copy()
-    return snout_kp, tail_kp
+def _get_color(label: str) -> tuple[int, int, int]:
+    """Devuelve el color BGR asociado a cada etiqueta de comportamiento."""
+    label = label.lower()
+    if "sniffing_immobile" in label: return (200, 100, 180)
+    if "sniffing"   in label: return (0,   200, 255)
+    if "immobile"   in label: return (180, 180, 180)
+    if "walking"    in label: return (0,   255, 255)
+    if "climbing"   in label: return (255,   0, 255)
+    if "dipping"    in label: return (0,   165, 255)
+    if "rearing"    in label: return (0,   255,   0)
+    if "grooming"   in label: return (180, 255, 180)
+    return (128, 128, 128)
+
 
 
 class _SpeedTracker:
@@ -133,19 +125,7 @@ class RatDetector(BaseModule):
         self.spatial_logic = SpatialAnalyzer(config_path=paths.coords_json)
         self._behavior_classifier = BehaviorClassifier(spatial_logic=self.spatial_logic)
 
-    @staticmethod
-    def _get_color(label: str) -> tuple[int, int, int]:
-        """Devuelve el color BGR asociado a cada etiqueta de comportamiento."""
-        label = label.lower()
-        if "sniffing_immobile" in label: return (200, 100, 180)
-        if "sniffing"   in label: return (0,   200, 255)
-        if "immobile"   in label: return (180, 180, 180)
-        if "walking"    in label: return (0,   255, 255)
-        if "climbing"   in label: return (255,   0, 255)
-        if "dipping"    in label: return (0,   165, 255)
-        if "rearing"    in label: return (0,   255,   0)
-        if "grooming"   in label: return (180, 255, 180)
-        return (128, 128, 128)
+
 
     @staticmethod
     def _extract_snout(res, detection_idx: int = 0) -> np.ndarray | None:
@@ -295,8 +275,6 @@ class RatDetector(BaseModule):
         cap_proc = cv2.VideoCapture(source_cv2)
         frame_idx: int  = 0
         last_label: str = "—"
-        _prev_snout: np.ndarray | None = None
-        _prev_tail:  np.ndarray | None = None
 
         while True:
             ret, raw_frame = cap_proc.read()
@@ -347,11 +325,6 @@ class RatDetector(BaseModule):
             if rat_box is not None and res.keypoints is not None:
                 snout_kp = self._extract_snout(res, detection_idx=0)
                 tail_kp  = self._extract_keypoint(res, KP_TAIL, detection_idx=0)
-                snout_kp, tail_kp = _kp_swap_fix(snout_kp, tail_kp, _prev_snout, _prev_tail)
-                if snout_kp is not None:
-                    _prev_snout = snout_kp
-                if tail_kp is not None:
-                    _prev_tail = tail_kp
 
             if rat_box is not None:
                 speed_val   = self._speed_tracker.update(rat_box, out_w, out_h)
@@ -364,7 +337,7 @@ class RatDetector(BaseModule):
                     hole_idx = self.spatial_logic.check_dipping_hole(snout_kp)
 
                 # Dibujar bbox y etiqueta
-                color = self._get_color(final_label)
+                color = _get_color(final_label)
                 rx1, ry1, rx2, ry2 = map(int, rat_box)
 
                 if final_label.startswith("sniffing_"):
