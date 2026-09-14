@@ -54,10 +54,11 @@ class ZoneCalibrator(BaseModule):
         self.video_path  = Path(video_path)
         self.output_json = paths.coords_json
 
-        self.exterior: list = []   # 2 puntos: esquinas opuestas del rectangulo exterior
-        self.interior: list = []   # 2 puntos: esquinas opuestas del rectangulo interior
-        self.holes:    list = []   # 4 puntos: centros de los agujeros
-        self.center:   list = []   # 2 puntos: esquinas de la zona central (opcional)
+        self.exterior:          list = []    # 2 puntos: esquinas opuestas del rectangulo exterior
+        self.interior:          list = []    # 2 puntos: esquinas opuestas del rectangulo interior
+        self.holes:             list = []    # 4 puntos: centros de los agujeros
+        self.center:            list = []    # 2 puntos: esquinas de la zona central (opcional)
+        self.center_from_holes: bool = False # True si la zona central se derivo de los agujeros
 
         self.img_raw: np.ndarray | None = None  # frame original sin modificar
         self.scale_x: float = 1.0               # factor display -> original (ancho)
@@ -171,13 +172,14 @@ class ZoneCalibrator(BaseModule):
             color = GREEN
         elif len(self.center) < 2:
             n_c   = len(self.center)
-            msg   = f"PASO 4/4 - ZONA CENTRAL (OPCIONAL): [{n_c}/2] clics  |  Q para omitir"
+            msg   = f"PASO 4/4 - ZONA CENTRAL (OPCIONAL): [{n_c}/2] clics  |  H = usar agujeros  |  Q = omitir"
             color = YELLOW
         else:
-            msg   = "Completo con zona central - pulsa  Q  para guardar"
+            origen = "agujeros" if self.center_from_holes else "manual"
+            msg   = f"Completo con zona central ({origen}) - pulsa  Q  para guardar"
             color = (0, 220, 0)
 
-        hint = "  R = resetear     Q = guardar y salir"
+        hint = "  R = resetear     H = zona central desde agujeros     Q = guardar y salir"
 
         overlay = img.copy()
         cv2.rectangle(overlay, (0, h - 50), (img.shape[1], h), BLACK, -1)
@@ -216,6 +218,8 @@ class ZoneCalibrator(BaseModule):
                 "x_min": min(c[0][0], c[1][0]), "x_max": max(c[0][0], c[1][0]),
                 "y_min": min(c[0][1], c[1][1]), "y_max": max(c[0][1], c[1][1]),
             }
+            if self.center_from_holes:
+                data["center_from_holes"] = True
 
         self.output_json.parent.mkdir(parents=True, exist_ok=True)
         with open(self.output_json, "w") as f:
@@ -230,12 +234,25 @@ class ZoneCalibrator(BaseModule):
         else:
             print("     Centro   : no definido (opcional)")
 
+    def _set_center_from_holes(self) -> None:
+        """Calcula la zona central como el bounding box de los 4 agujeros."""
+        xs = [h[0] for h in self.holes]
+        ys = [h[1] for h in self.holes]
+        self.center = [
+            [min(xs), min(ys)],
+            [max(xs), max(ys)],
+        ]
+        self.center_from_holes = True
+        print(f"[H] Zona central derivada de agujeros: {self.center[0]} -> {self.center[1]}")
+        self._refresh()
+
     def _reset(self) -> None:
         """Borra todos los puntos marcados y actualiza la ventana."""
-        self.exterior = []
-        self.interior = []
-        self.holes    = []
-        self.center   = []
+        self.exterior          = []
+        self.interior          = []
+        self.holes             = []
+        self.center            = []
+        self.center_from_holes = False
         print("[R] Puntos reseteados.")
         self._refresh()
 
@@ -285,6 +302,11 @@ class ZoneCalibrator(BaseModule):
                 else:
                     print(f"[!] Calibracion incompleta ({mandatory}/8 puntos obligatorios). Saliendo sin guardar.")
                 break
+            elif key in (ord('h'), ord('H')):
+                if len(self.holes) == 4 and len(self.center) < 2:
+                    self._set_center_from_holes()
+                elif len(self.holes) < 4:
+                    print("[H] Primero marca los 4 agujeros (paso 3).")
             elif key in (ord('r'), ord('R')):
                 self._reset()
 
