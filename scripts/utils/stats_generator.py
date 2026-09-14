@@ -227,12 +227,17 @@ class StatsGenerator:
             p2 = self._to_canvas(lim["x_max"], lim["y_max"], x_min, y_min, x_scale, y_scale)
             cv2.rectangle(img, p1, p2, (0, 0, 0), 1, cv2.LINE_AA)
 
-        # Agujeros
+        # Agujeros con numero visible
         if self.holes:
-            r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
-            for hx, hy in self.holes:
+            r_canvas  = max(6, int(self.hole_radius * min(x_scale, y_scale)))
+            hole_names = self._hole_position_names()
+            for idx, (hx, hy) in enumerate(self.holes):
                 cx, cy = self._to_canvas(hx, hy, x_min, y_min, x_scale, y_scale)
                 cv2.circle(img, (cx, cy), r_canvas, (80, 80, 80), 2)
+                label = f"{idx + 1}"
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.38, 1)
+                cv2.putText(img, label, (cx - tw // 2, cy + th // 2),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.38, (40, 40, 40), 1, cv2.LINE_AA)
 
         # Trayectoria del snout — cada segmento coloreado segun la etiqueta en ese frame
         prev_pt:    tuple[int, int] | None = None
@@ -387,6 +392,28 @@ class StatsGenerator:
     # ------------------------------------------------------------------
     # Utilidades Excel
     # ------------------------------------------------------------------
+
+    def _hole_position_names(self) -> list[str]:
+        """
+        Asigna nombre de posicion a cada agujero segun su lugar en la cuadricula 2x2.
+        Devuelve una lista de nombres en el mismo orden que self.holes.
+        Si no hay exactamente 4 agujeros, devuelve numeros simples ("1", "2", ...).
+        """
+        if len(self.holes) != 4:
+            return [str(i + 1) for i in range(len(self.holes))]
+
+        # Ordenar por Y para separar fila superior e inferior
+        indexed = sorted(enumerate(self.holes), key=lambda t: t[1][1])
+        top_row    = sorted(indexed[:2], key=lambda t: t[1][0])   # los 2 con menor Y, ordenados por X
+        bottom_row = sorted(indexed[2:], key=lambda t: t[1][0])   # los 2 con mayor Y, ordenados por X
+
+        position_map = {
+            top_row[0][0]:    "Sup-Izq",
+            top_row[1][0]:    "Sup-Der",
+            bottom_row[0][0]: "Inf-Izq",
+            bottom_row[1][0]: "Inf-Der",
+        }
+        return [position_map[i] for i in range(4)]
 
     def _count_bouts(self) -> dict[str, int]:
         """Cuenta bouts (rachas consecutivas) por etiqueta sobre todas las filas."""
@@ -719,13 +746,15 @@ class StatsGenerator:
         if self.holes:
             r += 1
             _s(r, "Introduccion por Agujero"); r += 1
+            hole_names = self._hole_position_names()
             for i in range(len(self.holes)):
                 fr_h  = hole_frames.get(i, 0)
                 bt_h  = hole_bouts.get(i, 0)
                 dur_h = round(fr_h / self.fps, 2)
-                _m(r, f"  Agujero {i + 1} — episodios",      bt_h,  "episodios"); r += 1
-                _m(r, f"  Agujero {i + 1} — duracion",       dur_h, "s");         r += 1
-                _m(r, f"  Agujero {i + 1} — % del tiempo de introduccion",
+                nom   = f"Agujero {i + 1} ({hole_names[i]})"
+                _m(r, f"  {nom} — episodios",      bt_h,  "episodios"); r += 1
+                _m(r, f"  {nom} — duracion",        dur_h, "s");         r += 1
+                _m(r, f"  {nom} — % del tiempo de introduccion",
                    round(fr_h / max(dipping_fr, 1) * 100, 1), "%"); r += 1
 
         r += 1
