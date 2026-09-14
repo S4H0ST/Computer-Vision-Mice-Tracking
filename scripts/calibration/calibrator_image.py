@@ -61,10 +61,11 @@ class ImageCalibrator:
         self.image_path  = image_path
         self.output_json = output_json
 
-        self.exterior: list = []   # 2 puntos en coordenadas originales
-        self.interior: list = []   # 2 puntos en coordenadas originales
-        self.holes:    list = []   # 4 puntos en coordenadas originales
-        self.center:   list = []   # 2 puntos en coordenadas originales (opcional)
+        self.exterior:          list = []    # 2 puntos en coordenadas originales
+        self.interior:          list = []    # 2 puntos en coordenadas originales
+        self.holes:             list = []    # 4 puntos en coordenadas originales
+        self.center:            list = []    # 2 puntos en coordenadas originales (opcional)
+        self.center_from_holes: bool = False # True si la zona central se derivo de los agujeros
 
         self.img_raw:  np.ndarray | None = None  # imagen original sin tocar
         self.scale_x:  float = 1.0               # factor display -> original (ancho)
@@ -181,13 +182,14 @@ class ImageCalibrator:
             color = GREEN
         elif len(self.center) < 2:
             n_c   = len(self.center)
-            msg   = f"PASO 4/4 - ZONA CENTRAL (OPCIONAL): [{n_c}/2] clics  |  S para omitir"
+            msg   = f"PASO 4/4 - ZONA CENTRAL (OPCIONAL): [{n_c}/2] clics  |  H = usar agujeros  |  S = omitir"
             color = YELLOW
         else:
-            msg   = "Completo con zona central - pulsa  S  para guardar   |   R  para repetir"
+            origen = "agujeros" if self.center_from_holes else "manual"
+            msg   = f"Completo con zona central ({origen}) - pulsa  S  para guardar   |   R  para repetir"
             color = (0, 220, 0)
 
-        hint = "  R = resetear     S = guardar     Q = salir sin guardar"
+        hint = "  R = resetear     H = zona central desde agujeros     S = guardar     Q = salir sin guardar"
 
         overlay = disp.copy()
         cv2.rectangle(overlay, (0, h - 50), (disp.shape[1], h), BLACK, -1)
@@ -232,6 +234,8 @@ class ImageCalibrator:
                 "y_min": min(c[0][1], c[1][1]),
                 "y_max": max(c[0][1], c[1][1]),
             }
+            if self.center_from_holes:
+                data["center_from_holes"] = True
 
         self.output_json.parent.mkdir(parents=True, exist_ok=True)
         with open(self.output_json, "w") as f:
@@ -245,12 +249,25 @@ class ImageCalibrator:
         else:
             print("     Centro   : no definido (opcional)")
 
+    def _set_center_from_holes(self) -> None:
+        """Calcula la zona central como el bounding box de los 4 agujeros."""
+        xs = [h[0] for h in self.holes]
+        ys = [h[1] for h in self.holes]
+        self.center = [
+            [min(xs), min(ys)],
+            [max(xs), max(ys)],
+        ]
+        self.center_from_holes = True
+        print(f"[H] Zona central derivada de agujeros: {self.center[0]} -> {self.center[1]}")
+        self._refresh()
+
     def _reset(self) -> None:
         """Borra todos los puntos marcados y actualiza la ventana."""
-        self.exterior = []
-        self.interior = []
-        self.holes    = []
-        self.center   = []
+        self.exterior          = []
+        self.interior          = []
+        self.holes             = []
+        self.center            = []
+        self.center_from_holes = False
         print("[R] Puntos reseteados.")
         self._refresh()
 
@@ -299,6 +316,11 @@ class ImageCalibrator:
                     break
                 else:
                     print(f"[!] Faltan {8 - mandatory} puntos obligatorios para guardar.")
+            elif key in (ord('h'), ord('H')):
+                if len(self.holes) == 4 and len(self.center) < 2:
+                    self._set_center_from_holes()
+                elif len(self.holes) < 4:
+                    print("[H] Primero marca los 4 agujeros (paso 3).")
             elif key in (ord('r'), ord('R')):
                 self._reset()
 
