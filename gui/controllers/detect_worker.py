@@ -74,14 +74,12 @@ class DetectionWorker(QThread):
     finished    = pyqtSignal(dict)
     error       = pyqtSignal(str)
 
-    def __init__(self, source, output_dir: Path, coords_json: Path,
-                 kp_swap_fix: bool = False) -> None:
+    def __init__(self, source, output_dir: Path, coords_json: Path) -> None:
         super().__init__()
-        self._source       = source        # Path (video) o int (indice de camara)
-        self._output_dir   = output_dir
-        self._coords_json  = coords_json
-        self._stop         = False
-        self._kp_swap_fix  = kp_swap_fix
+        self._source      = source        # Path (video) o int (indice de camara)
+        self._output_dir  = output_dir
+        self._coords_json = coords_json
+        self._stop        = False
 
     def request_stop(self) -> None:
         self._stop = True
@@ -100,7 +98,7 @@ class DetectionWorker(QThread):
         from output.writers import VideoOutput, CsvOutput
         from config.config import paths
         from utils.stats_generator import StatsGenerator
-        from detection.detector import KP_SNOUT, KP_SPINE, KP_TAIL, _SpeedTracker, _kp_swap_fix, _get_color
+        from detection.detector import KP_SNOUT, KP_SPINE, KP_TAIL, _SpeedTracker, _get_color
 
         # ---- Inicializacion ----
         self.log_msg.emit(f"Cargando modelo: {paths.yolo_model.name}")
@@ -153,9 +151,6 @@ class DetectionWorker(QThread):
 
         # ---- Bucle stream=True: ByteTrack activo, sin parpadeo ----
         stats: dict[str, int] = {k: 0 for k in BEHAVIOR_KEYS}
-
-        _prev_snout: "np.ndarray | None" = None
-        _prev_tail:  "np.ndarray | None" = None
 
         results = model.predict(
             source=cv2_source, stream=True,
@@ -210,13 +205,6 @@ class DetectionWorker(QThread):
                             spine_kp = sp
 
             if rat_box is not None:
-                if self._kp_swap_fix:
-                    snout_kp, tail_kp = _kp_swap_fix(snout_kp, tail_kp, _prev_snout, _prev_tail)
-                if snout_kp is not None:
-                    _prev_snout = snout_kp
-                if tail_kp is not None:
-                    _prev_tail = tail_kp
-
                 speed_val   = speed_tracker.update(rat_box, w, h)
                 final_label = classifier.classify(yolo_label, speed_val, snout_kp, rat_box, spatial_ok)
 
