@@ -636,17 +636,6 @@ class MainWindow(QMainWindow):
         self.btn_new_detection.clicked.connect(self._on_new_detection)
         self.tab_images.currentChanged.connect(self._on_result_tab_changed)
 
-        # Checkbox temporal: correccion de intercambio snout<->tail
-        from PyQt5.QtWidgets import QCheckBox, QHBoxLayout
-        self._chk_kp_swap = QCheckBox()
-        self._chk_kp_swap.setChecked(False)
-        self._chk_kp_swap.setStyleSheet(
-            "font-size: 11px; color: #555; padding: 0 4px;"
-        )
-        topbar = self.findChild(QHBoxLayout, "detectionTopBar")
-        if topbar is not None:
-            topbar.insertWidget(topbar.count() - 1, self._chk_kp_swap)
-
         # Botones de re-edicion de zona de calibracion
         from PyQt5.QtWidgets import QPushButton
         _ZONE_DEFS_MW = [
@@ -1669,19 +1658,6 @@ class MainWindow(QMainWindow):
             for btn, (es, en) in zip(self._calib_zone_btns, _ZONE_TEXTS_MW):
                 btn.setText(es if self._lang == "es" else en)
 
-        if hasattr(self, "_chk_kp_swap"):
-            if self._lang == "es":
-                self._chk_kp_swap.setText("Corregir intercambio KP (temporal)")
-                self._chk_kp_swap.setToolTip(
-                    "Corrige el intercambio snout↔tail durante movimiento rapido.\n"
-                    "Heuristica temporal: activa hasta ampliar el dataset de entrenamiento."
-                )
-            else:
-                self._chk_kp_swap.setText("Fix KP swap (temp.)")
-                self._chk_kp_swap.setToolTip(
-                    "Corrects snout↔tail keypoint swap during fast movement.\n"
-                    "Temporary heuristic until training dataset is expanded."
-                )
 
     def _update_calib_legend(self) -> None:
         """Leyenda de colores de calibracion debajo de la imagen (fuera del frame)."""
