@@ -28,13 +28,17 @@ class YOLOTrainer(BaseModule):
             return 1
         try:
             gpu_mem = torch.cuda.get_device_properties(0).total_memory / 1e9
-            if gpu_mem >= 8:
-                return 8
+            if gpu_mem >= 16:
+                return 32
+            if gpu_mem >= 10:
+                return 16
+            if gpu_mem >= 6:
+                return 12
             if gpu_mem >= 4:
-                return 4
-            return 2
+                return 8
+            return 4
         except Exception:
-            return 2
+            return 4
 
     def run(self) -> None:
         """Lanza el entrenamiento y, al finalizar, copia best.pt a models/yolo_ratas.pt."""
