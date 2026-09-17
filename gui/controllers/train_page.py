@@ -7,6 +7,7 @@ Clases:
     TrainPage    — QWidget con formulario + consola para lanzar el entrenamiento.
 """
 
+import os
 import platform
 import shutil
 import sys
@@ -20,12 +21,14 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+_DEV_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(_DEV_ROOT / "scripts"))
 
 from config.config import paths, train_cfg
 
-_TRANS_PATH = PROJECT_ROOT / "scripts" / "config" / "translations.json"
+# paths.root is always correct: exe dir when frozen, project root in dev.
+# _DEV_ROOT is only used for the translation file at import time (safe).
+_TRANS_PATH = _DEV_ROOT / "scripts" / "config" / "translations.json"
 
 def _load_train_t() -> dict:
     try:
@@ -62,27 +65,55 @@ class TrainWorker(QThread):
             self.error.emit(str(exc))
 
     def _train(self) -> None:
+        import time
         from ultralytics import YOLO
 
         base = str(paths.yolo_model) if paths.yolo_model.exists() else train_cfg.base_model
         self.log_msg.emit(f"Cargando modelo base: {base}")
+        self.log_msg.emit("Calibrando batch optimo en GPU... (puede tardar 1-2 min)")
         model = YOLO(base)
 
-        runs_dir = PROJECT_ROOT / "runs" / "train"
-        self.log_msg.emit(
-            f"Iniciando entrenamiento — epochs={train_cfg.epochs}, "
-            f"imgsz={train_cfg.imgsz}, batch={train_cfg.batch_size}, "
-            f"device={train_cfg.device}"
-        )
+        runs_dir = paths.root / "runs" / "train"
+
+        # --- Callbacks de progreso ---
+        _t = [0.0]      # tiempo inicio de epoca
+        _best = [0.0]   # mejor mAP50(B) visto
+
+        def _on_train_start(trainer):
+            nb = getattr(trainer, "nb", "?")
+            self.log_msg.emit(
+                f"Entrenamiento iniciado — epochs={trainer.epochs}, "
+                f"batch={trainer.batch_size}, lotes/epoca={nb}"
+            )
+
+        def _on_epoch_start(trainer):
+            _t[0] = time.time()
+            epoch = trainer.epoch + 1
+            self.log_msg.emit(f"-- Epoca {epoch}/{trainer.epochs} --")
+
+        def _on_epoch_end(trainer):
+            elapsed = time.time() - _t[0]
+            epoch   = trainer.epoch + 1
+            total   = trainer.epochs
+            m       = trainer.metrics
+            map50b  = m.get("metrics/mAP50(B)", 0.0)
+            map50p  = m.get("metrics/mAP50(P)", 0.0)
+            if map50b > _best[0]:
+                _best[0] = map50b
+            remaining_s = (total - epoch) * elapsed
+            eta = f"{int(remaining_s // 3600):02d}h{int((remaining_s % 3600) // 60):02d}m"
+            self.log_msg.emit(
+                f"  [{elapsed:.0f}s] mAP50(B)={map50b:.3f}  mAP50(P)={map50p:.3f}"
+                f"  mejor={_best[0]:.3f}  ETA {eta}"
+            )
+
+        model.add_callback("on_train_start",     _on_train_start)
+        model.add_callback("on_train_epoch_start", _on_epoch_start)
+        model.add_callback("on_train_epoch_end",   _on_epoch_end)
 
         # En Windows, DataLoader con workers>0 da problemas de multiprocessing
         workers = 0 if platform.system() == "Windows" else 8
 
-        # Augmentation geometrico puro (mismos params que YOLOTrainer.run()):
-        #   degrees=180  -> cualquier orientacion valida (camara cenital)
-        #   mosaic=0.0   -> desactivado (fondo negro es parte del dominio)
-        #   hsv_*=0.0    -> sin cambios de color (iluminacion controlada)
-        #   erasing=0.0  -> sin borrado sintetico
         model.train(
             data=str(self._yaml_path),
             epochs=train_cfg.epochs,
@@ -246,8 +277,23 @@ class TrainPage(QWidget):
         self._lbl_row_model = QLabel(self._t("lbl_model_name"))
         form_layout.addRow(self._lbl_row_model, self._edit_model_name)
 
+        # Ruta de salida del modelo (solo lectura + boton abrir carpeta)
+        out_row = QHBoxLayout()
+        self._edit_output_path = QLineEdit()
+        self._edit_output_path.setReadOnly(True)
+        self._edit_output_path.setStyleSheet("color: #555; font-size: 11px;")
+        out_row.addWidget(self._edit_output_path)
+        self._btn_open_folder = QPushButton("Abrir carpeta")
+        self._btn_open_folder.setFixedWidth(110)
+        self._btn_open_folder.clicked.connect(self._on_open_output_folder)
+        out_row.addWidget(self._btn_open_folder)
+        self._lbl_row_output = QLabel("Guardará en:")
+        form_layout.addRow(self._lbl_row_output, out_row)
+
         root.addWidget(self._form_group)
 
+        # Fila Train + Cancelar
+        btn_row = QHBoxLayout()
         self._btn_train = QPushButton(self._t("train_btn"))
         self._btn_train.setEnabled(False)
         self._btn_train.setFixedHeight(40)
@@ -258,7 +304,21 @@ class TrainPage(QWidget):
             "QPushButton:hover:!disabled { background-color: #a80013; }"
         )
         self._btn_train.clicked.connect(self._on_train)
-        root.addWidget(self._btn_train)
+        btn_row.addWidget(self._btn_train)
+
+        self._btn_cancel = QPushButton("Cancelar")
+        self._btn_cancel.setEnabled(False)
+        self._btn_cancel.setFixedHeight(40)
+        self._btn_cancel.setFixedWidth(110)
+        self._btn_cancel.setStyleSheet(
+            "QPushButton { background-color: #555; color: white; font-weight: bold; "
+            "font-size: 13px; border-radius: 6px; } "
+            "QPushButton:disabled { background-color: #ccc; color: #999; } "
+            "QPushButton:hover:!disabled { background-color: #333; }"
+        )
+        self._btn_cancel.clicked.connect(self._on_cancel)
+        btn_row.addWidget(self._btn_cancel)
+        root.addLayout(btn_row)
 
         # Panel de metricas (oculto hasta que termina el entrenamiento)
         self._grp_metrics = QGroupBox(self._t("metrics_grp"))
@@ -318,7 +378,7 @@ class TrainPage(QWidget):
 
     def _check_dataset_auto(self) -> None:
         """Comprueba si existe el dataset y rellena los campos automaticamente."""
-        train_images = PROJECT_ROOT / "datasets" / "images" / "train"
+        train_images = paths.root / "datasets" / "unified" / "train" / "images"
         if train_images.exists() and any(train_images.iterdir()):
             self._lbl_dataset_status.setText(self._t("ds_found"))
             self._lbl_dataset_status.setStyleSheet(
@@ -329,7 +389,7 @@ class TrainPage(QWidget):
 
             # Auto-rellenar carpeta si no tiene ya una
             if self._dataset_dir is None:
-                datasets_root = PROJECT_ROOT / "datasets"
+                datasets_root = paths.root / "datasets"
                 self._dataset_dir = datasets_root
                 self._edit_dataset.setText(str(datasets_root))
 
@@ -348,7 +408,7 @@ class TrainPage(QWidget):
 
     def _find_yaml_auto(self) -> None:
         """Busca data.yaml en datasets/ automaticamente."""
-        datasets_root = PROJECT_ROOT / "datasets"
+        datasets_root = paths.root / "datasets"
         candidates = list(datasets_root.glob("*.yaml"))
         if not candidates:
             candidates = list(datasets_root.rglob("*.yaml"))
@@ -360,32 +420,44 @@ class TrainPage(QWidget):
             self._edit_yaml.setText(str(self._yaml_path))
 
     def _update_train_btn(self) -> None:
-        ok = (
-            self._dataset_dir is not None
-            and self._yaml_path is not None
-            and bool(self._edit_model_name.text().strip())
-        )
-        self._btn_train.setEnabled(ok and (self._worker is None or not self._worker.isRunning()))
+        has_dataset = self._dataset_dir is not None
+        has_yaml    = self._yaml_path is not None
+        has_name    = bool(self._edit_model_name.text().strip())
+
+        _ok  = "font-size: 12px; color: #333;"
+        _err = "font-size: 12px; color: #CB0017; font-weight: bold;"
+        self._lbl_row_dataset.setStyleSheet(_err if not has_dataset else _ok)
+        self._lbl_row_yaml.setStyleSheet(   _err if not has_yaml    else _ok)
+        self._lbl_row_model.setStyleSheet(  _err if not has_name    else _ok)
+
+        name = self._edit_model_name.text().strip() or "rata_model"
+        dest = paths.models_dir / f"{name}.pt"
+        self._edit_output_path.setText(str(dest))
+
+        training = self._worker is not None and self._worker.isRunning()
+        ok = has_dataset and has_yaml and has_name
+        self._btn_train.setEnabled(ok and not training)
+        self._btn_cancel.setEnabled(training)
 
     # ------------------------------------------------------------------
     # Slots de botones
     # ------------------------------------------------------------------
 
     def _on_browse_dataset(self) -> None:
-        default = str(PROJECT_ROOT / "datasets")
+        default = str(self._dataset_dir or Path.home())
         folder = QFileDialog.getExistingDirectory(self, self._t("dlg_dataset"), default)
         if folder:
             self._dataset_dir = Path(folder)
             self._edit_dataset.setText(folder)
-            # Buscar yaml dentro de la carpeta seleccionada
+            # Buscar yaml dentro de la carpeta seleccionada — siempre actualiza
             yamls = list(self._dataset_dir.glob("*.yaml"))
-            if yamls and self._yaml_path is None:
+            if yamls:
                 self._yaml_path = yamls[0]
                 self._edit_yaml.setText(str(self._yaml_path))
             self._update_train_btn()
 
     def _on_browse_yaml(self) -> None:
-        default = str(PROJECT_ROOT / "datasets")
+        default = str(self._dataset_dir or Path.home())
         path, _ = QFileDialog.getOpenFileName(
             self, self._t("dlg_yaml"), default, "YAML Files (*.yaml *.yml);;All Files (*.*)"
         )
@@ -394,16 +466,51 @@ class TrainPage(QWidget):
             self._edit_yaml.setText(path)
             self._update_train_btn()
 
+    def _on_cancel(self) -> None:
+        if self._worker and self._worker.isRunning():
+            self._worker.terminate()
+            self._worker.wait(3000)
+            self._console.append("[!] Entrenamiento cancelado por el usuario.")
+            self._btn_train.setText(self._t("train_btn"))
+            self._update_train_btn()
+
+    def _on_open_output_folder(self) -> None:
+        folder = paths.models_dir
+        folder.mkdir(parents=True, exist_ok=True)
+        os.startfile(str(folder))
+
     def _on_train(self) -> None:
         if self._worker and self._worker.isRunning():
             return
 
-        model_name = self._edit_model_name.text().strip() or "rata_model"
+        # Guarda explícita: no continuar si falta algún campo
+        missing = []
+        if self._dataset_dir is None:
+            missing.append("• Carpeta del dataset")
+        if self._yaml_path is None or not self._yaml_path.exists():
+            missing.append("• Archivo data.yaml")
+        if not self._edit_model_name.text().strip():
+            missing.append("• Nombre del modelo")
+        if missing:
+            QMessageBox.warning(
+                self,
+                "Faltan campos obligatorios",
+                "No se puede entrenar sin completar:\n" + "\n".join(missing),
+            )
+            self._update_train_btn()
+            return
+
+        model_name = self._edit_model_name.text().strip()
 
         self._console.clear()
-        self._console.append(f"Iniciando entrenamiento del modelo '{model_name}'...")
+        self._console.append("=" * 55)
+        self._console.append(f"  Dataset:   {self._dataset_dir}")
+        self._console.append(f"  YAML:      {self._yaml_path}")
+        self._console.append(f"  Modelo:    {paths.models_dir / (model_name + '.pt')}")
+        self._console.append("=" * 55)
         self._btn_train.setEnabled(False)
         self._btn_train.setText(self._t("training_btn"))
+        self._btn_cancel.setEnabled(True)
         self._grp_metrics.setVisible(False)
 
         self._worker = TrainWorker(self._yaml_path, model_name, parent=self)
@@ -419,6 +526,7 @@ class TrainPage(QWidget):
 
     def _on_finished(self, model_path: str, metrics: dict) -> None:
         self._btn_train.setText(self._t("train_btn"))
+        self._btn_cancel.setEnabled(False)
         self._update_train_btn()
 
         def _get(*keys) -> str:
@@ -441,6 +549,7 @@ class TrainPage(QWidget):
 
     def _on_error(self, msg: str) -> None:
         self._btn_train.setText(self._t("train_btn"))
+        self._btn_cancel.setEnabled(False)
         self._update_train_btn()
         self._console.append(f"[ERROR] {msg}")
         QMessageBox.critical(self, self._t("error_title"), msg)
