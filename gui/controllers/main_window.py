@@ -104,9 +104,6 @@ _TRANSLATIONS: list[tuple] = [
     ("lbl_file_video1",       "setText",  "Video anotado",                    "Annotated video"),
     ("lbl_desc_video1",       "setText",  "Video con etiquetas y zonas calibradas superpuestas",
                                           "Video with behaviour labels and calibrated zones overlaid"),
-    ("lbl_file_video2",       "setText",  "Video de recorrido",               "Clean video"),
-    ("lbl_desc_video2",       "setText",  "Video solo con etiquetas, sin zonas de fondo",
-                                          "Video with labels only, no background zones"),
     ("lbl_file_folder",       "setText",  "Carpeta de salida",                "Output folder"),
     ("lbl_desc_folder",       "setText",  "Contiene todos los archivos de esta ejecucion",
                                           "Contains all files from this run"),
@@ -116,7 +113,6 @@ _TRANSLATIONS: list[tuple] = [
     ("s_lbl_res_model",       "setText",  "Modelo:",                          "Model:"),
     ("btn_open_excel",        "setText",  "Abrir",                            "Open"),
     ("btn_open_video1",       "setText",  "Abrir",                            "Open"),
-    ("btn_open_video2",       "setText",  "Abrir",                            "Open"),
     ("btn_open_folder",       "setText",  "Abrir",                            "Open"),
     ("btn_new_detection",     "setText",  "Nueva Deteccion",                  "New Detection"),
     ("s_lbl_res_dist_px",    "setText",  "Distancia (px):",                  "Distance (px):"),
@@ -196,6 +192,9 @@ The sidebar gives access to all modules:</p>
   <b>Start Camera</b> — open the default webcam for real-time analysis.
 </div>
 <p>Either button proceeds to the <b>Calibration</b> page automatically.</p>
+<div class="tip">These buttons and the Pre-Labeling sidebar entry are only available
+after a model has been selected. If the sidebar shows <b>SELECT MODEL</b> (in red),
+click it to browse and load a <code>.pt</code> weights file from <code>models/</code>.</div>
 
 <h2>Calibration</h2>
 <p>Click 8 points on the arena image to define its geometry:</p>
@@ -203,7 +202,8 @@ The sidebar gives access to all modules:</p>
   <li><b style="color:#cc0000">Step 1</b> — 2 clicks on opposite corners of the <b>exterior wall</b> (red).</li>
   <li><b style="color:#0000cc">Step 2</b> — 2 clicks on opposite corners of the <b>interior floor</b> (blue).</li>
   <li><b style="color:#007700">Step 3</b> — 4 clicks on the <b>centre of each hole</b> (green circles).</li>
-  <li><b style="color:#cc9900">Step 4</b> — (optional) 2 clicks for a <b>central zone</b> border (yellow).</li>
+  <li><b style="color:#cc9900">Step 4</b> — (optional) 2 clicks for a <b>central zone</b> border (yellow),
+      or enable <b>Central border from holes</b> to auto-compute it as the union bounding box of the 4 holes.</li>
 </ul>
 <p>Set the real-world box dimensions (cm) and choose an <b>Output Folder</b> before clicking <b>Next →</b>.</p>
 <div class="tip">Tip: reuse a previous calibration via <b>Import Coordinates → Browse…</b>
@@ -216,7 +216,7 @@ handles on hole circles to resize them.</div>
 <ul>
   <li>Live video feed with behaviour label and keypoints overlaid.</li>
   <li>Frame count, FPS and video time elapsed.</li>
-  <li>Running totals (seconds) per behaviour: Idle, Walking, Sniffing, Climbing, Rearing, Head-dip, Grooming.</li>
+  <li>Running totals (seconds) per behaviour: Idle, Climbing, Rearing, Head-dip, Grooming (and any custom labels you have configured).</li>
 </ul>
 <p>Press <b>Cancel</b> to stop early — partial results are still saved.<br>
 Use <b>← Back</b> (visible after cancelling) to fix the calibration and re-run.</p>
@@ -227,7 +227,7 @@ Use <b>← Back</b> (visible after cancelling) to fix the calibration and re-run
   <li><b>Trajectory</b> tab — colour-coded path of the rat across the arena.</li>
   <li><b>Heatmap</b> tab — density map showing where the rat spent most time.</li>
   <li><b>Generated Files</b> panel — open the stats spreadsheet (.xlsx), annotated video,
-      clean trajectory video, or the output folder directly.</li>
+      or the output folder directly.</li>
   <li><b>Summary</b> panel — duration, total frames, model name and path distance (px / cm).</li>
 </ul>
 <div class="tip">Tip: click <b>Select Folder</b> in the top-right to load results from any previous run.</div>
@@ -304,24 +304,21 @@ written to <code>outputs/calibration/</code> for convenience.</p>
 <h3>What behaviours does the model detect?</h3>
 <ul>
   <li><b>Idle</b> — rat is stationary.</li>
-  <li><b>Walking</b> — moving across the arena floor.</li>
-  <li><b>Sniffing</b> — nose-down exploration.</li>
   <li><b>Climbing</b> — moving along the arena wall (thigmotaxis).</li>
   <li><b>Rearing</b> — standing on hind legs.</li>
   <li><b>Head-dip</b> — head extended into a hole.</li>
   <li><b>Grooming</b> — self-grooming posture.</li>
 </ul>
-<p>You can add custom labels via <b>Config. Etiquetas</b> in the sidebar.</p>
+<p>You can add or customise labels via <b>Config. Etiquetas</b> in the sidebar.</p>
 
 <h3>Can I analyse a video without a connected camera?</h3>
 <p>Yes — use <b>Select Video</b> on the Home page to load any recorded video file.</p>
 
-<h3>The model is shown as "NOT FOUND" in the sidebar. What do I do?</h3>
-<p>Place the YOLO weights file (<code>.pt</code>) in the path shown in
-<code>scripts/config/config.py</code> under <code>yolo_model</code>.
-Detection will not work until the model file is present. You can also click on the
-model status label in the sidebar to browse and select a different <code>.pt</code> file
-from the <code>models/</code> folder.</p>
+<h3>The sidebar shows "SELECT MODEL" in red. What do I do?</h3>
+<p>Click the label itself to open a file browser and select a <code>.pt</code> weights file
+from the <code>models/</code> folder next to the application.
+Until a model is loaded, <b>Select Video</b>, <b>Start Camera</b> and <b>Pre-Labeling</b>
+are disabled.</p>
 
 <h3>Can I stop detection mid-way and still get results?</h3>
 <p>Yes. Press <b>Cancel</b>, confirm the prompt, and the app will save whatever has
@@ -369,6 +366,9 @@ La barra lateral da acceso a todos los modulos:</p>
   <b>Iniciar Camara</b> — abre la camara por defecto para analisis en tiempo real.
 </div>
 <p>Cualquiera de los dos botones avanza automaticamente a la pantalla de <b>Calibracion</b>.</p>
+<div class="tip">Estos botones y el acceso a Pre-Etiquetado solo estan disponibles cuando hay
+un modelo cargado. Si la barra lateral muestra <b>SELECCIONAR MODELO</b> (en rojo),
+haz clic en esa etiqueta para elegir un archivo <code>.pt</code> de la carpeta <code>models/</code>.</div>
 
 <h2>Calibracion</h2>
 <p>Haz clic sobre la imagen de la arena para definir su geometria:</p>
@@ -376,7 +376,9 @@ La barra lateral da acceso a todos los modulos:</p>
   <li><b style="color:#cc0000">Paso 1</b> — 2 clics en esquinas opuestas del <b>borde exterior</b> (rojo).</li>
   <li><b style="color:#0000cc">Paso 2</b> — 2 clics en esquinas opuestas del <b>suelo interior</b> (azul).</li>
   <li><b style="color:#007700">Paso 3</b> — 4 clics en el <b>centro de cada agujero</b> (circulos verdes).</li>
-  <li><b style="color:#cc9900">Paso 4</b> — (OPCIONAL) 2 clics para el <b>borde central</b> (amarillo).</li>
+  <li><b style="color:#cc9900">Paso 4</b> — (OPCIONAL) 2 clics para el <b>borde central</b> (amarillo),
+      o activa <b>Borde central desde agujeros</b> para calcularlo automaticamente como la
+      caja contenedora de los 4 agujeros.</li>
 </ul>
 <p>Introduce las dimensiones reales de la caja (cm) y elige una <b>Carpeta de Salida</b>
 antes de pulsar <b>Siguiente →</b>.</p>
@@ -390,8 +392,8 @@ Arrastra las esquinas de los circulos de agujero para cambiar su radio.</div>
 <ul>
   <li>Imagen en vivo con la etiqueta de comportamiento y los keypoints superpuestos.</li>
   <li>Contador de frames, FPS y tiempo de video transcurrido.</li>
-  <li>Totales acumulados (s) por comportamiento: Inactivo, Caminando, Olfateando,
-      Escalando, Erguido, Asomando, Aseo.</li>
+  <li>Totales acumulados (s) por comportamiento: Inactivo, Escalando, Erguido,
+      Asomando, Aseo (y cualquier etiqueta personalizada configurada).</li>
 </ul>
 <p>Pulsa <b>Cancelar</b> para detener — los resultados parciales se guardan igualmente.<br>
 Usa <b>← Volver</b> (visible tras cancelar) para corregir la calibracion y volver a ejecutar.</p>
@@ -402,8 +404,8 @@ para cargar una ejecucion anterior.</p>
 <ul>
   <li>Pestana <b>Recorrido</b> — trayectoria coloreada de la rata sobre la arena.</li>
   <li>Pestana <b>Mapa de Calor</b> — densidad de presencia en cada zona.</li>
-  <li>Panel <b>Archivos Generados</b> — abre el Excel (.xlsx), el video anotado,
-      el video de recorrido limpio o la carpeta de salida.</li>
+  <li>Panel <b>Archivos Generados</b> — abre el Excel (.xlsx), el video anotado
+      o la carpeta de salida.</li>
   <li>Panel <b>Resumen</b> — duracion, frames totales, modelo y distancia recorrida (px / cm).</li>
 </ul>
 <div class="tip">Consejo: haz clic en <b>Seleccionar Carpeta</b> (arriba a la derecha)
@@ -481,24 +483,21 @@ importarlo en la siguiente sesion con <b>Importar Coordenadas → Examinar…</b
 <h3>¿Que comportamientos detecta el modelo?</h3>
 <ul>
   <li><b>Inactivo</b> — la rata esta quieta.</li>
-  <li><b>Caminando</b> — se desplaza por el suelo de la arena.</li>
-  <li><b>Olfateando</b> — exploracion con el hocico hacia abajo.</li>
   <li><b>Escalando</b> — se mueve por la pared de la arena (thigmotaxis).</li>
   <li><b>Erguido</b> — se sostiene sobre las patas traseras.</li>
   <li><b>Asomando</b> — introduce la cabeza en un agujero (head-dip).</li>
   <li><b>Aseo</b> — postura de acicalamiento (grooming).</li>
 </ul>
-<p>Puedes añadir etiquetas personalizadas desde <b>Config. Etiquetas</b> en la barra lateral.</p>
+<p>Puedes añadir o personalizar etiquetas desde <b>Config. Etiquetas</b> en la barra lateral.</p>
 
 <h3>¿Puedo analizar un video sin camara conectada?</h3>
 <p>Si — usa <b>Seleccionar Video</b> en la pantalla de Inicio para cargar cualquier video grabado.</p>
 
-<h3>El modelo aparece como "NOT FOUND" en la barra lateral. ¿Que hago?</h3>
-<p>Coloca el archivo de pesos YOLO (<code>.pt</code>) en la ruta indicada en
-<code>scripts/config/config.py</code> bajo <code>yolo_model</code>.
-La deteccion no funcionara hasta que el archivo este presente. Tambien puedes hacer clic
-en el texto del modelo en la barra lateral para seleccionar un archivo <code>.pt</code>
-diferente de la carpeta <code>models/</code>.</p>
+<h3>La barra lateral muestra "SELECCIONAR MODELO" en rojo. ¿Que hago?</h3>
+<p>Haz clic en esa etiqueta para abrir un explorador de archivos y seleccionar un archivo
+de pesos <code>.pt</code> de la carpeta <code>models/</code> junto a la aplicacion.
+Hasta que se cargue un modelo, <b>Seleccionar Video</b>, <b>Iniciar Camara</b> y
+<b>Pre-Etiquetado</b> estan desactivados.</p>
 
 <h3>¿Puedo detener la deteccion a mitad y obtener igualmente los resultados?</h3>
 <p>Si. Pulsa <b>Cancelar</b>, confirma el dialogo, y la app guardara todo lo procesado:
@@ -548,6 +547,7 @@ class MainWindow(QMainWindow):
         self._calib_hole_radius: int = HOLE_RADIUS
         self._calib_drag_hole_idx: int = -1
         self._calib_drag_handle:   int = -1
+        self._center_from_holes:   bool = False
 
         # Runtime state
         self._video_source = None
@@ -631,13 +631,12 @@ class MainWindow(QMainWindow):
         self.list_result_runs.currentItemChanged.connect(self._on_result_run_selected)
         self.btn_open_excel.clicked.connect(lambda: self._open_path(self._output_paths.get("excel")))
         self.btn_open_video1.clicked.connect(lambda: self._open_path(self._output_paths.get("video_annotated")))
-        self.btn_open_video2.clicked.connect(lambda: self._open_path(self._output_paths.get("video_clean")))
         self.btn_open_folder.clicked.connect(lambda: self._open_path(self._output_paths.get("folder")))
         self.btn_new_detection.clicked.connect(self._on_new_detection)
         self.tab_images.currentChanged.connect(self._on_result_tab_changed)
 
         # Botones de re-edicion de zona de calibracion
-        from PyQt5.QtWidgets import QPushButton
+        from PyQt5.QtWidgets import QPushButton, QHBoxLayout, QCheckBox
         _ZONE_DEFS_MW = [
             ("Borde Exterior", "Exterior Border", "#e74c3c"),
             ("Borde Interior", "Interior Border", "#3498db"),
@@ -660,9 +659,16 @@ class MainWindow(QMainWindow):
             self._calib_zone_btns.append(btn)
             zone_row_mw.addWidget(btn)
         zone_row_mw.addStretch()
+
+        self._chk_center_from_holes = QCheckBox("Borde Central = unión de agujeros (auto)")
+        self._chk_center_from_holes.setStyleSheet("font-size: 11px; color: #7a6000;")
+        self._chk_center_from_holes.stateChanged.connect(self._on_center_from_holes_changed)
+
         calib_outer = self.findChild(QVBoxLayout, "calibOuterLayout")
         if calib_outer is not None:
-            calib_outer.insertLayout(calib_outer.count() - 1, zone_row_mw)
+            idx = calib_outer.count() - 1
+            calib_outer.insertLayout(idx, zone_row_mw)
+            calib_outer.insertWidget(idx + 1, self._chk_center_from_holes)
 
         # Spinbox de radio de agujero inyectado en calibControlsLayout
         from PyQt5.QtWidgets import QGroupBox, QFormLayout, QSpinBox, QLabel
@@ -795,8 +801,14 @@ class MainWindow(QMainWindow):
         self._calib_edit_zone = None
         for btn in self._calib_zone_btns:
             btn.setChecked(False)
+            btn.setEnabled(True)
         self._calib_drag_hole_idx = -1
         self._calib_drag_handle   = -1
+        self._center_from_holes = False
+        if hasattr(self, "_chk_center_from_holes"):
+            self._chk_center_from_holes.blockSignals(True)
+            self._chk_center_from_holes.setChecked(False)
+            self._chk_center_from_holes.blockSignals(False)
         self._update_calib_fields()
         self._update_calib_instruction()
 
@@ -853,6 +865,7 @@ class MainWindow(QMainWindow):
     def _on_calib_mouse_release(self, event) -> None:
         self._calib_drag_hole_idx = -1
         self._calib_drag_handle   = -1
+        self._apply_center_from_holes()
 
     def _load_calib_frame_from_video(self) -> None:
         cap = cv2.VideoCapture(str(self._video_source))
@@ -990,9 +1003,10 @@ class MainWindow(QMainWindow):
                 self._calib_interior.append((orig_x, orig_y))
             elif phase == 2:
                 self._calib_holes.append((orig_x, orig_y))
-            elif phase == 3 and len(self._calib_center) < 2:
+            elif phase == 3 and not self._center_from_holes and len(self._calib_center) < 2:
                 self._calib_center.append((orig_x, orig_y))
 
+        self._apply_center_from_holes()
         self._update_calib_fields()
         self._update_calib_instruction()
         self._display_calib_frame()
@@ -1076,6 +1090,36 @@ class MainWindow(QMainWindow):
         else:
             self._calib_edit_zone = None
         self._update_calib_fields()
+        self._update_calib_instruction()
+        self._display_calib_frame()
+        self._update_confirm_state()
+
+    def _on_center_from_holes_changed(self, state: int) -> None:
+        self._center_from_holes = bool(state)
+        if hasattr(self, "_calib_zone_btns") and len(self._calib_zone_btns) > 3:
+            self._calib_zone_btns[3].setEnabled(not self._center_from_holes)
+            if self._center_from_holes:
+                self._calib_zone_btns[3].setChecked(False)
+                self._calib_edit_zone = None
+        if not self._center_from_holes:
+            self._calib_center = []
+            self._update_calib_instruction()
+            self._display_calib_frame()
+            self._update_confirm_state()
+        else:
+            self._apply_center_from_holes()
+
+    def _apply_center_from_holes(self) -> None:
+        """Si el modo auto está activo, recalcula _calib_center como bbox de los agujeros."""
+        if not self._center_from_holes:
+            return
+        holes = self._calib_holes
+        if len(holes) < 2:
+            self._calib_center = []
+        else:
+            xs = [p[0] for p in holes]
+            ys = [p[1] for p in holes]
+            self._calib_center = [(min(xs), min(ys)), (max(xs), max(ys))]
         self._update_calib_instruction()
         self._display_calib_frame()
         self._update_confirm_state()
@@ -1466,7 +1510,6 @@ class MainWindow(QMainWindow):
             "trajectory":      first(sd.glob("trajectory_*.png")) or first(run_dir.glob("trajectory_*.png")),
             "heatmap":         first(sd.glob("heatmap_*.png")) or first(run_dir.glob("heatmap_*.png")),
             "video_annotated": first(run_dir.glob("*_anotado.mp4")),
-            "video_clean":     None,
             "csv":             first(run_dir.glob("*.csv")),
             "coords_json":     first(run_dir.glob("coords_*.json")),
             "folder":          run_dir,
@@ -1509,12 +1552,10 @@ class MainWindow(QMainWindow):
 
         self.lbl_file_excel.setText(short_name(paths_dict.get("excel")))
         self.lbl_file_video1.setText(short_name(paths_dict.get("video_annotated")))
-        self.lbl_file_video2.setText(short_name(paths_dict.get("video_clean")))
 
         for btn, key in [
             (self.btn_open_excel,   "excel"),
             (self.btn_open_video1,  "video_annotated"),
-            (self.btn_open_video2,  "video_clean"),
         ]:
             p = paths_dict.get(key)
             btn.setEnabled(bool(p and Path(p).exists()))
@@ -1608,6 +1649,7 @@ class MainWindow(QMainWindow):
         self.btn_lang.setText("EN" if self._lang == "es" else "ES")
 
         # Actualiza etiquetas dinamicas segun idioma activo
+        self._setup_model_status()
         self._update_ratio_label()
         self._update_calib_instruction()
         self._update_confirm_state()
@@ -1819,16 +1861,29 @@ class MainWindow(QMainWindow):
 
     def _setup_model_status(self) -> None:
         ok = paths.yolo_model.exists()
-        status = paths.yolo_model.name if ok else "NOT FOUND"
+        if ok:
+            status = paths.yolo_model.name
+        else:
+            status = "SELECCIONAR MODELO" if self._lang == "es" else "SELECT MODEL"
         color  = "#2ecc71" if ok else "#e74c3c"
         self.lbl_model_status.setText(f"Model: {status}")
         self.lbl_model_status.setStyleSheet(
             f"font-size: 10px; color: {color}; padding: 0px 8px 14px 12px;"
         )
-        # Cursor de mano para indicar que es clicable
         from PyQt5.QtCore import Qt as _Qt
         self.lbl_model_status.setCursor(_Qt.PointingHandCursor)
         self.lbl_model_status.mousePressEvent = self._on_model_status_click
+        self._update_nav_guards(ok)
+
+    def _update_nav_guards(self, model_ok: bool) -> None:
+        """Habilita o deshabilita controles que requieren un modelo cargado."""
+        self.btn_video.setEnabled(model_ok)
+        self.btn_camera.setEnabled(model_ok)
+        self.nav_prelabeling.setEnabled(model_ok)
+        tip = "" if model_ok else "Selecciona primero un modelo (.pt)"
+        self.btn_video.setToolTip(tip)
+        self.btn_camera.setToolTip(tip)
+        self.nav_prelabeling.setToolTip(tip)
 
     def _on_model_status_click(self, event) -> None:
         """Permite al usuario cambiar el modelo .pt activo desde la barra lateral."""

@@ -28,16 +28,17 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal
 from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+_DEV_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(_DEV_ROOT / "scripts"))
 
 from config.config import paths, detect_cfg
 
-DATASETS_DIR = PROJECT_ROOT / "datasets"
-MODELS_DIR   = PROJECT_ROOT / "models"
+# paths.root = exe dir when frozen, project root in dev — always correct for user data.
+DATASETS_DIR = paths.root / "datasets"
+MODELS_DIR   = paths.root / "models"
 HOLE_RADIUS  = 15
 
-_LABEL_CONFIG_PATH = PROJECT_ROOT / "scripts" / "config" / "labels.json"
+_LABEL_CONFIG_PATH = paths.root / "scripts" / "config" / "labels.json"
 
 _DEFAULT_LABEL_CONFIG: list[dict] = [
     {"key_char": "1", "name": "climbing",     "display_es": "1: Escalando",     "display_en": "1: Climbing",   "hex_color": "#ff00ff", "bgr_color": [255,   0, 255]},
@@ -691,6 +692,7 @@ class PrelabelPage(QWidget):
         # Re-edicion de zona individual
         self._pl_calib_edit_zone: int | None = None
         self._pl_calib_zone_btns: list = []
+        self._pl_center_from_holes: bool = False
 
         # Carpeta de salida del dataset (override de DATASETS_DIR)
         self._output_dir_override: Path | None = None
@@ -863,6 +865,11 @@ class PrelabelPage(QWidget):
         zone_row_pl.addStretch()
         layout.addLayout(zone_row_pl)
 
+        self._chk_pl_center_from_holes = QCheckBox("Borde Central = unión de agujeros (auto)")
+        self._chk_pl_center_from_holes.setStyleSheet("font-size: 11px; color: #7a6000;")
+        self._chk_pl_center_from_holes.stateChanged.connect(self._on_pl_center_from_holes_changed)
+        layout.addWidget(self._chk_pl_center_from_holes)
+
         self._lbl_pl_calib_instr = QLabel("")
         self._lbl_pl_calib_instr.setStyleSheet("color: #1a6a2a; font-size: 11px;")
         layout.addWidget(self._lbl_pl_calib_instr)
@@ -1025,6 +1032,35 @@ class PrelabelPage(QWidget):
 
         ctrl.addSpacing(12)
 
+        # Submuestreo anti-overfitting
+        self._lbl_stride = QLabel("1 de cada")
+        self._lbl_stride.setStyleSheet("font-size: 11px;")
+        ctrl.addWidget(self._lbl_stride)
+        self._spn_stride = QSpinBox()
+        self._spn_stride.setRange(1, 30)
+        self._spn_stride.setValue(5)
+        self._spn_stride.setSuffix(" fr.")
+        self._spn_stride.setToolTip(
+            "Submuestreo: guarda 1 frame de cada N dentro de cada rango etiquetado.\n"
+            "Reduce frames casi idénticos y evita overfitting.\n"
+            "Recomendado: FPS/3 (p. ej. 10 para 30fps, 5 para 15fps)."
+        )
+        self._spn_stride.setFixedWidth(70)
+        ctrl.addWidget(self._spn_stride)
+
+        ctrl.addSpacing(12)
+
+        self._btn_cancel_labeling = QPushButton("Cancelar")
+        self._btn_cancel_labeling.setStyleSheet(
+            "QPushButton { background-color: #555; color: white; font-weight: bold; "
+            "padding: 4px 12px; border-radius: 4px; } "
+            "QPushButton:hover { background-color: #333; }"
+        )
+        self._btn_cancel_labeling.clicked.connect(self._on_cancel_labeling)
+        ctrl.addWidget(self._btn_cancel_labeling)
+
+        ctrl.addSpacing(6)
+
         self._btn_finish = QPushButton(_PL_T["finish_btn"][self._lang])
         self._btn_finish.setStyleSheet(
             "QPushButton { background-color: #CB0017; color: white; font-weight: bold; "
@@ -1144,6 +1180,35 @@ class PrelabelPage(QWidget):
             self._pl_calib_edit_zone = zone
         else:
             self._pl_calib_edit_zone = None
+        self._pl_display_calib_frame()
+        self._update_pl_calib_instruction()
+        self._update_step0_next()
+
+    def _on_pl_center_from_holes_changed(self, state: int) -> None:
+        self._pl_center_from_holes = bool(state)
+        if hasattr(self, "_pl_calib_zone_btns") and len(self._pl_calib_zone_btns) > 3:
+            self._pl_calib_zone_btns[3].setEnabled(not self._pl_center_from_holes)
+            if self._pl_center_from_holes:
+                self._pl_calib_zone_btns[3].setChecked(False)
+                self._pl_calib_edit_zone = None
+        if not self._pl_center_from_holes:
+            self._pl_calib_center = []
+            self._pl_display_calib_frame()
+            self._update_pl_calib_instruction()
+            self._update_step0_next()
+        else:
+            self._apply_pl_center_from_holes()
+
+    def _apply_pl_center_from_holes(self) -> None:
+        if not self._pl_center_from_holes:
+            return
+        holes = self._pl_calib_holes
+        if len(holes) < 2:
+            self._pl_calib_center = []
+        else:
+            xs = [p[0] for p in holes]
+            ys = [p[1] for p in holes]
+            self._pl_calib_center = [(min(xs), min(ys)), (max(xs), max(ys))]
         self._pl_display_calib_frame()
         self._update_pl_calib_instruction()
         self._update_step0_next()
@@ -1280,9 +1345,10 @@ class PrelabelPage(QWidget):
                 self._pl_calib_interior.append((ox, oy))
             elif phase == 2:
                 self._pl_calib_holes.append((ox, oy))
-            elif phase == 3 and len(self._pl_calib_center) < 2:
+            elif phase == 3 and not self._pl_center_from_holes and len(self._pl_calib_center) < 2:
                 self._pl_calib_center.append((ox, oy))
 
+        self._apply_pl_center_from_holes()
         self._pl_display_calib_frame()
         self._update_pl_calib_instruction()
         self._update_step0_next()
@@ -1304,6 +1370,7 @@ class PrelabelPage(QWidget):
     def _on_pl_calib_mouse_release(self, event) -> None:
         self._pl_drag_hole_idx = -1
         self._pl_drag_handle   = -1
+        self._apply_pl_center_from_holes()
 
     def _on_hole_radius_changed(self, value: int) -> None:
         self._pl_hole_radius = value
@@ -1755,17 +1822,53 @@ class PrelabelPage(QWidget):
     # Finalizar — generar dataset
     # ------------------------------------------------------------------
 
+    def _subsample_labeled_frames(self, frames: list, stride: int) -> list:
+        """Submuestrea frames dentro de cada run contigua con la misma etiqueta.
+
+        Dentro de cada bloque de frames consecutivos que comparten etiqueta,
+        conserva 1 de cada `stride`. Frames no consecutivos (saltos de etiqueta
+        o huecos) siempre se conservan como inicio de nuevo bloque.
+        """
+        if stride <= 1:
+            return frames
+        sorted_f = sorted(frames)
+        if not sorted_f:
+            return []
+
+        result = []
+        i = 0
+        while i < len(sorted_f):
+            run_start = i
+            cur_label = self._label_map.get(sorted_f[i])
+            # Buscar fin del run contiguo con la misma etiqueta
+            j = i + 1
+            while j < len(sorted_f):
+                if (sorted_f[j] == sorted_f[j - 1] + 1
+                        and self._label_map.get(sorted_f[j]) == cur_label):
+                    j += 1
+                else:
+                    break
+            run = sorted_f[i:j]
+            # Submuestrear con stride; siempre incluir el primer frame del run
+            sampled = run[::stride]
+            result.extend(sampled)
+            i = j
+        return result
+
     def _on_finish(self) -> None:
         self._playing = False
         self._timer.stop()
         self._btn_pause.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
 
-        valid_frames = [
+        all_labeled = [
             f for f in self._label_map
             if f in self._detections
             and self._detections[f] is not None
             and self._detections[f][0] is not None
         ]
+
+        stride = self._spn_stride.value() if hasattr(self, "_spn_stride") else 1
+        valid_frames = self._subsample_labeled_frames(all_labeled, stride)
 
         t = _PL_T
         L = self._lang
@@ -1793,6 +1896,18 @@ class PrelabelPage(QWidget):
         )
         self._reset_for_new_video()
 
+    def _on_cancel_labeling(self) -> None:
+        """Pregunta confirmacion y vuelve a la pantalla inicial de pre-etiquetado."""
+        resp = QMessageBox.question(
+            self,
+            "Cancelar etiquetado",
+            "¿Seguro que quieres cancelar?\nSe perderá el etiquetado no guardado.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if resp == QMessageBox.Yes:
+            self._reset_for_new_video()
+
     def _reset_for_new_video(self) -> None:
         """Vuelve al paso 0 limpio para etiquetar otro video."""
         self._timer.stop()
@@ -1811,8 +1926,14 @@ class PrelabelPage(QWidget):
         self._pl_calib_center   = []
         self._pl_calib_frame    = None
         self._pl_calib_edit_zone = None
+        self._pl_center_from_holes = False
         for btn in self._pl_calib_zone_btns:
             btn.setChecked(False)
+            btn.setEnabled(True)
+        if hasattr(self, "_chk_pl_center_from_holes"):
+            self._chk_pl_center_from_holes.blockSignals(True)
+            self._chk_pl_center_from_holes.setChecked(False)
+            self._chk_pl_center_from_holes.blockSignals(False)
         self._output_dir_override = None
         self._lbl_video_path.setText("Ningun video seleccionado")
         self._lbl_pl_import_status.setText("")

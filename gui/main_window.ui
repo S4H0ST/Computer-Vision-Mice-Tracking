@@ -82,7 +82,7 @@ QPushButton#btn_confirm_calib:hover {
     background-color: #2ecc71;
 }
 QPushButton#btn_open_excel, QPushButton#btn_open_video1,
-QPushButton#btn_open_video2, QPushButton#btn_open_folder {
+QPushButton#btn_open_folder {
     background-color: #ecf0f1;
     color: #2c3e50;
     border: 1px solid #bdc3c7;
@@ -91,7 +91,7 @@ QPushButton#btn_open_video2, QPushButton#btn_open_folder {
     min-width: 56px;
 }
 QPushButton#btn_open_excel:hover, QPushButton#btn_open_video1:hover,
-QPushButton#btn_open_video2:hover, QPushButton#btn_open_folder:hover {
+QPushButton#btn_open_folder:hover {
     background-color: #d5dbdb;
 }
 QLabel#lbl_video_feed, QLabel#lbl_frame_display,
@@ -1631,50 +1631,6 @@ QListWidget#list_result_runs::item:selected {
                  </item>
                  <item>
                   <widget class="QPushButton" name="btn_open_video1">
-                   <property name="text">
-                    <string>Abrir</string>
-                   </property>
-                  </widget>
-                 </item>
-                </layout>
-               </item>
-               <item>
-                <layout class="QHBoxLayout" name="video2Row">
-                 <property name="spacing">
-                  <number>6</number>
-                 </property>
-                 <item>
-                  <layout class="QVBoxLayout" name="video2LabelCol">
-                   <property name="spacing">
-                    <number>1</number>
-                   </property>
-                   <item>
-                    <widget class="QLabel" name="lbl_file_video2">
-                     <property name="text">
-                      <string>Video de recorrido</string>
-                     </property>
-                     <property name="styleSheet">
-                      <string notr="true">font-size: 12px; font-weight: bold;</string>
-                     </property>
-                    </widget>
-                   </item>
-                   <item>
-                    <widget class="QLabel" name="lbl_desc_video2">
-                     <property name="text">
-                      <string>Video solo con etiquetas, sin zonas de fondo</string>
-                     </property>
-                     <property name="wordWrap">
-                      <bool>true</bool>
-                     </property>
-                     <property name="styleSheet">
-                      <string notr="true">color: #7f8c8d; font-size: 10px;</string>
-                     </property>
-                    </widget>
-                   </item>
-                  </layout>
-                 </item>
-                 <item>
-                  <widget class="QPushButton" name="btn_open_video2">
                    <property name="text">
                     <string>Abrir</string>
                    </property>
