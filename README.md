@@ -53,6 +53,18 @@ The project went through 6 completed phases plus one active phase. Each complete
 **Commit:** [17050d38](https://github.com/S4H0ST/Computer-Vision-Mice-Tracking/commit/17050d38f900f684169ed35e07098b993205c43e)
 
 Standard YOLOv8 trained on a large frame-extracted dataset. Immediate overfitting — high visual similarity between frames caused the model to memorise background rather than learn posture. Fixed by drastically reducing dataset size and applying geometric augmentation only (no color changes — the environment is always the same white arena).
+
+Five complementary mechanisms prevent overfitting in every training run. All are set in `scripts/detection/trainer.py` inside the `model.train(...)` call:
+
+| Mechanism | Parameter | Value | What it does |
+|---|---|---|---|
+| **Early stopping** | `patience` | 30 epochs | Halts training automatically if validation mAP50 does not improve for 30 consecutive epochs — the primary safety net |
+| **Dropout** | `dropout` | 0.2 (20 %) | Randomly deactivates 20 % of neurons each forward pass, forcing the model to learn redundant representations instead of memorising specific paths |
+| **L2 regularisation** | `weight_decay` | 0.0008 | Adds a penalty proportional to the square of each weight — discourages large weights that indicate reliance on specific training features |
+| **Cosine LR schedule** | `cos_lr` | True | Smoothly reduces the learning rate following a cosine curve, guiding the optimiser toward flat minima that generalise better than sharp ones |
+| **Geometric augmentation** | `degrees`, `fliplr`, `flipud`, `scale`, `translate` | 180°, 0.5, 0.5, ±40 %, ±5 % | Every epoch each image is rotated, flipped and rescaled randomly — the model never sees the same image twice, making pixel-level memorisation impossible |
+
+Color augmentation (`hsv_h`, `hsv_s`, `hsv_v`) is **explicitly disabled** — the recording environment is controlled (same arena, same lighting every session), so colour invariance does not exist in the real domain and training for it would waste model capacity.
 </details>
 
 <details>
@@ -233,6 +245,20 @@ Zones are calibrated interactively per video (first frame is extracted automatic
 | Detection rate on test video | **92.1 %** | — | — |
 
 > **Why Recall over Precision:** A missed frame = a lost behavioral data point. Occasional false positives are filtered by the spatial logic downstream; false negatives are unrecoverable.
+
+### Overfitting prevention
+
+With only ~230 training images in a visually homogeneous environment, memorisation is a constant risk. Five mechanisms work together to prevent it — all configured in `scripts/detection/trainer.py`:
+
+| Mechanism | Value | Role |
+|---|---|---|
+| Early stopping (`patience=30`) | stops if val mAP50 flat for 30 epochs | **Primary safety net** — terminates training the moment generalisation stops improving |
+| Dropout (`dropout=0.2`) | 20 % neurons dropped per pass | Forces redundant representations; no single path can be memorised |
+| L2 regularisation (`weight_decay=0.0008`) | penalty ∝ w² on every weight | Discourages large weights that encode dataset-specific features |
+| Cosine LR schedule (`cos_lr=True`) | lr decays smoothly epoch 0→N | Converges to flat minima — generalise better than sharp ones |
+| Geometric augmentation | rotation ±180°, flip H/V, scale ±40 % | Each epoch the model sees a different geometric variant of every image |
+
+Color augmentation is **off** (`hsv_h/s/v = 0`, `mosaic = 0`, `erasing = 0`): the arena lighting is constant across all sessions, so colour invariance does not exist in the deployment domain.
 
 ---
 
