@@ -49,7 +49,7 @@ _MW_HANDLE_SIZE   = 5
 # (widget_name, method, text_es, text_en)
 _TRANSLATIONS: list[tuple] = [
     ("nav_home",              "setText",  "  Inicio",                         "  Home"),
-    ("nav_prelabeling",       "setText",  "  Pre-Etiquetado",                 "  Pre-Labeling"),
+    ("nav_prelabeling",       "setText",  "  Fase Etiquetado",                "  Labeling Phase"),
     ("nav_train",             "setText",  "  Entrenar",                       "  Train"),
     ("nav_results",           "setText",  "  Resultados",                     "  Results"),
     ("_nav_compare",          "setText",  "  Comparar Grupos",                "  Compare Groups"),
@@ -117,6 +117,12 @@ _TRANSLATIONS: list[tuple] = [
     ("btn_new_detection",     "setText",  "Nueva Deteccion",                  "New Detection"),
     ("s_lbl_res_dist_px",    "setText",  "Distancia (px):",                  "Distance (px):"),
     ("s_lbl_res_dist_cm",    "setText",  "Distancia (cm):",                  "Distance (cm):"),
+    ("menuFile",              "setTitle", "Archivo",                          "File"),
+    ("menuHelp",              "setTitle", "Ayuda",                            "Help"),
+    ("action_nueva_deteccion","setText",  "Nueva Deteccion",                  "New Detection"),
+    ("action_salir",          "setText",  "Salir",                            "Exit"),
+    ("action_help",           "setText",  "Guia de Uso",                      "User Guide"),
+    ("action_acerca_de",      "setText",  "Acerca de...",                     "About..."),
     ("tab_images",            None,       None,                               None),
     # Avisos de validacion (el texto lo gestiona _update_confirm_state directamente)
     ("lbl_warn_output",       None,       None,                               None),
@@ -179,7 +185,7 @@ using computer vision and YOLO-Pose keypoint detection.
 The sidebar gives access to all modules:</p>
 <ul>
   <li><b>Home</b> — start a detection session (video file or live camera).</li>
-  <li><b>Pre-Labeling</b> — manually label an existing video to generate a training dataset.</li>
+  <li><b>Labeling Phase</b> — manually label an existing video to generate a training dataset.</li>
   <li><b>Train</b> — fine-tune the YOLO model on your labelled dataset.</li>
   <li><b>Results</b> — view trajectory images, heatmaps and generated files.</li>
   <li><b>Compare Groups</b> — statistical comparison between two experimental groups.</li>
@@ -192,7 +198,7 @@ The sidebar gives access to all modules:</p>
   <b>Start Camera</b> — open the default webcam for real-time analysis.
 </div>
 <p>Either button proceeds to the <b>Calibration</b> page automatically.</p>
-<div class="tip">These buttons and the Pre-Labeling sidebar entry are only available
+<div class="tip">These buttons and the Labeling Phase sidebar entry are only available
 after a model has been selected. If the sidebar shows <b>SELECT MODEL</b> (in red),
 click it to browse and load a <code>.pt</code> weights file from <code>models/</code>.</div>
 
@@ -232,16 +238,18 @@ Use <b>← Back</b> (visible after cancelling) to fix the calibration and re-run
 </ul>
 <div class="tip">Tip: click <b>Select Folder</b> in the top-right to load results from any previous run.</div>
 
-<h2>Pre-Labeling</h2>
+<h2>Labeling Phase</h2>
 <p>Manually label a recorded video to produce a YOLO-Pose training dataset.</p>
 <div class="step">
   <b>Step 1</b> — Select the video, calibrate the arena (or import existing coords),
   choose an output dataset folder, then click <b>Next →</b>.<br>
   <b>Step 2</b> — The model pre-processes all frames (runs inference to extract bounding boxes
   and keypoints). Progress is shown on screen; press <b>Cancel</b> to abort.<br>
-  <b>Step 3</b> — Use the playback controls to navigate the video.
-  Press the number keys (or click the coloured buttons) to assign a behaviour label
-  to the current frame while playing. Press <b>O</b> to toggle occluded-snout mode for the current frame.
+  <b>Step 3</b> — Use the playback controls or <b>click/drag the colour timeline bar</b> to
+  navigate the video. The colour bar shows all assigned labels; clicking or dragging it jumps
+  to that position without overwriting any existing labels.
+  Press the configured keys (shown on the right-hand buttons) or click a coloured button to
+  assign a behaviour label to the current frame. Press <b>O</b> to toggle occluded-snout mode.
   Click <b>Finish and Generate Dataset</b> to export.
 </div>
 <p>The dataset is saved under the selected folder with the structure
@@ -270,19 +278,25 @@ behaviour distributions with bar charts and statistical tests.</p>
 <ul>
   <li>Add a new behaviour label (key, internal name, Spanish/English display text, colour).</li>
   <li>Remove an existing label.</li>
-  <li>Change the keyboard shortcut (single alphanumeric character).</li>
+  <li>Change the keyboard shortcut — any single character is accepted: letters, digits, or
+      symbols (e.g. <kbd>!</kbd>, <kbd>.</kbd>, <kbd>-</kbd>). Accents and case are ignored
+      when matching keys (pressing <kbd>á</kbd> triggers the same label as <kbd>A</kbd>).</li>
   <li>Change the colour by clicking the colour cell.</li>
 </ul>
+<p>The right-hand panel in Labeling Phase always shows the <b>actual current key</b> next to
+each label name, so you always know what to press even after changing shortcuts.</p>
 <p>Changes are saved to <code>scripts/config/labels.json</code> and take effect the next
-time you open the Pre-Labeling tab.</p>
+time you open the Labeling Phase tab.</p>
 
 <h2>Keyboard Shortcuts</h2>
 <ul>
   <li><kbd>Ctrl+N</kbd> — New Detection (from any page)</li>
   <li><kbd>Ctrl+Q</kbd> — Exit the application</li>
   <li><kbd>F1</kbd> — Open this guide</li>
-  <li><kbd>1</kbd>–<kbd>7</kbd> (Pre-Labeling) — assign a behaviour label to the current frame</li>
-  <li><kbd>O</kbd> (Pre-Labeling) — toggle occluded-snout marker</li>
+  <li>Configured keys (Labeling Phase) — assign a behaviour label to the current frame;
+      the actual key for each label is shown on the coloured buttons on the right</li>
+  <li><kbd>O</kbd> (Labeling Phase) — toggle occluded-snout marker (unless <kbd>O</kbd>
+      is already assigned to a label)</li>
 </ul>
 """
 
@@ -317,7 +331,7 @@ written to <code>outputs/calibration/</code> for convenience.</p>
 <h3>The sidebar shows "SELECT MODEL" in red. What do I do?</h3>
 <p>Click the label itself to open a file browser and select a <code>.pt</code> weights file
 from the <code>models/</code> folder next to the application.
-Until a model is loaded, <b>Select Video</b>, <b>Start Camera</b> and <b>Pre-Labeling</b>
+Until a model is loaded, <b>Select Video</b>, <b>Start Camera</b> and <b>Labeling Phase</b>
 are disabled.</p>
 
 <h3>Can I stop detection mid-way and still get results?</h3>
@@ -326,10 +340,10 @@ been processed so far — trajectory image, heatmap, annotated video and stats s
 will all reflect the partial run.</p>
 
 <h3>How do I create a training dataset?</h3>
-<p>Use the <b>Pre-Labeling</b> module: select a video, calibrate the arena, choose an
-output folder, then label each frame with behaviour keys (1–7 by default).
-When done, click <b>Finish and Generate Dataset</b>. Repeat for more videos —
-frames accumulate in the same dataset folder.</p>
+<p>Use the <b>Labeling Phase</b> module: select a video, calibrate the arena, choose an
+output folder, then label each frame with the configured behaviour keys (shown on the
+right-hand coloured buttons). When done, click <b>Finish and Generate Dataset</b>.
+Repeat for more videos — frames accumulate in the same dataset folder.</p>
 
 <h3>How do I train the model on my dataset?</h3>
 <p>Go to <b>Train</b>, point it at the dataset folder (where <code>data.yaml</code> lives),
@@ -337,9 +351,10 @@ give the model a name, and click <b>Train</b>. The best checkpoint is saved to
 <code>models/</code> automatically.</p>
 
 <h3>How do I add a new behaviour label?</h3>
-<p>Click <b>Config. Etiquetas</b> in the sidebar. Add a row with a unique key character,
-an internal name, display text (ES / EN) and a colour. Save — the new label appears
-the next time you open Pre-Labeling.</p>
+<p>Click <b>Config. Etiquetas</b> in the sidebar. Add a row with a unique key character
+(letters, digits or symbols — accents and case are ignored), an internal name, display
+text (ES / EN) and a colour. Save — the new label appears the next time you open the
+Labeling Phase and its actual key is always shown on the coloured button.</p>
 
 <h3>How do I switch the interface language?</h3>
 <p>Click the <b>ES / EN</b> button in the sidebar (below <b>Comparar Grupos</b>)
@@ -353,7 +368,7 @@ mediante vision por computador y deteccion de keypoints YOLO-Pose.
 La barra lateral da acceso a todos los modulos:</p>
 <ul>
   <li><b>Inicio</b> — inicia una sesion de deteccion (video o camara en directo).</li>
-  <li><b>Pre-Etiquetado</b> — etiqueta manualmente un video para generar un dataset de entrenamiento.</li>
+  <li><b>Fase Etiquetado</b> — etiqueta manualmente un video para generar un dataset de entrenamiento.</li>
   <li><b>Entrenar</b> — ajusta el modelo YOLO sobre tu dataset etiquetado.</li>
   <li><b>Resultados</b> — visualiza trayectorias, mapas de calor y archivos generados.</li>
   <li><b>Comparar Grupos</b> — comparacion estadistica entre dos grupos experimentales.</li>
@@ -366,7 +381,7 @@ La barra lateral da acceso a todos los modulos:</p>
   <b>Iniciar Camara</b> — abre la camara por defecto para analisis en tiempo real.
 </div>
 <p>Cualquiera de los dos botones avanza automaticamente a la pantalla de <b>Calibracion</b>.</p>
-<div class="tip">Estos botones y el acceso a Pre-Etiquetado solo estan disponibles cuando hay
+<div class="tip">Estos botones y el acceso a Fase Etiquetado solo estan disponibles cuando hay
 un modelo cargado. Si la barra lateral muestra <b>SELECCIONAR MODELO</b> (en rojo),
 haz clic en esa etiqueta para elegir un archivo <code>.pt</code> de la carpeta <code>models/</code>.</div>
 
@@ -411,16 +426,18 @@ para cargar una ejecucion anterior.</p>
 <div class="tip">Consejo: haz clic en <b>Seleccionar Carpeta</b> (arriba a la derecha)
 para cargar resultados de cualquier ejecucion anterior.</div>
 
-<h2>Pre-Etiquetado</h2>
+<h2>Fase Etiquetado</h2>
 <p>Etiqueta manualmente un video grabado para producir un dataset de entrenamiento YOLO-Pose.</p>
 <div class="step">
   <b>Paso 1</b> — Selecciona el video, calibra la arena (o importa coordenadas existentes),
   elige una carpeta de dataset y pulsa <b>Siguiente →</b>.<br>
   <b>Paso 2</b> — El modelo pre-procesa todos los frames (inferencia para extraer cajas y keypoints).
   El progreso se muestra en pantalla; pulsa <b>Cancelar</b> para abortar.<br>
-  <b>Paso 3</b> — Usa los controles de reproduccion para navegar el video.
-  Pulsa las teclas numericas (o haz clic en los botones de colores) para asignar una etiqueta
-  al frame actual mientras se reproduce. Pulsa <b>O</b> para marcar el hocico como oculto.
+  <b>Paso 3</b> — Usa los controles de reproduccion o <b>haz clic / arrastra la barra de colores</b>
+  para navegar el video. La barra muestra las etiquetas asignadas; hacer clic o arrastrar salta
+  a esa posicion sin sobreescribir etiquetas existentes.
+  Pulsa la tecla configurada (indicada en los botones de colores de la derecha) para asignar
+  una etiqueta al frame actual. Pulsa <b>O</b> para marcar el hocico como oculto.
   Haz clic en <b>Finalizar y Generar Dataset</b> para exportar.
 </div>
 <p>El dataset se guarda con la estructura
@@ -449,19 +466,26 @@ sus distribuciones de comportamiento con graficas de barras y pruebas estadistic
 <ul>
   <li>Añadir una nueva etiqueta (tecla, nombre interno, texto ES / EN, color).</li>
   <li>Eliminar una etiqueta existente.</li>
-  <li>Cambiar el atajo de teclado (un solo caracter alfanumerico).</li>
+  <li>Cambiar el atajo de teclado — se admite cualquier caracter: letras, digitos o simbolos
+      (p. ej. <kbd>!</kbd>, <kbd>.</kbd>, <kbd>-</kbd>). Las tildes y mayusculas se ignoran
+      al reconocer la tecla (pulsar <kbd>a</kbd> o <kbd>A</kbd> o <kbd>á</kbd> activan la
+      misma etiqueta asignada a <kbd>A</kbd>).</li>
   <li>Cambiar el color haciendo clic en la celda de color.</li>
 </ul>
+<p>El panel derecho en la Fase Etiquetado siempre muestra la <b>tecla real actual</b> junto al
+nombre de cada etiqueta, para que sepas que pulsar en todo momento.</p>
 <p>Los cambios se guardan en <code>scripts/config/labels.json</code> y se aplican la proxima
-vez que abres la pestana Pre-Etiquetado.</p>
+vez que abres la Fase Etiquetado.</p>
 
 <h2>Atajos de teclado</h2>
 <ul>
   <li><kbd>Ctrl+N</kbd> — Nueva Deteccion (desde cualquier pantalla)</li>
   <li><kbd>Ctrl+Q</kbd> — Salir de la aplicacion</li>
   <li><kbd>F1</kbd> — Abrir esta guia</li>
-  <li><kbd>1</kbd>–<kbd>7</kbd> (Pre-Etiquetado) — asignar etiqueta de comportamiento al frame actual</li>
-  <li><kbd>O</kbd> (Pre-Etiquetado) — alternar marcador de hocico oculto</li>
+  <li>Teclas configuradas (Fase Etiquetado) — asignar etiqueta al frame actual;
+      la tecla de cada etiqueta se muestra en los botones de colores de la derecha</li>
+  <li><kbd>O</kbd> (Fase Etiquetado) — alternar marcador de hocico oculto (salvo que
+      <kbd>O</kbd> este asignada a una etiqueta)</li>
 </ul>
 """
 
@@ -497,17 +521,17 @@ importarlo en la siguiente sesion con <b>Importar Coordenadas → Examinar…</b
 <p>Haz clic en esa etiqueta para abrir un explorador de archivos y seleccionar un archivo
 de pesos <code>.pt</code> de la carpeta <code>models/</code> junto a la aplicacion.
 Hasta que se cargue un modelo, <b>Seleccionar Video</b>, <b>Iniciar Camara</b> y
-<b>Pre-Etiquetado</b> estan desactivados.</p>
+<b>Fase Etiquetado</b> estan desactivados.</p>
 
 <h3>¿Puedo detener la deteccion a mitad y obtener igualmente los resultados?</h3>
 <p>Si. Pulsa <b>Cancelar</b>, confirma el dialogo, y la app guardara todo lo procesado:
 trayectoria, mapa de calor, video anotado y Excel reflejaran la ejecucion parcial.</p>
 
 <h3>¿Como creo un dataset de entrenamiento?</h3>
-<p>Usa el modulo <b>Pre-Etiquetado</b>: selecciona un video, calibra la arena, elige una
-carpeta de salida y etiqueta cada frame con las teclas de comportamiento (1–7 por defecto).
-Al terminar, pulsa <b>Finalizar y Generar Dataset</b>. Repite con mas videos —
-los frames se acumulan en la misma carpeta de dataset.</p>
+<p>Usa el modulo <b>Fase Etiquetado</b>: selecciona un video, calibra la arena, elige una
+carpeta de salida y etiqueta cada frame con las teclas configuradas (se muestran en los botones
+de colores de la derecha). Al terminar, pulsa <b>Finalizar y Generar Dataset</b>. Repite con
+mas videos — los frames se acumulan en la misma carpeta de dataset.</p>
 
 <h3>¿Como entreno el modelo con mi dataset?</h3>
 <p>Ve a <b>Entrenar</b>, indica la carpeta del dataset (donde esta <code>data.yaml</code>),
@@ -515,9 +539,11 @@ pon un nombre al modelo y pulsa <b>Entrenar</b>. El mejor checkpoint se guarda e
 <code>models/</code> automaticamente.</p>
 
 <h3>¿Como añado una nueva etiqueta de comportamiento?</h3>
-<p>Haz clic en <b>Config. Etiquetas</b> en la barra lateral. Añade una fila con tecla,
+<p>Haz clic en <b>Config. Etiquetas</b> en la barra lateral. Añade una fila con tecla
+(cualquier caracter: letras, digitos o simbolos; tildes y mayusculas se ignoran),
 nombre interno, texto de visualizacion (ES / EN) y color. Guarda — la nueva etiqueta
-aparecera la proxima vez que abras Pre-Etiquetado.</p>
+aparecera la proxima vez que abras la Fase Etiquetado, con la tecla actual siempre visible
+en el boton de color.</p>
 
 <h3>¿Como cambio el idioma de la interfaz?</h3>
 <p>Haz clic en el boton <b>ES / EN</b> en la barra lateral izquierda (debajo de Comparar Grupos).</p>
