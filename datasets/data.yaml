@@ -1,9 +1,0 @@
-path: C:\Users\sohai\Documents\1_TFG\Github_Proyect\Computer-Vision-Mice-Tracking\datasets
-train: unified/train/images
-val:   unified/valid/images
-test:  unified/test/images
-
-nc: 5
-names: ['rat_climbing', 'rat_grooming', 'rat_head_dipping', 'rat_inmobile', 'rat_rearing']
-kpt_shape: [3, 3]
-flip_idx: [0, 1, 2]
