@@ -311,10 +311,10 @@ class TrainPage(QWidget):
         self._btn_cancel.setFixedHeight(40)
         self._btn_cancel.setFixedWidth(110)
         self._btn_cancel.setStyleSheet(
-            "QPushButton { background-color: #555; color: white; font-weight: bold; "
-            "font-size: 13px; border-radius: 6px; } "
-            "QPushButton:disabled { background-color: #ccc; color: #999; } "
-            "QPushButton:hover:!disabled { background-color: #333; }"
+            "QPushButton { background-color: #ffffff; color: #CB0017; font-weight: bold; "
+            "font-size: 13px; border-radius: 6px; border: 2px solid #CB0017; } "
+            "QPushButton:disabled { background-color: #f5f5f5; color: #ccc; border: 2px solid #ddd; } "
+            "QPushButton:hover:!disabled { background-color: #fde8ea; border: 2px solid #a80013; color: #a80013; }"
         )
         self._btn_cancel.clicked.connect(self._on_cancel)
         btn_row.addWidget(self._btn_cancel)
