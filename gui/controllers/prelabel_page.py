@@ -10,7 +10,9 @@ Flujo multi-paso:
 
 import math
 import random
+import re
 import sys
+import unicodedata
 from pathlib import Path
 
 import cv2
@@ -72,18 +74,24 @@ def _save_label_config(config: list[dict]) -> None:
 
 
 _KEY_DISPLAY: dict = {}
+_KEY_CHARS:   dict = {}
 PRELABEL_KEYS: list = []
 CLASS_NAMES:   list = []
 
 
 def reload_prelabel_config() -> None:
-    """Rebuilds module-level PRELABEL_KEYS / CLASS_NAMES / _KEY_DISPLAY from JSON."""
+    """Rebuilds module-level PRELABEL_KEYS / CLASS_NAMES / _KEY_DISPLAY / _KEY_CHARS from JSON."""
     config = _load_label_config()
     new_keys: list = []
     new_display: dict = {}
+    new_key_chars: dict = {}
     for entry in config:
-        key_char = entry.get("key_char", "1").upper()
-        qt_key = getattr(Qt, f"Key_{key_char}", Qt.Key_1)
+        raw_key = entry.get("key_char", "1")
+        # Normalize: strip accents → ASCII, uppercase; works for symbols too
+        _norm = unicodedata.normalize('NFKD', raw_key).encode('ASCII', 'ignore').decode('ASCII').upper()
+        key_char = _norm[0] if _norm else raw_key[0].upper()
+        # Qt key codes for printable ASCII chars equal their Unicode code point
+        qt_key = ord(key_char) if len(key_char) == 1 else Qt.Key_1
         name = entry["name"]
         disp_es = entry.get("display_es", f"{key_char}: {name}")
         hex_c   = entry.get("hex_color", "#888888")
@@ -93,20 +101,33 @@ def reload_prelabel_config() -> None:
             "es": disp_es,
             "en": entry.get("display_en", disp_es),
         }
+        new_key_chars[name] = key_char
     PRELABEL_KEYS[:] = new_keys
     CLASS_NAMES[:] = [k[1] for k in new_keys]
     _KEY_DISPLAY.clear()
     _KEY_DISPLAY.update(new_display)
+    _KEY_CHARS.clear()
+    _KEY_CHARS.update(new_key_chars)
 
 
 reload_prelabel_config()
 
+
+def _btn_label_text(name: str, lang: str) -> str:
+    """Button text always showing the actual current key char, even if the display text changed."""
+    key = _KEY_CHARS.get(name, '?')
+    display = _KEY_DISPLAY.get(name, {}).get(lang, name)
+    # Strip any existing leading 'X: ' prefix so the key never appears twice
+    clean = re.sub(r'^.\s*:\s*', '', display).strip() or display
+    return f"{key}: {clean}"
+
+
 # Textos traducibles
 _PL_T = {
-    "step0_title":     {"es": "Pre-Etiquetado — Seleccion de Video",
-                        "en": "Pre-Labeling — Video Selection"},
-    "step1_title":     {"es": "Pre-Etiquetado — Procesando Video",
-                        "en": "Pre-Labeling — Processing Video"},
+    "step0_title":     {"es": "Fase Etiquetado — Seleccion de Video",
+                        "en": "Labeling Phase — Video Selection"},
+    "step1_title":     {"es": "Fase Etiquetado — Procesando Video",
+                        "en": "Labeling Phase — Processing Video"},
     "no_video":        {"es": "Selecciona un video para mostrar el primer frame",
                         "en": "Select a video to display the first frame"},
     "browse_video":    {"es": "Seleccionar Video...",    "en": "Browse Video..."},
@@ -168,8 +189,8 @@ _PL_T = {
     "gen_done_msg":       {"es": "Dataset guardado en:\n{path}\n\nFrames etiquetados: {n}\nPuedes etiquetar otro video o ir a Entrenar.",
                            "en": "Dataset saved to:\n{path}\n\nLabelled frames: {n}\nYou can label another video or go to Train."},
     "lsd_title":          {"es": "Configurar Etiquetas",      "en": "Label Settings"},
-    "lsd_desc":           {"es": "Define las etiquetas disponibles durante el Pre-Etiquetado. Haz clic en la celda de <b>Color</b> para cambiar el color.",
-                           "en": "Define the labels available during Pre-Labeling. Click the <b>Colour</b> cell to change it."},
+    "lsd_desc":           {"es": "Define las etiquetas disponibles durante el Etiquetado. Haz clic en la celda de <b>Color</b> para cambiar el color.",
+                           "en": "Define the labels available during Labeling. Click the <b>Colour</b> cell to change it."},
     "lsd_col_key":        {"es": "Tecla",                     "en": "Key"},
     "lsd_col_name":       {"es": "Nombre interno",            "en": "Internal name"},
     "lsd_col_es":         {"es": "Pantalla ES",               "en": "Display ES"},
@@ -177,8 +198,8 @@ _PL_T = {
     "lsd_col_color":      {"es": "Color",                     "en": "Colour"},
     "lsd_add":            {"es": "+ Anadir fila",             "en": "+ Add row"},
     "lsd_del":            {"es": "- Eliminar fila",           "en": "- Remove row"},
-    "lsd_hint":           {"es": "Los cambios se aplican al reabrir Pre-Etiquetado.",
-                           "en": "Changes take effect the next time you open Pre-Labeling."},
+    "lsd_hint":           {"es": "Los cambios se aplican al reabrir la Fase Etiquetado.",
+                           "en": "Changes take effect the next time you open the Labeling Phase."},
     "lsd_save":           {"es": "Guardar",                   "en": "Save"},
     "lsd_cancel":         {"es": "Cancelar",                  "en": "Cancel"},
     "lsd_color_dlg":      {"es": "Seleccionar color",         "en": "Select colour"},
@@ -241,7 +262,13 @@ def _draw_grid(frame: np.ndarray, divisions: int = 12) -> None:
 # ---------------------------------------------------------------------------
 
 class TimelineWidget(QWidget):
-    """Barra de tiempo coloreada con etiquetas, posicion actual y marcas de tiempo."""
+    """Barra de tiempo coloreada con etiquetas, posicion actual y marcas de tiempo.
+
+    Emite seek_frame(int) cuando el usuario hace clic o arrastra con el ratón,
+    permitiendo navegar sin asignar ninguna etiqueta.
+    """
+
+    seek_frame = pyqtSignal(int)
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
@@ -252,6 +279,7 @@ class TimelineWidget(QWidget):
         self._label_map: dict = {}
         self._label_colors: dict = {}
         self._fps: float = 25.0
+        self.setCursor(Qt.PointingHandCursor)
 
     def update_state(
         self,
@@ -306,6 +334,26 @@ class TimelineWidget(QWidget):
         # Borde
         painter.setPen(QPen(QColor("#222"), 1))
         painter.drawRect(0, TICK_H, w - 1, h - TICK_H - 1)
+
+    # ------------------------------------------------------------------
+    # Navegacion con raton (clic / arrastre)
+    # ------------------------------------------------------------------
+
+    def mousePressEvent(self, event) -> None:
+        if event.button() == Qt.LeftButton:
+            self._emit_seek(event.x())
+
+    def mouseMoveEvent(self, event) -> None:
+        if event.buttons() & Qt.LeftButton:
+            self._emit_seek(event.x())
+
+    def _emit_seek(self, x: int) -> None:
+        w = self.width()
+        if w <= 0:
+            return
+        frame = int(x / w * self._total_frames)
+        frame = max(0, min(frame, self._total_frames - 1))
+        self.seek_frame.emit(frame)
 
 
 # ---------------------------------------------------------------------------
@@ -587,7 +635,9 @@ class LabelSettingsDialog(QDialog):
                 it = self._table.item(row, c)
                 return it.text().strip() if it else ""
 
-            key_char = _cell(0).upper()
+            raw_key  = _cell(0)
+            _kn = unicodedata.normalize('NFKD', raw_key).encode('ASCII', 'ignore').decode('ASCII').upper()
+            key_char = _kn[0] if _kn else raw_key[0].upper() if raw_key else ''
             name     = _cell(1)
             disp_es  = _cell(2)
             disp_en  = _cell(3)
@@ -978,6 +1028,7 @@ class PrelabelPage(QWidget):
         left_layout.addWidget(self._lbl_pl_video, stretch=1)
 
         self._timeline = TimelineWidget()
+        self._timeline.seek_frame.connect(self._on_timeline_seek)
         left_layout.addWidget(self._timeline)
 
         # Controles de reproduccion
@@ -1093,7 +1144,7 @@ class PrelabelPage(QWidget):
         keys_layout = QVBoxLayout(self._grp_keys)
         keys_layout.setSpacing(3)
         for qt_key, name, display, hex_c, bgr_c in PRELABEL_KEYS:
-            btn = QPushButton(_KEY_DISPLAY[name][self._lang])
+            btn = QPushButton(_btn_label_text(name, self._lang))
             btn.setCheckable(True)
             r, g, b = int(hex_c[1:3], 16), int(hex_c[3:5], 16), int(hex_c[5:7], 16)
             lum = 0.299 * r + 0.587 * g + 0.114 * b
@@ -1127,7 +1178,7 @@ class PrelabelPage(QWidget):
         for _, name, display, _, _ in PRELABEL_KEYS:
             lbl_val = QLabel("0 bouts | 0.0 s")
             lbl_val.setStyleSheet("font-size: 10px;")
-            stats_layout.addRow(_KEY_DISPLAY[name][self._lang] + ":", lbl_val)
+            stats_layout.addRow(_btn_label_text(name, self._lang) + ":", lbl_val)
             self._stat_labels[name] = lbl_val
         right_layout.addWidget(self._grp_stats)
 
@@ -1614,6 +1665,15 @@ class PrelabelPage(QWidget):
         self._update_timeline()
         self._update_frame_counter()
 
+    def _on_timeline_seek(self, frame_idx: int) -> None:
+        """Navega al frame indicado sin asignar etiqueta ni sobreescribir etiquetas existentes."""
+        if self._total_frames == 0:
+            return
+        self._frame_idx = max(0, min(frame_idx, self._total_frames - 1))
+        self._show_frame(self._frame_idx)
+        self._update_timeline()
+        self._update_frame_counter()
+
     def _on_speed_changed(self, text: str) -> None:
         try:
             self._speed = float(text.replace("x", ""))
@@ -1772,13 +1832,19 @@ class PrelabelPage(QWidget):
     # ------------------------------------------------------------------
 
     def keyPressEvent(self, event) -> None:
-        for qt_key, name, _, _, _ in PRELABEL_KEYS:
-            if event.key() == qt_key:
-                self._select_label(name)
+        t = event.text()
+        if t:
+            # Normalize: strip accents → ASCII, uppercase — handles symbols and tildes
+            norm = unicodedata.normalize('NFKD', t).encode('ASCII', 'ignore').decode('ASCII').upper()
+            if not norm:
+                norm = t.upper()
+            for _, name, _, _, _ in PRELABEL_KEYS:
+                if _KEY_CHARS.get(name, '') == norm:
+                    self._select_label(name)
+                    return
+            if norm == 'O':
+                self._on_toggle_occlude()
                 return
-        if event.key() == Qt.Key_O:
-            self._on_toggle_occlude()
-            return
         super().keyPressEvent(event)
 
     def _select_label(self, name: str) -> None:
@@ -2061,7 +2127,7 @@ class PrelabelPage(QWidget):
                 item.widget().deleteLater()
 
         for qt_key, name, display, hex_c, bgr_c in PRELABEL_KEYS:
-            btn = QPushButton(_KEY_DISPLAY[name][self._lang])
+            btn = QPushButton(_btn_label_text(name, self._lang))
             btn.setCheckable(True)
             r, g, b = int(hex_c[1:3], 16), int(hex_c[3:5], 16), int(hex_c[5:7], 16)
             lum = 0.299 * r + 0.587 * g + 0.114 * b
@@ -2089,7 +2155,7 @@ class PrelabelPage(QWidget):
         for _, name, _, _, _ in PRELABEL_KEYS:
             lbl_val = QLabel("0 bouts | 0.0 s")
             lbl_val.setStyleSheet("font-size: 10px;")
-            stats_layout.addRow(_KEY_DISPLAY[name][self._lang] + ":", lbl_val)
+            stats_layout.addRow(_btn_label_text(name, self._lang) + ":", lbl_val)
             self._stat_labels[name] = lbl_val
 
     # ------------------------------------------------------------------
@@ -2134,17 +2200,15 @@ class PrelabelPage(QWidget):
 
         # Actualizar botones de etiqueta y stats
         for _, name, _, hex_c, _ in PRELABEL_KEYS:
-            display = _KEY_DISPLAY[name][lang]
             if name in self._label_buttons:
-                self._label_buttons[name].setText(display)
-            # Stat labels: actualizar row labels en el QFormLayout
+                self._label_buttons[name].setText(_btn_label_text(name, lang))
         # Reconstruir filas del stats layout con nuevo idioma
         stats_layout = self._grp_stats.layout()
         if stats_layout is not None:
             for i, (_, name, _, _, _) in enumerate(PRELABEL_KEYS):
                 item = stats_layout.itemAt(i * 2)  # QFormLayout: label+field pairs
                 if item and item.widget():
-                    item.widget().setText(_KEY_DISPLAY[name][lang] + ":")
+                    item.widget().setText(_btn_label_text(name, lang) + ":")
 
         # Panel derecho: importar coords + carpeta salida
         self._grp_pl_import.setTitle(t["import_coords_grp"][lang])
