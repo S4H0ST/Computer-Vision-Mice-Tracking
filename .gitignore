@@ -9,7 +9,7 @@ runs/
 venv_build/
 
 # ── Scripts de build local (no forman parte del codigo) ──────────────
-build_cpu.bat
+*.bat
 dist/
 build/
 *.spec
