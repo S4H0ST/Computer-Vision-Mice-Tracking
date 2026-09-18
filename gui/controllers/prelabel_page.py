@@ -2036,17 +2036,26 @@ class PrelabelPage(QWidget):
             (out_dir / split / "images").mkdir(parents=True, exist_ok=True)
             (out_dir / split / "labels").mkdir(parents=True, exist_ok=True)
 
+        # Count existing images so new files never overwrite previous videos
+        existing = sum(
+            len([f for f in (out_dir / sp / "images").iterdir() if f.suffix.lower() in (".jpg", ".jpeg", ".png")])
+            if (out_dir / sp / "images").exists() else 0
+            for sp in ["train", "valid", "test"]
+        )
+
         step = 0
+        global_idx = existing
         for split, frame_list in splits.items():
             for fidx in frame_list:
-                self._save_frame_annotation(fidx, split, out_dir)
+                self._save_frame_annotation(fidx, split, out_dir, global_idx)
+                global_idx += 1
                 step += 1
                 progress_dlg.setValue(step)
 
         _write_data_yaml(CLASS_NAMES, out_dir / "data.yaml", out_dir)
         return out_dir
 
-    def _save_frame_annotation(self, frame_idx: int, split: str, out_dir: Path | None = None) -> None:
+    def _save_frame_annotation(self, frame_idx: int, split: str, out_dir: Path | None = None, out_idx: int | None = None) -> None:
         if self._cap is None:
             return
         try:
@@ -2059,7 +2068,8 @@ class PrelabelPage(QWidget):
 
         base = out_dir or DATASETS_DIR
         H, W = frame.shape[:2]
-        img_name = f"frame_{frame_idx:06d}.jpg"
+        file_idx = out_idx if out_idx is not None else frame_idx
+        img_name = f"frame_{file_idx:06d}.jpg"
         img_path = base / split / "images" / img_name
         cv2.imwrite(str(img_path), frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
 
@@ -2108,7 +2118,7 @@ class PrelabelPage(QWidget):
             kp_parts = ["0.000000", "0.000000", "0"] * 3
 
         line = f"{class_id} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f} " + " ".join(kp_parts)
-        lbl_path = base / split / "labels" / f"frame_{frame_idx:06d}.txt"
+        lbl_path = base / split / "labels" / f"frame_{file_idx:06d}.txt"
         with open(lbl_path, "w", encoding="utf-8") as f:
             f.write(line + "\n")
 
