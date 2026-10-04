@@ -240,18 +240,26 @@ class StatsGenerator:
                             cv2.FONT_HERSHEY_SIMPLEX, 0.38, (40, 40, 40), 1, cv2.LINE_AA)
 
         # Trayectoria del snout — cada segmento coloreado segun la etiqueta en ese frame
+        # Saltos > 120 px entre frames consecutivos se ignoran (deteccion espuria)
+        _MAX_JUMP_SQ = 120 ** 2
         prev_pt:    tuple[int, int] | None = None
         prev_label: str                    = ""
+        prev_sx: float | None = None
+        prev_sy: float | None = None
         for row in self.rows:
             try:
                 sx = float(row.get("snout_x", -1))
                 sy = float(row.get("snout_y", -1))
             except ValueError:
-                prev_pt = None
+                prev_pt = None; prev_sx = prev_sy = None
                 continue
             if sx < 0 or sy < 0:
-                prev_pt = None
+                prev_pt = None; prev_sx = prev_sy = None
                 continue
+            # Filtrar saltos imposibles (keypoint en posicion erronea)
+            if prev_sx is not None:
+                if (sx - prev_sx) ** 2 + (sy - prev_sy) ** 2 > _MAX_JUMP_SQ:
+                    prev_pt = None   # cortar la linea, no dibujar este segmento
             lbl   = row.get("final_label", "")
             color = self._traj_color(lbl)
             pt    = self._to_canvas(sx, sy, x_min, y_min, x_scale, y_scale)
@@ -259,6 +267,8 @@ class StatsGenerator:
                 cv2.line(img, prev_pt, pt, color, 1)
             prev_pt    = pt
             prev_label = lbl
+            prev_sx    = sx
+            prev_sy    = sy
 
         self._draw_traj_legend(img, sz, m, leg_h)
         cv2.imwrite(str(out_path), img)
@@ -341,14 +351,7 @@ class StatsGenerator:
             cx, cy = self._to_canvas(sx, sy, x_min, y_min, x_scale, y_scale)
             accum[cy, cx] += 1.0
 
-        # Sigma adaptativo: ~3.5% del ancho del canvas.
-        # Con 600px de arena → sigma≈22 px ≈ 2.2 cm en una caja de 60 cm.
-        # Esto produce manchas del tamaño de un cuerpo de rata (5-8 cm),
-        # coherente con los heatmaps de OFT publicados en literatura.
-        # sigma=12 quedaba demasiado puntual; 22 da densidad suave sin borronar.
-        arena_px = sz - 2 * m
-        sigma = max(18, int(arena_px / 27))
-        accum = cv2.GaussianBlur(accum, (0, 0), sigmaX=sigma)
+        accum = cv2.GaussianBlur(accum, (0, 0), sigmaX=12)
 
         if accum.max() > 0:
             accum = accum / accum.max()

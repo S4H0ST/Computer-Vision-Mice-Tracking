@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (QMainWindow, QFileDialog, QMessageBox, QListWidgetI
                              QGroupBox, QFormLayout, QListWidget,
                              QTabWidget, QTextBrowser, QDialogButtonBox, QLabel, QStyle)
 from PyQt5.QtCore import Qt, QTimer, pyqtSlot
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtGui import QImage, QPixmap, QIcon
 from PyQt5 import uic
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -1632,7 +1632,8 @@ class MainWindow(QMainWindow):
         except Exception:
             return None
 
-        chosen = pick_model_path()
+        # Usar el modelo que el usuario haya seleccionado explicitamente; si no, pick_model_path
+        chosen = self._active_model_path if self._active_model_path is not None else pick_model_path()
 
         # ── Caso 1: CPU + solo .pt (sin .onnx) ──────────────────────────────
         if needs_cpu_pt_warning():
@@ -1676,8 +1677,8 @@ class MainWindow(QMainWindow):
                 msg.setText(
                     "<b>Se ha detectado una GPU NVIDIA (CUDA).</b><br><br>"
                     "El modelo por defecto es <code>.onnx</code> (optimo para CPU), "
-                    "pero con GPU es mas rapido usar el modelo <code>.pt</code> "
-                    "(PyTorch + CUDA, hasta 5-10&times; mas rapido).<br><br>"
+                    "pero con GPU NVIDIA disponible el modelo <code>.pt</code> "
+                    "es considerablemente mas rapido.<br><br>"
                     "¿Con cual modelo quieres continuar?"
                 )
                 btn_pt   = msg.addButton("Usar .pt  (GPU — recomendado)", QMessageBox.AcceptRole)
@@ -1688,8 +1689,8 @@ class MainWindow(QMainWindow):
                 msg.setText(
                     "<b>NVIDIA GPU (CUDA) detected.</b><br><br>"
                     "The default model is <code>.onnx</code> (optimised for CPU), "
-                    "but with a GPU the <code>.pt</code> model is faster "
-                    "(PyTorch + CUDA, up to 5-10&times; faster).<br><br>"
+                    "but with an NVIDIA GPU the <code>.pt</code> model "
+                    "is considerably faster.<br><br>"
                     "Which model do you want to use?"
                 )
                 btn_pt   = msg.addButton("Use .pt  (GPU — recommended)", QMessageBox.AcceptRole)
@@ -2146,7 +2147,7 @@ class MainWindow(QMainWindow):
             self._compare_page.apply_language(self._lang)
 
         if hasattr(self, "_btn_label_settings"):
-            _cfg_txt = "  ⚙  Configuración" if self._lang == "es" else "  ⚙  Settings"
+            _cfg_txt = "  Configuración" if self._lang == "es" else "  Settings"
             self._btn_label_settings.setText(_cfg_txt)
 
         if hasattr(self, "_grp_calib_hole_size"):
@@ -2310,10 +2311,16 @@ class MainWindow(QMainWindow):
         # Layout: 0-8=spacer, 9=btn_lang, 10=version
 
         # Boton de configuracion (etiquetas + tamaño de texto)
-        self._btn_label_settings = _QPB("  ⚙  Configuración", self.sidebar)
+        self._btn_label_settings = _QPB("  Configuración", self.sidebar)
         self._btn_label_settings.setFlat(True)
         self._btn_label_settings.setObjectName("btn_label_settings")
         self._btn_label_settings.setIconSize(_QSize(16, 16))
+        _cfg_ic = QIcon.fromTheme("preferences-system")
+        if _cfg_ic.isNull():
+            _cfg_ic = QIcon.fromTheme("configure")
+        if _cfg_ic.isNull():
+            _cfg_ic = self.style().standardIcon(QStyle.SP_FileDialogDetailedView)
+        self._btn_label_settings.setIcon(_cfg_ic)
         self._btn_label_settings.setStyleSheet(
             "QPushButton { background-color: #CB0017; color: white; "
             "text-align: left; padding: 10px 20px; font-size: 13px; border: none; }"
@@ -2400,6 +2407,7 @@ class MainWindow(QMainWindow):
             self, _M["dlg"][L], str(models_gpu_dir), _M["flt"][L],
         )
         if selected:
+            self._active_model_path = Path(selected)
             paths.yolo_model = Path(selected)
             self._setup_model_status()
 
