@@ -368,12 +368,11 @@ class StatsGenerator:
             cv2.rectangle(img, p1, p2, (255, 255, 255), 1)
 
         if self.holes:
-            r_canvas  = max(6, int(self.hole_radius * min(x_scale, y_scale)))
-            hole_names = self._hole_position_names()
+            r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
             for idx, (hx, hy) in enumerate(self.holes):
                 cx, cy = self._to_canvas(hx, hy, x_min, y_min, x_scale, y_scale)
                 cv2.circle(img, (cx, cy), r_canvas, (255, 255, 255), 2)
-                label = hole_names[idx] if len(self.holes) == 4 else str(idx + 1)
+                label = str(idx + 1)
                 (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.30, 1)
                 cv2.putText(img, label, (cx - tw // 2, cy + th // 2),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.30, (255, 255, 255), 1, cv2.LINE_AA)

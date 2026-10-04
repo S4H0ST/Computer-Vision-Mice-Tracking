@@ -24,6 +24,7 @@ from pathlib import Path
 from PyQt5.QtCore import QThread, pyqtSignal
 
 BEHAVIOR_KEYS = ("immobile", "walking", "sniffing", "climbing", "rearing", "dipping", "grooming")
+_HMAP_SIZE    = 200   # live heatmap canvas pixels
 
 
 def _draw_kps(
@@ -75,10 +76,11 @@ class DetectionWorker(QThread):
     finished     : dict con rutas de archivos de salida y valores de resumen
     error        : cadena con el mensaje de error
     """
-    frame_ready = pyqtSignal(object, dict, int)
-    log_msg     = pyqtSignal(str)
-    finished    = pyqtSignal(dict)
-    error       = pyqtSignal(str)
+    frame_ready   = pyqtSignal(object, dict, int)
+    heatmap_ready = pyqtSignal(object)       # BGR ndarray _HMAP_SIZE x _HMAP_SIZE
+    log_msg       = pyqtSignal(str)
+    finished      = pyqtSignal(dict)
+    error         = pyqtSignal(str)
 
     def __init__(self, source, output_dir: Path, coords_json: Path,
                  model_path: Path | None = None) -> None:
@@ -157,11 +159,15 @@ class DetectionWorker(QThread):
 
         # ---- Dispositivo ----
         import torch
-        device = "0" if torch.cuda.is_available() else "cpu"
+        device = "cpu" if _model_path.suffix.lower() == ".onnx" else ("0" if torch.cuda.is_available() else "cpu")
         self.log_msg.emit(f"Dispositivo: {'GPU (CUDA)' if device == '0' else 'CPU'}")
 
         # ---- Bucle stream=True: ByteTrack activo, sin parpadeo ----
         stats: dict[str, int] = {k: 0 for k in BEHAVIOR_KEYS}
+        stats.update({"hole_0": 0, "hole_1": 0, "hole_2": 0, "hole_3": 0})
+        hmap_accum    = np.zeros((_HMAP_SIZE, _HMAP_SIZE), dtype=np.float32)
+        hole_bouts    = [0, 0, 0, 0]
+        prev_hole_idx = -1
 
         results = model.predict(
             source=cv2_source, stream=True,
@@ -242,6 +248,37 @@ class DetectionWorker(QThread):
                 key = _label_to_stat_key(final_label)
                 if key:
                     stats[key] += 1
+
+            # Track per-hole visit bouts (new visit when hole index changes)
+            if hole_idx >= 0:
+                if prev_hole_idx != hole_idx:
+                    hole_bouts[hole_idx] += 1
+                prev_hole_idx = hole_idx
+            else:
+                prev_hole_idx = -1
+            stats["hole_0"] = hole_bouts[0]
+            stats["hole_1"] = hole_bouts[1]
+            stats["hole_2"] = hole_bouts[2]
+            stats["hole_3"] = hole_bouts[3]
+
+            # Accumulate snout position for live heatmap
+            if snout_kp is not None and crop_w > 0 and crop_h > 0:
+                sx = int(np.clip((snout_kp[0] - x1_c) / crop_w * _HMAP_SIZE, 0, _HMAP_SIZE - 1))
+                sy = int(np.clip((snout_kp[1] - y1_c) / crop_h * _HMAP_SIZE, 0, _HMAP_SIZE - 1))
+                hmap_accum[sy, sx] += 1.0
+
+            # Emit live heatmap every 30 frames when there is data
+            if frame_idx % 30 == 0 and hmap_accum.max() > 0:
+                blurred = cv2.GaussianBlur(hmap_accum, (0, 0), sigmaX=12)
+                norm    = cv2.normalize(blurred, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+                colored = cv2.applyColorMap(norm, cv2.COLORMAP_JET)
+                if spatial.holes and crop_w > 0 and crop_h > 0:
+                    _hr = max(3, int(spatial.hole_radius / max(crop_w, crop_h) * _HMAP_SIZE))
+                    for hx, hy in spatial.holes:
+                        hxs = int(np.clip((hx - x1_c) / crop_w * _HMAP_SIZE, 0, _HMAP_SIZE - 1))
+                        hys = int(np.clip((hy - y1_c) / crop_h * _HMAP_SIZE, 0, _HMAP_SIZE - 1))
+                        cv2.circle(colored, (hxs, hys), _hr, (255, 255, 255), 1)
+                self.heatmap_ready.emit(colored)
 
             img_out = img[y1_c:y2_c, x1_c:x2_c]
             vid_out.write(img_out)

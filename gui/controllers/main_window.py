@@ -25,6 +25,7 @@ from datetime import datetime
 
 from PyQt5.QtWidgets import (QMainWindow, QFileDialog, QMessageBox, QListWidgetItem,
                              QSizePolicy, QDialog, QVBoxLayout, QHBoxLayout, QFrame,
+                             QGroupBox, QFormLayout, QListWidget,
                              QTabWidget, QTextBrowser, QDialogButtonBox, QLabel, QStyle)
 from PyQt5.QtCore import Qt, QTimer, pyqtSlot
 from PyQt5.QtGui import QImage, QPixmap
@@ -195,7 +196,8 @@ The sidebar gives access to all modules:</p>
 <h2>Home</h2>
 <div class="step">
   <b>Select Video</b> — load an offline video file (.mp4, .avi, .mov, .mkv).<br>
-  <b>Start Camera</b> — open the default webcam for real-time analysis.
+  <b>Start Camera</b> — scan available cameras and pick one for real-time analysis.
+  If more than one camera is detected a selection dialog appears.
 </div>
 <p>Either button proceeds to the <b>Calibration</b> page automatically.</p>
 <div class="tip">These buttons and the Labeling Phase sidebar entry are only available
@@ -223,6 +225,10 @@ handles on hole circles to resize them.</div>
   <li>Live video feed with behaviour label and keypoints overlaid.</li>
   <li>Frame count, FPS and video time elapsed.</li>
   <li>Running totals (seconds) per behaviour: Idle, Climbing, Rearing, Head-dip, Grooming (and any custom labels you have configured).</li>
+  <li><b>Hole Visits</b> — a counter for each of the 4 holes (A1–A4) showing how many times
+      the rat has dipped its head into that hole so far.</li>
+  <li><b>Live Heatmap</b> — a density map of where the rat's snout has been, updated every 30 frames.
+      Warm colours (red) indicate areas of high activity; hole positions are marked as white circles.</li>
 </ul>
 <p>Press <b>Cancel</b> to stop early — partial results are still saved.<br>
 Use <b>← Back</b> (visible after cancelling) to fix the calibration and re-run.</p>
@@ -395,7 +401,8 @@ La barra lateral da acceso a todos los modulos:</p>
 <h2>Inicio</h2>
 <div class="step">
   <b>Seleccionar Video</b> — carga un fichero de video (.mp4, .avi, .mov, .mkv).<br>
-  <b>Iniciar Camara</b> — abre la camara por defecto para analisis en tiempo real.
+  <b>Iniciar Camara</b> — escanea las camaras disponibles y permite elegir una para analisis en
+  tiempo real. Si hay mas de una camara conectada, aparece un dialogo de seleccion.
 </div>
 <p>Cualquiera de los dos botones avanza automaticamente a la pantalla de <b>Calibracion</b>.</p>
 <div class="tip">Estos botones y el acceso a Fase Etiquetado solo estan disponibles cuando hay
@@ -426,6 +433,11 @@ Arrastra las esquinas de los circulos de agujero para cambiar su radio.</div>
   <li>Contador de frames, FPS y tiempo de video transcurrido.</li>
   <li>Totales acumulados (s) por comportamiento: Inactivo, Escalando, Erguido,
       Asomando, Aseo (y cualquier etiqueta personalizada configurada).</li>
+  <li><b>Visitas por Agujero</b> — contador para cada uno de los 4 agujeros (A1–A4)
+      con el numero de veces que la rata ha introducido la cabeza en ese agujero.</li>
+  <li><b>Mapa de Calor en Vivo</b> — densidad espacial de la posicion del hocico,
+      actualizado cada 30 frames. Los colores calidos (rojo) indican mayor actividad;
+      los agujeros se marcan con circulos blancos.</li>
 </ul>
 <p>Pulsa <b>Cancelar</b> para detener — los resultados parciales se guardan igualmente.<br>
 Usa <b>← Volver</b> (visible tras cancelar) para corregir la calibracion y volver a ejecutar.</p>
@@ -648,6 +660,7 @@ class MainWindow(QMainWindow):
         self._setup_prelabel_page()
         self._setup_compare_page()
         self._setup_home_info_banner()
+        self._setup_detection_live_panels()
         self._apply_language()  # idioma por defecto: espanol
         self._update_confirm_state()
 
@@ -946,6 +959,44 @@ class MainWindow(QMainWindow):
     # Pagina inicio — banner informativo GPU/CPU
     # ------------------------------------------------------------------
 
+    def _setup_detection_live_panels(self) -> None:
+        """Inserta el grupo de visitas por agujero y el mapa de calor en vivo en statsLayout."""
+        layout = self.statsLayout
+
+        # -- Hole visit counters --
+        grp = QGroupBox("Visitas por Agujero")
+        form = QFormLayout()
+        form.setSpacing(3)
+        form.setContentsMargins(6, 6, 6, 6)
+        grp.setLayout(form)
+        self._lbl_hole: list[tuple[QLabel, QLabel]] = []
+        for i in range(4):
+            lbl_k = QLabel(f"A{i + 1}:")
+            lbl_v = QLabel("0")
+            form.addRow(lbl_k, lbl_v)
+            self._lbl_hole.append((lbl_k, lbl_v))
+        self._grp_holes_live = grp
+
+        # -- Live heatmap --
+        grp_hmap = QGroupBox("Mapa de Calor en Vivo")
+        vbox = QVBoxLayout()
+        vbox.setContentsMargins(4, 4, 4, 4)
+        grp_hmap.setLayout(vbox)
+        lbl_hmap = QLabel()
+        lbl_hmap.setMinimumSize(160, 160)
+        lbl_hmap.setMaximumSize(220, 220)
+        lbl_hmap.setAlignment(Qt.AlignCenter)
+        lbl_hmap.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        lbl_hmap.setStyleSheet("background-color: #1a1a2e;")
+        vbox.addWidget(lbl_hmap)
+        self._lbl_live_heatmap = lbl_hmap
+        self._grp_live_heatmap = grp_hmap
+
+        # Insert before the trailing spacer (last item in layout)
+        spacer_pos = layout.count() - 1
+        layout.insertWidget(spacer_pos,     grp)
+        layout.insertWidget(spacer_pos + 1, grp_hmap)
+
     def _setup_home_info_banner(self) -> None:
         """Inserta la pastilla informativa GPU/CPU en la pagina de inicio."""
         banner = QFrame(self.page_home)
@@ -1027,16 +1078,61 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(60, self._display_calib_frame)
 
     def _on_select_camera(self) -> None:
-        cap = cv2.VideoCapture(0)
+        # Enumerate available cameras (indices 0-4)
+        available: list[int] = []
+        for idx in range(5):
+            cap = cv2.VideoCapture(idx)
+            if cap.isOpened():
+                ret, _ = cap.read()
+                cap.release()
+                if ret:
+                    available.append(idx)
+            else:
+                cap.release()
+
+        if not available:
+            msg = "No se encontro ninguna camara." if self._lang == "es" else "No camera found."
+            QMessageBox.warning(self, "Error", msg)
+            return
+
+        if len(available) == 1:
+            chosen = available[0]
+        else:
+            dlg = QDialog(self)
+            dlg.setWindowTitle("Seleccionar Camara" if self._lang == "es" else "Select Camera")
+            dlg.setMinimumWidth(260)
+            vlayout = QVBoxLayout(dlg)
+            prompt_lbl = QLabel("Selecciona una camara:" if self._lang == "es" else "Select a camera:")
+            vlayout.addWidget(prompt_lbl)
+            lst = QListWidget()
+            for idx in available:
+                lst.addItem(f"Camera {idx}")
+            lst.setCurrentRow(0)
+            vlayout.addWidget(lst)
+            btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+            btns.accepted.connect(dlg.accept)
+            btns.rejected.connect(dlg.reject)
+            vlayout.addWidget(btns)
+            if dlg.exec_() != QDialog.Accepted:
+                return
+            chosen = available[lst.currentRow()]
+
+        cap = cv2.VideoCapture(chosen)
         if not cap.isOpened():
-            QMessageBox.warning(self, "Error", "Could not open camera.")
+            cap.release()
+            err = (f"No se pudo abrir la camara {chosen}." if self._lang == "es"
+                   else f"Could not open camera {chosen}.")
+            QMessageBox.warning(self, "Error", err)
             return
         ret, frame = cap.read()
         cap.release()
         if not ret:
-            QMessageBox.warning(self, "Error", "Could not capture a frame from the camera.")
+            err = ("No se pudo capturar un frame de la camara." if self._lang == "es"
+                   else "Could not capture a frame from the camera.")
+            QMessageBox.warning(self, "Error", err)
             return
-        self._video_source = 0
+
+        self._video_source = chosen
         self._reset_calib_state()
         self._calib_frame = frame
         self.stackedWidget.setCurrentIndex(1)
@@ -1655,11 +1751,17 @@ class MainWindow(QMainWindow):
         self._elapsed_s = 0
         self._timer.start(1000)
 
+        for _, lbl_v in self._lbl_hole:
+            lbl_v.setText("0")
+        self._lbl_live_heatmap.clear()
+        self._lbl_live_heatmap.setStyleSheet("background-color: #1a1a2e;")
+
         self._worker = DetectionWorker(
             self._video_source, self._output_dir, self._coords_json,
             model_path=chosen_model,
         )
         self._worker.frame_ready.connect(self._on_frame_ready)
+        self._worker.heatmap_ready.connect(self._on_heatmap_ready)
         self._worker.log_msg.connect(self._on_log_msg)
         self._worker.finished.connect(self._on_detection_finished)
         self._worker.error.connect(self._on_detection_error)
@@ -1699,6 +1801,23 @@ class MainWindow(QMainWindow):
         self.lbl_beh_rearing.setText(f"{stats.get('rearing', 0) / fps_approx:.1f} s")
         self.lbl_beh_dipping.setText(f"{stats.get('dipping', 0) / fps_approx:.1f} s")
         self.lbl_beh_grooming.setText(f"{stats.get('grooming', 0) / fps_approx:.1f} s")
+
+        for i, (_, lbl_v) in enumerate(self._lbl_hole):
+            lbl_v.setText(str(stats.get(f"hole_{i}", 0)))
+
+    @pyqtSlot(object)
+    def _on_heatmap_ready(self, hmap_bgr: np.ndarray) -> None:
+        lbl = self._lbl_live_heatmap
+        lw, lh = lbl.width(), lbl.height()
+        if lw < 10 or lh < 10:
+            return
+        h, w = hmap_bgr.shape[:2]
+        scale = min(lw / w, lh / h)
+        dw, dh = max(1, int(w * scale)), max(1, int(h * scale))
+        resized = cv2.resize(hmap_bgr, (dw, dh))
+        rgb     = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+        qimg    = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
+        lbl.setPixmap(QPixmap.fromImage(qimg))
 
     @pyqtSlot(str)
     def _on_log_msg(self, msg: str) -> None:
@@ -2047,6 +2166,14 @@ class MainWindow(QMainWindow):
             ]
             for btn, (es, en) in zip(self._calib_zone_btns, _ZONE_TEXTS_MW):
                 btn.setText(es if self._lang == "es" else en)
+
+        if hasattr(self, "_grp_holes_live"):
+            self._grp_holes_live.setTitle(
+                "Visitas por Agujero" if self._lang == "es" else "Hole Visits"
+            )
+            self._grp_live_heatmap.setTitle(
+                "Mapa de Calor en Vivo" if self._lang == "es" else "Live Heatmap"
+            )
 
 
     def _update_calib_legend(self) -> None:
