@@ -24,8 +24,8 @@ from pathlib import Path
 from datetime import datetime
 
 from PyQt5.QtWidgets import (QMainWindow, QFileDialog, QMessageBox, QListWidgetItem,
-                             QSizePolicy, QDialog, QVBoxLayout, QTabWidget,
-                             QTextBrowser, QDialogButtonBox, QStyle)
+                             QSizePolicy, QDialog, QVBoxLayout, QHBoxLayout, QFrame,
+                             QTabWidget, QTextBrowser, QDialogButtonBox, QLabel, QStyle)
 from PyQt5.QtCore import Qt, QTimer, pyqtSlot
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5 import uic
@@ -1382,49 +1382,101 @@ class MainWindow(QMainWindow):
         s = int(seconds)
         return f"{s // 60}:{s % 60:02d}"
 
-    def _warn_cpu_pt_if_needed(self) -> bool:
-        """Muestra aviso si se va a usar .pt en CPU. Devuelve True si el usuario cancela."""
+    def _resolve_model_path(self) -> "Path | None":
+        """
+        Elige el modelo a usar y muestra avisos si el hardware no coincide con el formato.
+
+        Casos:
+          - CPU + solo .pt disponible → aviso de rendimiento, usuario puede cancelar.
+          - GPU detectada + modelo por defecto es .onnx + existe .pt → ofrece cambiar a .pt.
+          - Todo correcto → devuelve la ruta sin dialogo.
+
+        Retorna la Path al modelo elegido, o None si el usuario cancela.
+        """
         try:
             import sys as _sys
             _sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-            from utils.model_loader import needs_cpu_pt_warning
-            if not needs_cpu_pt_warning():
-                return False
+            from utils.model_loader import pick_model_path, needs_cpu_pt_warning, gpu_can_upgrade
+            from app_config.config import paths as _paths
         except Exception:
-            return False
+            return None
 
-        msg = QMessageBox(self)
-        msg.setIcon(QMessageBox.Warning)
-        if self._lang == "es":
-            msg.setWindowTitle("Modelo no optimo para CPU")
-            msg.setText(
-                "<b>No se detecto GPU NVIDIA (CUDA).</b><br><br>"
-                "Estas usando el modelo <code>.pt</code> con CPU, lo que es muy lento.<br><br>"
-                "<b>Solucion recomendada:</b> genera el archivo <code>.onnx</code> del modelo "
-                "(ve a <b>Entrenar</b> y completa un entrenamiento — el .onnx se exporta "
-                "automaticamente) o ejecuta <code>scripts/convert_to_onnx.py</code>.<br><br>"
-                "Con <code>.onnx</code> la inferencia en CPU es ~2&times; mas rapida."
-            )
-            btn_cancel = msg.addButton("Cancelar", QMessageBox.RejectRole)
-            msg.addButton("Continuar igualmente", QMessageBox.AcceptRole)
-        else:
-            msg.setWindowTitle("Suboptimal model for CPU")
-            msg.setText(
-                "<b>No NVIDIA GPU (CUDA) detected.</b><br><br>"
-                "You are running a <code>.pt</code> model on CPU, which is very slow.<br><br>"
-                "<b>Recommended fix:</b> generate the <code>.onnx</code> model file "
-                "(go to <b>Train</b> and finish a training run — .onnx is exported automatically) "
-                "or run <code>scripts/convert_to_onnx.py</code>.<br><br>"
-                "With <code>.onnx</code>, CPU inference is ~2&times; faster."
-            )
-            btn_cancel = msg.addButton("Cancel", QMessageBox.RejectRole)
-            msg.addButton("Continue anyway", QMessageBox.AcceptRole)
+        chosen = pick_model_path()
 
-        msg.exec_()
-        return msg.clickedButton() == btn_cancel
+        # ── Caso 1: CPU + solo .pt (sin .onnx) ──────────────────────────────
+        if needs_cpu_pt_warning():
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Warning)
+            if self._lang == "es":
+                msg.setWindowTitle("Modelo no optimo para CPU")
+                msg.setText(
+                    "<b>No se detecto GPU NVIDIA (CUDA).</b><br><br>"
+                    "El modelo <code>.pt</code> en CPU es muy lento.<br><br>"
+                    "<b>Recomendado:</b> genera el <code>.onnx</code> desde la pagina "
+                    "<b>Entrenar</b> (se exporta automaticamente al terminar) o ejecuta "
+                    "<code>scripts/convert_to_onnx.py</code>.<br><br>"
+                    "Con <code>.onnx</code> la inferencia es ~2&times; mas rapida en CPU."
+                )
+                btn_cancel = msg.addButton("Cancelar", QMessageBox.RejectRole)
+                msg.addButton("Continuar igualmente", QMessageBox.AcceptRole)
+            else:
+                msg.setWindowTitle("Suboptimal model for CPU")
+                msg.setText(
+                    "<b>No NVIDIA GPU (CUDA) detected.</b><br><br>"
+                    "Running a <code>.pt</code> model on CPU is very slow.<br><br>"
+                    "<b>Recommended:</b> generate <code>.onnx</code> from the <b>Train</b> "
+                    "page (exported automatically after training) or run "
+                    "<code>scripts/convert_to_onnx.py</code>.<br><br>"
+                    "With <code>.onnx</code>, CPU inference is ~2&times; faster."
+                )
+                btn_cancel = msg.addButton("Cancel", QMessageBox.RejectRole)
+                msg.addButton("Continue anyway", QMessageBox.AcceptRole)
+            msg.exec_()
+            if msg.clickedButton() == btn_cancel:
+                return None
+            return chosen
+
+        # ── Caso 2: GPU disponible pero el modelo elegido es .onnx ──────────
+        if gpu_can_upgrade(chosen):
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Information)
+            if self._lang == "es":
+                msg.setWindowTitle("GPU detectada")
+                msg.setText(
+                    "<b>Se ha detectado una GPU NVIDIA (CUDA).</b><br><br>"
+                    "El modelo por defecto es <code>.onnx</code> (optimo para CPU), "
+                    "pero con GPU es mas rapido usar el modelo <code>.pt</code> "
+                    "(PyTorch + CUDA, hasta 5-10&times; mas rapido).<br><br>"
+                    "¿Con cual modelo quieres continuar?"
+                )
+                btn_pt   = msg.addButton("Usar .pt  (GPU — recomendado)", QMessageBox.AcceptRole)
+                btn_onnx = msg.addButton("Continuar con .onnx  (CPU)", QMessageBox.RejectRole)
+                btn_cancel = msg.addButton("Cancelar", QMessageBox.DestructiveRole)
+            else:
+                msg.setWindowTitle("GPU detected")
+                msg.setText(
+                    "<b>NVIDIA GPU (CUDA) detected.</b><br><br>"
+                    "The default model is <code>.onnx</code> (optimised for CPU), "
+                    "but with a GPU the <code>.pt</code> model is faster "
+                    "(PyTorch + CUDA, up to 5-10&times; faster).<br><br>"
+                    "Which model do you want to use?"
+                )
+                btn_pt   = msg.addButton("Use .pt  (GPU — recommended)", QMessageBox.AcceptRole)
+                btn_onnx = msg.addButton("Continue with .onnx  (CPU)", QMessageBox.RejectRole)
+                btn_cancel = msg.addButton("Cancel", QMessageBox.DestructiveRole)
+            msg.exec_()
+            clicked = msg.clickedButton()
+            if clicked == btn_cancel:
+                return None
+            if clicked == btn_pt:
+                return _paths.yolo_model
+            return chosen  # btn_onnx → usar .onnx tal cual
+
+        return chosen
 
     def _start_detection(self) -> None:
-        if self._warn_cpu_pt_if_needed():
+        chosen_model = self._resolve_model_path()
+        if chosen_model is None:
             return
 
         if self._worker and self._worker.isRunning():
@@ -1468,6 +1520,7 @@ class MainWindow(QMainWindow):
 
         self._worker = DetectionWorker(
             self._video_source, self._output_dir, self._coords_json,
+            model_path=chosen_model,
         )
         self._worker.frame_ready.connect(self._on_frame_ready)
         self._worker.log_msg.connect(self._on_log_msg)

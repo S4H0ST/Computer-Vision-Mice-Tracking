@@ -1,12 +1,18 @@
 """
 Utilidades para exportar y cargar modelos YOLO en distintos formatos de inferencia.
 
+Logica de seleccion de modelo:
+  Por defecto se prefiere .onnx (optimo para CPU, que es lo mas habitual en usuarios finales).
+  Si se detecta GPU CUDA y el modelo activo es .onnx, la GUI puede ofrecer al usuario
+  cambiar a .pt para aprovechar la aceleracion hardware.
+
 Functions:
     export_to_onnx       — exporta un modelo .pt a ONNX (con simplificacion opcional).
     export_to_tensorrt   — exporta un modelo .pt a TensorRT (.engine) para GPU NVIDIA.
     load_model           — carga un modelo .pt o .onnx y devuelve una instancia YOLO.
-    pick_model_path      — elige el mejor formato segun hardware disponible.
-    needs_cpu_pt_warning — True si el hardware es CPU pero solo hay modelo .pt disponible.
+    pick_model_path      — devuelve la ruta al modelo por defecto (.onnx preferido).
+    gpu_can_upgrade      — True si hay GPU y existe .pt, pero se esta usando .onnx.
+    needs_cpu_pt_warning — True si es CPU pero solo hay .pt (sin .onnx disponible).
 """
 
 from __future__ import annotations
@@ -17,103 +23,78 @@ from ultralytics import YOLO
 
 
 def export_to_onnx(model_path: Path, simplify: bool = True) -> Path:
-    """
-    Exporta un modelo .pt a formato ONNX.
-
-    Args:
-        model_path: Ruta al archivo .pt de Ultralytics.
-        simplify:   Si True, aplica onnx-simplifier para reducir el grafo.
-
-    Returns:
-        Ruta al archivo .onnx generado (mismo directorio que model_path).
-    """
     model = YOLO(str(model_path))
     export_path = model.export(format="onnx", simplify=simplify)
     return Path(export_path)
 
 
 def export_to_tensorrt(model_path: Path) -> Path:
-    """
-    Exporta un modelo .pt a TensorRT (.engine) para inferencia en GPU NVIDIA.
-
-    Requiere CUDA y TensorRT instalados. El archivo resultante solo es
-    compatible con la GPU y el driver en los que se genero.
-
-    Args:
-        model_path: Ruta al archivo .pt de Ultralytics.
-
-    Returns:
-        Ruta al archivo .engine generado (mismo directorio que model_path).
-    """
     model = YOLO(str(model_path))
     export_path = model.export(format="engine")
     return Path(export_path)
 
 
+def _cuda_available() -> bool:
+    try:
+        import torch
+        return torch.cuda.is_available()
+    except ImportError:
+        return False
+
+
 def pick_model_path() -> Path:
     """
-    Devuelve la ruta al mejor modelo disponible segun el hardware:
-      - GPU (CUDA): prefiere .pt (PyTorch + CUDA, sin problemas de provider)
-      - CPU:        prefiere .onnx si existe (ONNX Runtime CPU es mas rapido)
+    Devuelve la ruta al modelo por defecto.
 
-    onnxruntime-gpu tiene un bug de tensor binding cuando se combina con
-    CUDAExecutionProvider en esta version; usar .pt en GPU lo evita.
+    Politica: preferir .onnx siempre que exista, independientemente del hardware.
+    Razon: el ejecutable distribuido esta pensado para usuarios sin GPU; .onnx es
+    mas rapido en CPU y no tiene el bug de tensor binding de onnxruntime-gpu.
+    Si el usuario tiene GPU, la GUI le ofrecera cambiar a .pt mediante un dialogo.
+
+    Orden de preferencia:
+      1. yolo_ratas.onnx  (si existe)
+      2. yolo_ratas.pt    (fallback)
     """
     from app_config.config import paths
 
-    try:
-        import torch
-        cuda_ok = torch.cuda.is_available()
-    except ImportError:
-        cuda_ok = False
-
-    if cuda_ok:
-        if paths.yolo_model.exists():
-            return paths.yolo_model
-    else:
-        if paths.yolo_model_onnx.exists():
-            return paths.yolo_model_onnx
-
-    # fallback universal
-    if paths.yolo_model.exists():
-        return paths.yolo_model
     if paths.yolo_model_onnx.exists():
         return paths.yolo_model_onnx
+    if paths.yolo_model.exists():
+        return paths.yolo_model
     raise FileNotFoundError("No se encontro ningun modelo YOLO en models/")
+
+
+def gpu_can_upgrade(current_path: Path) -> bool:
+    """
+    True cuando el usuario podria mejorar el rendimiento cambiando a .pt con GPU:
+      - Hay GPU CUDA disponible
+      - El modelo activo elegido es .onnx
+      - Existe tambien el .pt
+
+    En ese caso la GUI debe ofrecer la opcion de cambiar a .pt.
+    """
+    from app_config.config import paths
+
+    if current_path.suffix.lower() != ".onnx":
+        return False
+    if not paths.yolo_model.exists():
+        return False
+    return _cuda_available()
 
 
 def needs_cpu_pt_warning() -> bool:
     """
-    True cuando el usuario esta a punto de correr inferencia con .pt en CPU:
+    True cuando el usuario va a correr inferencia con .pt en CPU sin alternativa:
       - No hay GPU CUDA disponible
-      - No existe un .onnx exportado
-      - Existe un .pt (fallback que se usara)
-
-    En ese caso conviene avisar antes de iniciar el proceso.
+      - No existe .onnx
+      - Existe .pt (es el unico modelo disponible)
     """
     from app_config.config import paths
 
-    try:
-        import torch
-        if torch.cuda.is_available():
-            return False
-    except ImportError:
-        pass
-
+    if _cuda_available():
+        return False
     return paths.yolo_model.exists() and not paths.yolo_model_onnx.exists()
 
 
 def load_model(model_path: Path) -> YOLO:
-    """
-    Carga un modelo YOLO desde un archivo .pt o .onnx.
-
-    Para ONNX con GPU: pasar device='0' al llamar a model.predict() activa
-    CUDAExecutionProvider automaticamente si onnxruntime-gpu esta instalado.
-
-    Args:
-        model_path: Ruta al archivo .pt o .onnx.
-
-    Returns:
-        Instancia YOLO lista para inferencia.
-    """
     return YOLO(str(model_path))

@@ -80,11 +80,13 @@ class DetectionWorker(QThread):
     finished    = pyqtSignal(dict)
     error       = pyqtSignal(str)
 
-    def __init__(self, source, output_dir: Path, coords_json: Path) -> None:
+    def __init__(self, source, output_dir: Path, coords_json: Path,
+                 model_path: Path | None = None) -> None:
         super().__init__()
         self._source      = source        # Path (video) o int (indice de camara)
         self._output_dir  = output_dir
         self._coords_json = coords_json
+        self._model_path  = model_path    # None → pick_model_path() decide
         self._stop        = False
 
     def request_stop(self) -> None:
@@ -109,7 +111,7 @@ class DetectionWorker(QThread):
 
         # ---- Inicializacion ----
         from utils.model_loader import pick_model_path
-        _model_path = pick_model_path()
+        _model_path = self._model_path if self._model_path is not None else pick_model_path()
         self.log_msg.emit(f"Cargando modelo: {_model_path.name}")
         model = YOLO(str(_model_path))
 
