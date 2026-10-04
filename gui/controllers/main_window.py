@@ -839,6 +839,7 @@ class MainWindow(QMainWindow):
             if hasattr(self, "_prelabel_page"):
                 self._prelabel_page.rebuild_label_ui()
             self._apply_label_colors_to_stats()
+            self._update_behavior_legend()
 
     def _on_settings(self) -> None:
         """Dialogo de configuracion: etiquetas de comportamiento y tamaño de texto."""
@@ -2293,29 +2294,43 @@ class MainWindow(QMainWindow):
         )
 
     def _update_behavior_legend(self) -> None:
-        """Construye la leyenda de colores de comportamiento en el idioma activo."""
-        if self._lang == "es":
-            items = [
-                ("#b4b4b4", "Inactivo"),
-                ("#ffff00", "Caminando"),
-                ("#ffc800", "Olisqueando"),
-                ("#ff00ff", "Escalando"),
-                ("#00ff00", "Erguido"),
-                ("#ffa500", "Asomando"),
-                ("#b4ffb4", "Aseo"),
-            ]
-            header = "Comportamiento:"
-        else:
-            items = [
-                ("#b4b4b4", "Idle"),
-                ("#ffff00", "Walking"),
-                ("#ffc800", "Sniffing"),
-                ("#ff00ff", "Climbing"),
-                ("#00ff00", "Rearing"),
-                ("#ffa500", "Head-dip"),
-                ("#b4ffb4", "Grooming"),
-            ]
-            header = "Behaviour:"
+        """Construye la leyenda de colores de comportamiento leyendo labels.json."""
+        import json
+        # Fallback si labels.json no está disponible
+        _fallback_es = [
+            ("#b4b4b4", "Inactivo"), ("#ffff00", "Caminando"), ("#ffc800", "Olisqueando"),
+            ("#ff00ff", "Escalando"), ("#00ff00", "Erguido"),  ("#ffa500", "Asomando"),
+            ("#b4ffb4", "Aseo"),
+        ]
+        _fallback_en = [
+            ("#b4b4b4", "Idle"),    ("#ffff00", "Walking"),  ("#ffc800", "Sniffing"),
+            ("#ff00ff", "Climbing"),("#00ff00", "Rearing"),  ("#ffa500", "Head-dip"),
+            ("#b4ffb4", "Grooming"),
+        ]
+        # Orden fijo: nombre interno labels.json → texto ES / EN
+        _ORDER = [
+            ("immobile",    "Inactivo",   "Idle"),
+            ("horizontal",  "Caminando",  "Walking"),
+            ("sniffing",    "Olisqueando","Sniffing"),
+            ("climbing",    "Escalando",  "Climbing"),
+            ("rearing",     "Erguido",    "Rearing"),
+            ("head_dipping","Asomando",   "Head-dip"),
+            ("grooming",    "Aseo",       "Grooming"),
+        ]
+        try:
+            from app_config.config import paths
+            lp = paths.root / "scripts" / "app_config" / "labels.json"
+            cfg = json.loads(lp.read_text(encoding="utf-8"))
+            name_to_hex: dict[str, str] = {e["name"]: e["hex_color"] for e in cfg if "name" in e and "hex_color" in e}
+            # Colores fijos para behaviors sin entrada en labels.json
+            _FIXED = {"immobile": "#b4b4b4", "sniffing": "#ffc800", "horizontal": "#ffff00"}
+            if self._lang == "es":
+                items = [(name_to_hex.get(n, _FIXED.get(n, "#888888")), es) for n, es, _ in _ORDER]
+            else:
+                items = [(name_to_hex.get(n, _FIXED.get(n, "#888888")), en) for n, _, en in _ORDER]
+        except Exception:
+            items = _fallback_es if self._lang == "es" else _fallback_en
+        header = "Comportamiento:" if self._lang == "es" else "Behaviour:"
         rows_html = ""
         for i in range(0, len(items), 2):
             c1, t1 = items[i]
