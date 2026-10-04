@@ -41,6 +41,13 @@ outputs/
 PROYECTO.md
 Orden_codigo_y_teoria.md
 adminScripts/
+docs/aprender/
+
+# ── Dataset completo (solo la plantilla data.yaml va al repo) ────────
+datasets/augmented/
+datasets/raw/
+datasets/unified/
+datasets/data_raw.yaml
 
 # ── Otros ────────────────────────────────────────────────────────────
 scripts/guia/
