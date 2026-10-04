@@ -365,10 +365,12 @@ class PreprocessWorker(QThread):
     finished = pyqtSignal(dict)
     error    = pyqtSignal(str)
 
-    def __init__(self, video_path: str | Path, model_path=None, parent=None) -> None:
+    def __init__(self, video_path: str | Path, model_path=None,
+                 exterior_pts: list | None = None, parent=None) -> None:
         super().__init__(parent)
-        self._video_path  = str(video_path)
-        self._model_path  = model_path    # Path | None — None → pick_model_path()
+        self._video_path   = str(video_path)
+        self._model_path   = model_path      # Path | None — None → pick_model_path()
+        self._exterior_pts = exterior_pts    # [(x1,y1),(x2,y2)] del calibrado del paso 0
         self._stop = False
 
     def request_stop(self) -> None:
@@ -394,25 +396,40 @@ class PreprocessWorker(QThread):
         from utils.model_loader import pick_model_path
         _mp   = self._model_path if self._model_path is not None else pick_model_path()
         model = YOLO(str(_mp))
-        device = detect_cfg.device
+        # ONNX Runtime maneja el dispositivo internamente; forzar "cpu" evita el
+        # error de tensor binding de onnxruntime-gpu cuando device="0" (CUDA).
+        device = "cpu" if _mp.suffix.lower() == ".onnx" else detect_cfg.device
 
-        # Intentar recortar al area del laberinto (coords.json) para reducir
-        # la resolucion que recibe YOLO y acelerar la inferencia en CPU.
+        # Recorte del area del laberinto para acelerar la inferencia en CPU.
+        # Prioridad: exterior calibrado en el paso 0 → coords.json global → sin recorte.
         crop_x, crop_y, crop_w, crop_h = 0, 0, w_full, h_full
-        try:
-            spatial = SpatialAnalyzer(paths.coords_json)
-            lim = spatial.outer_limits
-            if lim:
-                margin = 5
-                cx1 = max(0, lim["x_min"] - margin)
-                cy1 = max(0, lim["y_min"] - margin)
-                cx2 = min(w_full, lim["x_max"] + margin)
-                cy2 = min(h_full, lim["y_max"] + margin)
-                if cx2 > cx1 and cy2 > cy1:
-                    crop_x, crop_y = cx1, cy1
-                    crop_w, crop_h = cx2 - cx1, cy2 - cy1
-        except Exception:
-            pass
+        if self._exterior_pts and len(self._exterior_pts) == 2:
+            # Usar el exterior marcado por el usuario en el paso 0
+            margin = 5
+            pts_x = [p[0] for p in self._exterior_pts]
+            pts_y = [p[1] for p in self._exterior_pts]
+            cx1 = max(0, min(pts_x) - margin)
+            cy1 = max(0, min(pts_y) - margin)
+            cx2 = min(w_full, max(pts_x) + margin)
+            cy2 = min(h_full, max(pts_y) + margin)
+            if cx2 > cx1 and cy2 > cy1:
+                crop_x, crop_y = cx1, cy1
+                crop_w, crop_h = cx2 - cx1, cy2 - cy1
+        else:
+            try:
+                spatial = SpatialAnalyzer(paths.coords_json)
+                lim = spatial.outer_limits
+                if lim:
+                    margin = 5
+                    cx1 = max(0, lim["x_min"] - margin)
+                    cy1 = max(0, lim["y_min"] - margin)
+                    cx2 = min(w_full, lim["x_max"] + margin)
+                    cy2 = min(h_full, lim["y_max"] + margin)
+                    if cx2 > cx1 and cy2 > cy1:
+                        crop_x, crop_y = cx1, cy1
+                        crop_w, crop_h = cx2 - cx1, cy2 - cy1
+            except Exception:
+                pass
 
         use_crop = (crop_w < w_full or crop_h < h_full)
         offset   = np.array([crop_x, crop_y, crop_x, crop_y], dtype=float)
@@ -1587,10 +1604,9 @@ class PrelabelPage(QWidget):
         self._lbl_pl_calib_instr.setText(txt)
 
     def _update_step0_next(self) -> None:
-        video_ok  = self._video_path is not None
-        calib_ok  = self._pl_calib_done() or self._chk_skip_calib.isChecked()
-        output_ok = self._output_dir_override is not None
-        ok = video_ok and calib_ok and output_ok
+        video_ok = self._video_path is not None
+        calib_ok = self._pl_calib_done() or self._chk_skip_calib.isChecked()
+        ok = video_ok and calib_ok
         self._btn_step0_next.setEnabled(ok)
 
         t = _PL_T
@@ -1599,8 +1615,6 @@ class PrelabelPage(QWidget):
             missing.append(t["warn_video"][self._lang])
         if not calib_ok:
             missing.append(t["warn_calib"][self._lang])
-        if not output_ok:
-            missing.append(t["warn_output"][self._lang])
 
         if missing:
             self._lbl_step0_warn.setText("\n".join(f"• {m}" for m in missing))
@@ -1707,7 +1721,12 @@ class PrelabelPage(QWidget):
     def _start_preprocess(self, model_path=None) -> None:
         self._progress_bar.setValue(0)
         self._lbl_preprocess_status.setText("Analizando video...")
-        self._preproc_worker = PreprocessWorker(self._video_path, model_path=model_path, parent=self)
+        exterior = (self._pl_calib_exterior
+                    if len(self._pl_calib_exterior) == 2 else None)
+        self._preproc_worker = PreprocessWorker(
+            self._video_path, model_path=model_path,
+            exterior_pts=exterior, parent=self
+        )
         self._preproc_worker.progress.connect(self._on_preprocess_progress)
         self._preproc_worker.finished.connect(self._on_preprocess_finished)
         self._preproc_worker.error.connect(self._on_preprocess_error)
