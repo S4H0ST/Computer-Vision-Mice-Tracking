@@ -2265,16 +2265,28 @@ class MainWindow(QMainWindow):
         self.lbl_calib_legend.setText(" &nbsp;&nbsp; ".join(parts))
 
     def _update_traj_legend(self) -> None:
-        """Leyenda de colores de trayectoria debajo del resumen en la pagina de resultados."""
-        items = [
-            ("#b4b4b4", "Inmovil"        if self._lang == "es" else "Idle"),
-            ("#ffff00", "Caminando"      if self._lang == "es" else "Walking"),
-            ("#00c8ff", "Olfateando"     if self._lang == "es" else "Sniffing"),
-            ("#ff00ff", "Escalando"      if self._lang == "es" else "Climbing"),
-            ("#ffa500", "Agujero"        if self._lang == "es" else "Head-dip"),
-            ("#00ff00", "Erguido"        if self._lang == "es" else "Rearing"),
-            ("#b4ffb4", "Acicalamiento"  if self._lang == "es" else "Grooming"),
+        """Leyenda de colores de trayectoria leyendo labels.json."""
+        import json
+        _ORDER = [
+            ("immobile",    "Inmovil",       "Idle",      "#b4b4b4"),
+            ("horizontal",  "Caminando",     "Walking",   "#ffff00"),
+            ("sniffing",    "Olfateando",    "Sniffing",  "#00c8ff"),
+            ("climbing",    "Escalando",     "Climbing",  "#ff00ff"),
+            ("head_dipping","Agujero",       "Head-dip",  "#ffa500"),
+            ("rearing",     "Erguido",       "Rearing",   "#00ff00"),
+            ("grooming",    "Acicalamiento", "Grooming",  "#b4ffb4"),
         ]
+        try:
+            from app_config.config import paths
+            lp = paths.root / "scripts" / "app_config" / "labels.json"
+            cfg = json.loads(lp.read_text(encoding="utf-8"))
+            name_to_hex = {e["name"]: e["hex_color"] for e in cfg if "name" in e and "hex_color" in e}
+            items = [
+                (name_to_hex.get(n, fb), es if self._lang == "es" else en)
+                for n, es, en, fb in _ORDER
+            ]
+        except Exception:
+            items = [(fb, es if self._lang == "es" else en) for _, es, en, fb in _ORDER]
         hdr = "Trayectoria:" if self._lang == "es" else "Trajectory:"
         rows_html = ""
         for i in range(0, len(items), 2):
