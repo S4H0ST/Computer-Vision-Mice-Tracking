@@ -6,6 +6,7 @@ Functions:
     export_to_tensorrt   — exporta un modelo .pt a TensorRT (.engine) para GPU NVIDIA.
     load_model           — carga un modelo .pt o .onnx y devuelve una instancia YOLO.
     pick_model_path      — elige el mejor formato segun hardware disponible.
+    needs_cpu_pt_warning — True si el hardware es CPU pero solo hay modelo .pt disponible.
 """
 
 from __future__ import annotations
@@ -79,6 +80,27 @@ def pick_model_path() -> Path:
     if paths.yolo_model_onnx.exists():
         return paths.yolo_model_onnx
     raise FileNotFoundError("No se encontro ningun modelo YOLO en models/")
+
+
+def needs_cpu_pt_warning() -> bool:
+    """
+    True cuando el usuario esta a punto de correr inferencia con .pt en CPU:
+      - No hay GPU CUDA disponible
+      - No existe un .onnx exportado
+      - Existe un .pt (fallback que se usara)
+
+    En ese caso conviene avisar antes de iniciar el proceso.
+    """
+    from app_config.config import paths
+
+    try:
+        import torch
+        if torch.cuda.is_available():
+            return False
+    except ImportError:
+        pass
+
+    return paths.yolo_model.exists() and not paths.yolo_model_onnx.exists()
 
 
 def load_model(model_path: Path) -> YOLO:

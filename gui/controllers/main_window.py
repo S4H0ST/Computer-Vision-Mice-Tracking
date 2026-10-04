@@ -338,6 +338,17 @@ from the <code>models/</code> folder next to the application.
 Until a model is loaded, <b>Select Video</b>, <b>Start Camera</b> and <b>Labeling Phase</b>
 are disabled.</p>
 
+<h3>Which model file should I use — .pt or .onnx?</h3>
+<p>It depends on your hardware:</p>
+<ul>
+  <li><b>NVIDIA GPU (CUDA)</b> → use <code>.pt</code>. PyTorch uses the GPU directly for fast inference.</li>
+  <li><b>CPU only (no NVIDIA GPU)</b> → use <code>.onnx</code>. ONNX Runtime processes ~2× faster than PyTorch on CPU.</li>
+</ul>
+<p>The app selects the right file automatically based on your hardware.
+If only a <code>.pt</code> is present on a CPU machine, a warning will appear before processing starts.
+You can generate the <code>.onnx</code> file from the <b>Train</b> page (it is exported automatically
+after training) or by running <code>scripts/convert_to_onnx.py</code>.</p>
+
 <h3>Can I stop detection mid-way and still get results?</h3>
 <p>Yes. Press <b>Cancel</b>, confirm the prompt, and the app will save whatever has
 been processed so far — trajectory image, heatmap, annotated video and stats spreadsheet
@@ -533,6 +544,18 @@ de pesos <code>.pt</code> de la carpeta <code>models/</code> junto a la aplicaci
 Hasta que se cargue un modelo, <b>Seleccionar Video</b>, <b>Iniciar Camara</b> y
 <b>Fase Etiquetado</b> estan desactivados.</p>
 
+<h3>¿Que archivo de modelo debo usar — .pt o .onnx?</h3>
+<p>Depende de tu hardware:</p>
+<ul>
+  <li><b>GPU NVIDIA (CUDA)</b> → usa <code>.pt</code>. PyTorch aprovecha la GPU directamente.</li>
+  <li><b>Solo CPU (sin GPU NVIDIA)</b> → usa <code>.onnx</code>. ONNX Runtime es ~2× mas rapido
+      que PyTorch en CPU.</li>
+</ul>
+<p>La aplicacion selecciona el archivo correcto segun tu hardware de forma automatica.
+Si solo hay un <code>.pt</code> en un equipo sin GPU, aparecera un aviso antes de comenzar.
+Puedes generar el <code>.onnx</code> desde la pagina <b>Entrenar</b> (se exporta automaticamente
+al finalizar el entrenamiento) o ejecutando <code>scripts/convert_to_onnx.py</code>.</p>
+
 <h3>¿Puedo detener la deteccion a mitad y obtener igualmente los resultados?</h3>
 <p>Si. Pulsa <b>Cancelar</b>, confirma el dialogo, y la app guardara todo lo procesado:
 trayectoria, mapa de calor, video anotado y Excel reflejaran la ejecucion parcial.</p>
@@ -615,6 +638,7 @@ class MainWindow(QMainWindow):
         self._setup_train_page()
         self._setup_prelabel_page()
         self._setup_compare_page()
+        self._setup_home_info_banner()
         self._apply_language()  # idioma por defecto: espanol
         self._update_confirm_state()
 
@@ -791,6 +815,62 @@ class MainWindow(QMainWindow):
         if dlg.exec_() == QDialog.Accepted:
             if hasattr(self, "_prelabel_page"):
                 self._prelabel_page.rebuild_label_ui()
+
+    # ------------------------------------------------------------------
+    # Pagina inicio — banner informativo GPU/CPU
+    # ------------------------------------------------------------------
+
+    def _setup_home_info_banner(self) -> None:
+        """Inserta la pastilla informativa GPU/CPU en la pagina de inicio."""
+        banner = QFrame(self.page_home)
+        banner.setObjectName("model_info_banner")
+        banner.setStyleSheet(
+            "QFrame#model_info_banner {"
+            "  background-color: #e8f4fd;"
+            "  border: 1px solid #2980b9;"
+            "  border-radius: 6px;"
+            "}"
+        )
+
+        row = QHBoxLayout(banner)
+        row.setContentsMargins(12, 8, 12, 8)
+        row.setSpacing(10)
+
+        icon_lbl = QLabel("ⓘ", banner)   # circled i
+        icon_lbl.setStyleSheet("color: #2980b9; font-size: 16px; font-weight: bold;")
+        icon_lbl.setFixedWidth(20)
+        icon_lbl.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+
+        text_lbl = QLabel(banner)
+        text_lbl.setWordWrap(True)
+        text_lbl.setStyleSheet("color: #1a5276; font-size: 12px;")
+        text_lbl.setOpenExternalLinks(False)
+
+        row.addWidget(icon_lbl)
+        row.addWidget(text_lbl, 1)
+
+        # Insertar tras el separador horizontal (item 2 en homeLayout)
+        self.page_home.layout().insertWidget(3, banner)
+
+        self._lbl_model_info = text_lbl
+
+    def _update_model_info_banner(self) -> None:
+        if not hasattr(self, "_lbl_model_info"):
+            return
+        if self._lang == "es":
+            self._lbl_model_info.setText(
+                "<b>Formato de modelo recomendado</b> &nbsp;—&nbsp; "
+                "<b>GPU NVIDIA (CUDA):</b> usa el archivo <code>.pt</code> (PyTorch + CUDA). &nbsp;"
+                "<b>Solo CPU:</b> usa <code>.onnx</code> (~2&times; mas rapido en CPU). "
+                "Exporta el <code>.onnx</code> desde <b>Entrenar</b> tras completar el entrenamiento."
+            )
+        else:
+            self._lbl_model_info.setText(
+                "<b>Recommended model format</b> &nbsp;&mdash;&nbsp; "
+                "<b>NVIDIA GPU (CUDA):</b> use the <code>.pt</code> file (PyTorch + CUDA). &nbsp;"
+                "<b>CPU only:</b> use <code>.onnx</code> (~2&times; faster on CPU). "
+                "Export <code>.onnx</code> from the <b>Train</b> page after training."
+            )
 
     # ------------------------------------------------------------------
     # Pagina inicio
@@ -1302,7 +1382,51 @@ class MainWindow(QMainWindow):
         s = int(seconds)
         return f"{s // 60}:{s % 60:02d}"
 
+    def _warn_cpu_pt_if_needed(self) -> bool:
+        """Muestra aviso si se va a usar .pt en CPU. Devuelve True si el usuario cancela."""
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+            from utils.model_loader import needs_cpu_pt_warning
+            if not needs_cpu_pt_warning():
+                return False
+        except Exception:
+            return False
+
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Warning)
+        if self._lang == "es":
+            msg.setWindowTitle("Modelo no optimo para CPU")
+            msg.setText(
+                "<b>No se detecto GPU NVIDIA (CUDA).</b><br><br>"
+                "Estas usando el modelo <code>.pt</code> con CPU, lo que es muy lento.<br><br>"
+                "<b>Solucion recomendada:</b> genera el archivo <code>.onnx</code> del modelo "
+                "(ve a <b>Entrenar</b> y completa un entrenamiento — el .onnx se exporta "
+                "automaticamente) o ejecuta <code>scripts/convert_to_onnx.py</code>.<br><br>"
+                "Con <code>.onnx</code> la inferencia en CPU es ~2&times; mas rapida."
+            )
+            btn_cancel = msg.addButton("Cancelar", QMessageBox.RejectRole)
+            msg.addButton("Continuar igualmente", QMessageBox.AcceptRole)
+        else:
+            msg.setWindowTitle("Suboptimal model for CPU")
+            msg.setText(
+                "<b>No NVIDIA GPU (CUDA) detected.</b><br><br>"
+                "You are running a <code>.pt</code> model on CPU, which is very slow.<br><br>"
+                "<b>Recommended fix:</b> generate the <code>.onnx</code> model file "
+                "(go to <b>Train</b> and finish a training run — .onnx is exported automatically) "
+                "or run <code>scripts/convert_to_onnx.py</code>.<br><br>"
+                "With <code>.onnx</code>, CPU inference is ~2&times; faster."
+            )
+            btn_cancel = msg.addButton("Cancel", QMessageBox.RejectRole)
+            msg.addButton("Continue anyway", QMessageBox.AcceptRole)
+
+        msg.exec_()
+        return msg.clickedButton() == btn_cancel
+
     def _start_detection(self) -> None:
+        if self._warn_cpu_pt_if_needed():
+            return
+
         if self._worker and self._worker.isRunning():
             self._worker.request_stop()
             self._worker.wait(5000)
@@ -1699,6 +1823,7 @@ class MainWindow(QMainWindow):
 
         self._update_behavior_legend()
         self._update_traj_legend()
+        self._update_model_info_banner()
 
         if hasattr(self, "_prelabel_page"):
             self._prelabel_page.apply_language(self._lang)

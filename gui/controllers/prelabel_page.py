@@ -1610,8 +1610,50 @@ class PrelabelPage(QWidget):
     def _on_step0_next(self) -> None:
         if self._video_path is None:
             return
+        if self._warn_cpu_pt():
+            return
         self._inner_stack.setCurrentIndex(1)
         self._start_preprocess()
+
+    def _warn_cpu_pt(self) -> bool:
+        """Avisa si se usara .pt en CPU. Devuelve True si el usuario cancela."""
+        try:
+            from utils.model_loader import needs_cpu_pt_warning
+            if not needs_cpu_pt_warning():
+                return False
+        except Exception:
+            return False
+
+        from PyQt5.QtWidgets import QMessageBox
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Warning)
+        if self._lang == "es":
+            msg.setWindowTitle("Modelo no optimo para CPU")
+            msg.setText(
+                "<b>No se detecto GPU NVIDIA (CUDA).</b><br><br>"
+                "El modelo <code>.pt</code> en CPU es muy lento para pre-etiquetar videos.<br><br>"
+                "<b>Solucion:</b> genera el archivo <code>.onnx</code> desde la pagina "
+                "<b>Entrenar</b> (se exporta automaticamente al terminar) o ejecuta "
+                "<code>scripts/convert_to_onnx.py</code>.<br><br>"
+                "Con <code>.onnx</code> el pre-procesado es ~2&times; mas rapido."
+            )
+            btn_cancel = msg.addButton("Cancelar", QMessageBox.RejectRole)
+            msg.addButton("Continuar igualmente", QMessageBox.AcceptRole)
+        else:
+            msg.setWindowTitle("Suboptimal model for CPU")
+            msg.setText(
+                "<b>No NVIDIA GPU (CUDA) detected.</b><br><br>"
+                "Running a <code>.pt</code> model on CPU is very slow for pre-labeling.<br><br>"
+                "<b>Fix:</b> generate <code>.onnx</code> from the <b>Train</b> page "
+                "(exported automatically after training) or run "
+                "<code>scripts/convert_to_onnx.py</code>.<br><br>"
+                "With <code>.onnx</code>, pre-processing is ~2&times; faster."
+            )
+            btn_cancel = msg.addButton("Cancel", QMessageBox.RejectRole)
+            msg.addButton("Continue anyway", QMessageBox.AcceptRole)
+
+        msg.exec_()
+        return msg.clickedButton() == btn_cancel
 
     # ------------------------------------------------------------------
     # Sub-pagina 1: pre-procesado
