@@ -836,10 +836,19 @@ class MainWindow(QMainWindow):
         row.setContentsMargins(12, 8, 12, 8)
         row.setSpacing(10)
 
-        icon_lbl = QLabel("ⓘ", banner)   # circled i
-        icon_lbl.setStyleSheet("color: #2980b9; font-size: 16px; font-weight: bold;")
-        icon_lbl.setFixedWidth(20)
-        icon_lbl.setAlignment(Qt.AlignTop | Qt.AlignHCenter)
+        icon_lbl = QLabel("i", banner)
+        icon_lbl.setStyleSheet(
+            "QLabel {"
+            "  color: white;"
+            "  background-color: #2980b9;"
+            "  border-radius: 9px;"
+            "  font-size: 11px;"
+            "  font-weight: bold;"
+            "  font-style: italic;"
+            "}"
+        )
+        icon_lbl.setFixedSize(18, 18)
+        icon_lbl.setAlignment(Qt.AlignCenter)
 
         text_lbl = QLabel(banner)
         text_lbl.setWordWrap(True)
@@ -859,17 +868,17 @@ class MainWindow(QMainWindow):
             return
         if self._lang == "es":
             self._lbl_model_info.setText(
-                "<b>Formato de modelo recomendado</b> &nbsp;—&nbsp; "
-                "<b>GPU NVIDIA (CUDA):</b> usa el archivo <code>.pt</code> (PyTorch + CUDA). &nbsp;"
-                "<b>Solo CPU:</b> usa <code>.onnx</code> (~2&times; mas rapido en CPU). "
-                "Exporta el <code>.onnx</code> desde <b>Entrenar</b> tras completar el entrenamiento."
+                "<b>Archivo de modelo:</b> &nbsp;"
+                "Sin tarjeta grafica: <code>.pt</code> y <code>.onnx</code> funcionan, "
+                "pero <code>.onnx</code> es ~2&times; mas rapido. &nbsp;|&nbsp; "
+                "Con tarjeta grafica NVIDIA: usa <code>.pt</code>."
             )
         else:
             self._lbl_model_info.setText(
-                "<b>Recommended model format</b> &nbsp;&mdash;&nbsp; "
-                "<b>NVIDIA GPU (CUDA):</b> use the <code>.pt</code> file (PyTorch + CUDA). &nbsp;"
-                "<b>CPU only:</b> use <code>.onnx</code> (~2&times; faster on CPU). "
-                "Export <code>.onnx</code> from the <b>Train</b> page after training."
+                "<b>Model file:</b> &nbsp;"
+                "No graphics card: <code>.pt</code> and <code>.onnx</code> both work, "
+                "but <code>.onnx</code> is ~2&times; faster. &nbsp;|&nbsp; "
+                "NVIDIA graphics card: use <code>.pt</code>."
             )
 
     # ------------------------------------------------------------------
