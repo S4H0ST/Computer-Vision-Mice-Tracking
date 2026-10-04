@@ -23,8 +23,8 @@ import cv2
 import json
 import numpy as np
 from pathlib import Path
-from config.interfaces import BaseModule
-from config.config import paths
+from app_config.interfaces import BaseModule
+from app_config.config import paths
 
 
 HOLE_RADIUS:   int = 20

@@ -1,14 +1,16 @@
 """
 Clasificador de comportamiento basado en logica hibrida (YOLO + velocidad + espacio).
 
-Clases:
+Classes:
     _LabelStabilizer   — histeresis temporal para evitar parpadeo de etiquetas.
     BehaviorClassifier — aplica la cadena de reglas (head_dipping, rearing,
                          climbing, walking/immobile/sniffing) y estabiliza la salida.
 """
 
+from __future__ import annotations
+
 import numpy as np
-from spatial.spatial import SpatialAnalyzer
+from zone_analyzer.spatial import SpatialAnalyzer
 
 
 WALK_SPEED_THRESHOLD: float  = 0.35   # por encima -> walking
@@ -145,8 +147,8 @@ class BehaviorClassifier:
         elif yolo_label == "rat_head_dipping":
             final_label = "rat_head_dipping"
 
-        # B) Desambiguar horizontal -> walking / immobile / sniffing
-        elif final_label == "rat_horizontal":
+        # B) Desambiguar horizontal/inmobile -> walking / immobile / sniffing
+        elif final_label in ("rat_horizontal", "rat_inmobile", "rat_immobile"):
             final_label = self._derive_horizontal(snout_kp, speed)
 
         # C) Climbing: confirmado si el bbox penetra en la zona de pared.

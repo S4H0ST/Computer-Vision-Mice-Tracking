@@ -1,9 +1,11 @@
 """
-Interfaces abstractas compartidas por todos los módulos del pipeline.
+Interfaces abstractas compartidas por todos los modulos del pipeline.
 
-Clases:
+Classes:
     BaseModule — clase abstracta que obliga a implementar run() y ofrece validate_file().
 """
+
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path

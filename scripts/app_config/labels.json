@@ -1,0 +1,86 @@
+[
+    {
+        "key_char": "1",
+        "name": "climbing",
+        "display_es": "1: Escalando",
+        "display_en": "1: Climbing",
+        "hex_color": "#ff00ff",
+        "bgr_color": [
+            255,
+            0,
+            255
+        ]
+    },
+    {
+        "key_char": "2",
+        "name": "grooming",
+        "display_es": "2: Acicalamiento",
+        "display_en": "2: Grooming",
+        "hex_color": "#b4ffb4",
+        "bgr_color": [
+            180,
+            255,
+            180
+        ]
+    },
+    {
+        "key_char": "3",
+        "name": "head_dipping",
+        "display_es": "3: Agujero",
+        "display_en": "3: Head-dip",
+        "hex_color": "#ffa500",
+        "bgr_color": [
+            0,
+            165,
+            255
+        ]
+    },
+    {
+        "key_char": "4",
+        "name": "horizontal",
+        "display_es": "4: Horizontal",
+        "display_en": "4: Horizontal",
+        "hex_color": "#ffff00",
+        "bgr_color": [
+            0,
+            255,
+            255
+        ]
+    },
+    {
+        "key_char": "5",
+        "name": "rearing",
+        "display_es": "5: Erguido",
+        "display_en": "5: Rearing",
+        "hex_color": "#00ff00",
+        "bgr_color": [
+            0,
+            255,
+            0
+        ]
+    },
+    {
+        "key_char": "6",
+        "name": "sniffing",
+        "display_es": "6: Olfateando",
+        "display_en": "6: Sniffing",
+        "hex_color": "#00c8ff",
+        "bgr_color": [
+            255,
+            200,
+            0
+        ]
+    },
+    {
+        "key_char": "7",
+        "name": "immobile",
+        "display_es": "7: Inmovil",
+        "display_en": "7: Immobile",
+        "hex_color": "#b4b4b4",
+        "bgr_color": [
+            180,
+            180,
+            180
+        ]
+    }
+]

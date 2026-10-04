@@ -20,7 +20,7 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
-_TRANS_PATH = PROJECT_ROOT / "scripts" / "config" / "translations.json"
+_TRANS_PATH = PROJECT_ROOT / "scripts" / "app_config" / "translations.json"
 
 def _load_t() -> dict:
     try:

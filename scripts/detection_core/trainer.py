@@ -1,22 +1,29 @@
 """
 Entrenamiento del modelo YOLO Pose para deteccion de comportamientos del raton.
 
-Clases:
+Classes:
     YOLOTrainer — entrena el modelo YOLO, estima el batch optimo y copia automaticamente
                   el mejor peso al directorio models/.
 """
+
+from __future__ import annotations
 
 import torch
 import shutil
 import platform
 from pathlib import Path
 from ultralytics import YOLO
-from config.interfaces import BaseModule
-from config.config import paths, TrainParams
+from app_config.interfaces import BaseModule
+from app_config.config import paths, TrainParams
 
 
 class YOLOTrainer(BaseModule):
-    """Entrena un modelo YOLO Pose y copia el mejor checkpoint a models/yolo_ratas.pt."""
+    """
+    Entrena un modelo YOLO Pose y copia el mejor checkpoint a models/yolo_ratas.pt.
+
+    Args:
+        config: Hiperparametros de entrenamiento (epochs, imgsz, batch, device, etc.).
+    """
 
     def __init__(self, config: TrainParams) -> None:
         self.cfg: TrainParams = config

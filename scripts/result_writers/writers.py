@@ -1,13 +1,16 @@
 """
 Escritura de video anotado y CSV de resultados frame a frame.
 
-Clases:
+Classes:
     VideoOutput — gestiona uno o dos cv2.VideoWriter (overlay + limpio opcional).
     CsvOutput   — gestiona apertura, escritura por fila y cierre del CSV de deteccion.
 """
 
+from __future__ import annotations
+
 import csv
 import cv2
+import numpy as np
 from pathlib import Path
 
 
@@ -33,7 +36,7 @@ class VideoOutput:
     def clean_path(self) -> Path | None:
         return self._clean_path
 
-    def write(self, img_main, img_clean=None) -> None:
+    def write(self, img_main: np.ndarray, img_clean: np.ndarray | None = None) -> None:
         self._main.write(img_main)
         if self._clean is not None and img_clean is not None:
             self._clean.write(img_clean)
@@ -68,7 +71,8 @@ class CsvOutput:
 
     def write_row(self, frame_idx: int, fps: float,
                   yolo_label: str, final_label: str,
-                  box, snout_kp, tail_kp, speed: float,
+                  box: np.ndarray, snout_kp: np.ndarray | None,
+                  tail_kp: np.ndarray | None, speed: float,
                   hole_idx: int = -1) -> None:
         rx1, ry1, rx2, ry2 = map(int, box)
         snout_x = float(snout_kp[0]) if snout_kp is not None else -1.0

@@ -1,55 +1,25 @@
 """
 Detector principal de comportamiento del raton usando YOLO Pose + logica hibrida.
 
-Clases:
+Classes:
     _SpeedTracker — calcula y suaviza la velocidad del centroide entre frames.
     RatDetector   — orquesta la inferencia YOLO, delega la clasificacion en
                     BehaviorClassifier, y escribe video y CSV via VideoOutput/CsvOutput.
 """
+
+from __future__ import annotations
 
 import cv2
 import numpy as np
 from collections import deque
 from ultralytics import YOLO
 
-from config.interfaces import BaseModule
-from config.config import paths, DetectParams
-from spatial.spatial import SpatialAnalyzer
-from behavior.behavior_classifier import BehaviorClassifier
-from output.writers import VideoOutput, CsvOutput
-
-
-# Traducciones de etiquetas internas para la leyenda impresa en consola
-LABEL_ES: dict[str, str] = {
-    "rat_climbing":      "Trepar / Escalar",
-    "rat_grooming":      "Acicalamiento / Limpieza",
-    "rat_head_dipping":  "Asomarse por agujero",
-    "rat_rearing":       "Incorporarse / Erguirse",
-    "walking":           "Caminando",
-    "immobile":          "Inmovil",
-    "sniffing_walking":  "Olfateando (en movimiento)",
-    "sniffing_immobile": "Olfateando (parado)",
-}
-
-# Indices de keypoints segun kpt_shape: [snout, spine, tail]
-KP_SNOUT: int = 0
-KP_SPINE: int = 1
-KP_TAIL: int  = 2
-
-
-def _get_color(label: str) -> tuple[int, int, int]:
-    """Devuelve el color BGR asociado a cada etiqueta de comportamiento."""
-    label = label.lower()
-    if "sniffing_immobile" in label: return (200, 100, 180)
-    if "sniffing"   in label: return (0,   200, 255)
-    if "immobile"   in label: return (180, 180, 180)
-    if "walking"    in label: return (0,   255, 255)
-    if "climbing"   in label: return (255,   0, 255)
-    if "dipping"    in label: return (0,   165, 255)
-    if "rearing"    in label: return (0,   255,   0)
-    if "grooming"   in label: return (180, 255, 180)
-    return (128, 128, 128)
-
+from app_config.interfaces import BaseModule
+from app_config.config import paths, DetectParams
+from zone_analyzer.spatial import SpatialAnalyzer
+from behavior_classifier.behavior_classifier import BehaviorClassifier
+from result_writers.writers import VideoOutput, CsvOutput
+from utils.detection_utils import KP_SNOUT, KP_SPINE, KP_TAIL, LABEL_ES, _get_color
 
 
 class _SpeedTracker:
@@ -64,19 +34,24 @@ class _SpeedTracker:
     def __init__(self, smoothing: int = 5) -> None:
         self._history: deque = deque(maxlen=smoothing)
         self._prev: tuple[float, float] | None = None
+        self._prev_tail: tuple[float, float] | None = None
 
-    def update(self, box: np.ndarray, img_w: int, img_h: int) -> float:
+    def update(self, box: np.ndarray, img_w: int, img_h: int,
+               tail_kp: np.ndarray | None = None) -> float:
         """
         Calcula la velocidad media suavizada para el frame actual.
+        Combina el centroide del bbox con el desplazamiento del keypoint de cola.
 
-        box   : array [x1, y1, x2, y2] en pixeles.
-        img_w : ancho de la imagen (para normalizar).
-        img_h : alto de la imagen (para normalizar).
+        box     : array [x1, y1, x2, y2] en pixeles.
+        img_w   : ancho de la imagen (para normalizar).
+        img_h   : alto de la imagen (para normalizar).
+        tail_kp : coordenadas (x, y) del keypoint de cola, o None si no visible.
         """
         x1, y1, x2, y2 = box
         cx = ((x1 + x2) / 2) / img_w
         cy = ((y1 + y2) / 2) / img_h
 
+        # Velocidad del centroide
         speed = 0.0
         if self._prev is not None:
             speed = np.sqrt((cx - self._prev[0]) ** 2 +
@@ -84,12 +59,27 @@ class _SpeedTracker:
             if speed > self._MAX_PLAUSIBLE_SPEED:
                 speed = self._history[-1] if self._history else 0.0
         self._prev = (cx, cy)
+
+        # Velocidad del keypoint de cola (combinada con centroide si visible)
+        if tail_kp is not None and not (tail_kp[0] < 1.0 and tail_kp[1] < 1.0):
+            tx = float(tail_kp[0]) / img_w
+            ty = float(tail_kp[1]) / img_h
+            if self._prev_tail is not None:
+                tail_speed = np.sqrt((tx - self._prev_tail[0]) ** 2 +
+                                     (ty - self._prev_tail[1]) ** 2) * 100.0
+                if tail_speed <= self._MAX_PLAUSIBLE_SPEED:
+                    speed = (speed + tail_speed) / 2.0
+            self._prev_tail = (tx, ty)
+        else:
+            self._prev_tail = None
+
         self._history.append(speed)
         return float(np.mean(self._history))
 
     def reset(self) -> None:
         """Reinicia el historial y el estado previo."""
         self._prev = None
+        self._prev_tail = None
         self._history.clear()
 
 
@@ -116,11 +106,10 @@ class RatDetector(BaseModule):
 
     def _setup(self) -> None:
         """Carga el modelo YOLO, el analizador espacial y el clasificador de comportamiento."""
-        if not paths.yolo_model.exists():
-            raise FileNotFoundError(f"Modelo YOLO no encontrado: {paths.yolo_model}")
-
-        print(f"[Core] Cargando YOLO Pose: {paths.yolo_model}")
-        self.model = YOLO(str(paths.yolo_model))
+        from utils.model_loader import pick_model_path
+        _mp = pick_model_path()
+        print(f"[Core] Cargando YOLO Pose: {_mp}")
+        self.model = YOLO(str(_mp))
 
         self.spatial_logic = SpatialAnalyzer(config_path=paths.coords_json)
         self._behavior_classifier = BehaviorClassifier(spatial_logic=self.spatial_logic)
@@ -327,7 +316,7 @@ class RatDetector(BaseModule):
                 tail_kp  = self._extract_keypoint(res, KP_TAIL, detection_idx=0)
 
             if rat_box is not None:
-                speed_val   = self._speed_tracker.update(rat_box, out_w, out_h)
+                speed_val   = self._speed_tracker.update(rat_box, out_w, out_h, tail_kp=tail_kp)
                 final_label = self._behavior_classifier.classify(
                     yolo_label, speed_val, snout_kp, rat_box, spatial_ok
                 )
@@ -345,7 +334,7 @@ class RatDetector(BaseModule):
                     label_txt = f"sniffing [{motion}]"
                 else:
                     display    = final_label.removeprefix("rat_").replace("_", " ")
-                    yolo_ruido = yolo_label in ("rat_horizontal", "Unknown")
+                    yolo_ruido = yolo_label in ("rat_horizontal", "rat_inmobile", "rat_immobile", "Unknown")
                     if not yolo_ruido and yolo_label != final_label:
                         yolo_disp = yolo_label.removeprefix("rat_").replace("_", " ")
                         label_txt = f"{display} [{yolo_disp}]"

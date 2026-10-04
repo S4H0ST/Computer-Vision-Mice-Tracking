@@ -19,10 +19,10 @@ import json
 import tempfile
 from pathlib import Path
 from datetime import datetime
-from config.config import paths, train_cfg, detect_cfg
-from detection.trainer import YOLOTrainer
-from detection.detector import RatDetector
-from calibration.calibrator_image import ImageCalibrator
+from app_config.config import paths, train_cfg, detect_cfg
+from detection_core.trainer import YOLOTrainer
+from detection_core.detector import RatDetector
+from zone_calibrator.calibrator_image import ImageCalibrator
 from utils.stats_generator import StatsGenerator
 
 

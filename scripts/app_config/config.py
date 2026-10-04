@@ -1,18 +1,20 @@
 """
 Configuracion centralizada del proyecto: rutas, parametros de entrenamiento y deteccion.
 
-Clases:
-    Paths        — rutas de archivos y directorios del proyecto.
-    TrainParams  — hiperparametros para el entrenamiento YOLO.
-    DetectParams — parametros para la inferencia/deteccion.
+Classes:
+    Paths         — rutas de archivos y directorios del proyecto.
+    TrainParams   — hiperparametros para el entrenamiento YOLO.
+    DetectParams  — parametros para la inferencia/deteccion.
     DatasetParams — parametros para la construccion del dataset.
 
-Variables de modulo:
+Module variables:
     paths      : Paths
     train_cfg  : TrainParams
     detect_cfg : DetectParams
     data_cfg   : DatasetParams
 """
+
+from __future__ import annotations
 
 import sys
 from pathlib import Path
@@ -41,6 +43,7 @@ class Paths:
 
     base_yolo_model: Path = models_dir / "yolov8s-pose.pt"
     yolo_model:      Path = models_dir / "yolo_ratas.pt"
+    yolo_model_onnx: Path = models_dir / "yolo_ratas.onnx"
     rnn_model:       Path = models_dir / "best_rnn.pth"
 
     # Rutas de salida

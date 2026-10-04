@@ -33,7 +33,7 @@ from PyQt5 import uic
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 
-from config.config import paths
+from app_config.config import paths
 from gui.controllers.detect_worker import DetectionWorker
 
 
@@ -271,7 +271,7 @@ you can label another video to the same output folder and the frames accumulate.
   <li>Click <b>Train</b>. Training output is streamed to the console panel.</li>
 </ul>
 <div class="tip">Tip: training hyperparameters (epochs, batch size, device) are configured
-in <code>scripts/config/config.py</code> under <code>train_cfg</code>.</div>
+in <code>scripts/app_config/config.py</code> under <code>train_cfg</code>.</div>
 
 <h2>Compare Groups</h2>
 <p>Load two sets of <code>stats_*.xlsx</code> result files (one per group) and compare their
@@ -289,7 +289,7 @@ behaviour distributions with bar charts and statistical tests.</p>
 </ul>
 <p>The right-hand panel in Labeling Phase always shows the <b>actual current key</b> next to
 each label name, so you always know what to press even after changing shortcuts.</p>
-<p>Changes are saved to <code>scripts/config/labels.json</code> and take effect the next
+<p>Changes are saved to <code>scripts/app_config/labels.json</code> and take effect the next
 time you open the Labeling Phase tab.</p>
 
 <h2>Keyboard Shortcuts</h2>
@@ -465,7 +465,7 @@ Puedes etiquetar otro video en la misma carpeta y los frames se acumulan.</div>
   <li>Haz clic en <b>Entrenar</b>. La salida del entrenamiento se muestra en la consola.</li>
 </ul>
 <div class="tip">Consejo: los hiperparametros de entrenamiento (epochs, batch size, device)
-se configuran en <code>scripts/config/config.py</code> bajo <code>train_cfg</code>.</div>
+se configuran en <code>scripts/app_config/config.py</code> bajo <code>train_cfg</code>.</div>
 
 <h2>Comparar Grupos</h2>
 <p>Carga dos conjuntos de archivos <code>stats_*.xlsx</code> (uno por grupo) y compara
@@ -484,7 +484,7 @@ sus distribuciones de comportamiento con graficas de barras y pruebas estadistic
 </ul>
 <p>El panel derecho en la Fase Etiquetado siempre muestra la <b>tecla real actual</b> junto al
 nombre de cada etiqueta, para que sepas que pulsar en todo momento.</p>
-<p>Los cambios se guardan en <code>scripts/config/labels.json</code> y se aplican la proxima
+<p>Los cambios se guardan en <code>scripts/app_config/labels.json</code> y se aplican la proxima
 vez que abres la Fase Etiquetado.</p>
 
 <h2>Atajos de teclado</h2>
@@ -780,7 +780,7 @@ class MainWindow(QMainWindow):
         QMessageBox.about(
             self,
             "About Rat Tracker Pose",
-            "<b>Rat Tracker Pose v2.0</b><br><br>"
+            "<b>Rat Tracker Pose v2.1</b><br><br>"
             "Automated rat behaviour analysis using computer vision and YOLO-Pose.<br><br>"
             "<small style='color:#7f8c8d;'>Universidad Rey Juan Carlos, 2026</small>",
         )
@@ -1565,7 +1565,7 @@ class MainWindow(QMainWindow):
         m, s = divmod(int(dur), 60)
         self.lbl_res_duration.setText(f"{m:02d}:{s:02d}" if dur else "—")
         self.lbl_res_frames.setText(str(frm) if frm else "—")
-        from config.config import paths as cfg_paths
+        from app_config.config import paths as cfg_paths
         self.lbl_res_model.setText(cfg_paths.yolo_model.name)
 
         # Distancia recorrida (calculada desde el CSV si esta disponible)
@@ -1712,7 +1712,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "_btn_label_settings"):
             try:
                 import json as _j
-                with open(PROJECT_ROOT / "scripts" / "config" / "translations.json",
+                with open(PROJECT_ROOT / "scripts" / "app_config" / "translations.json",
                           "r", encoding="utf-8") as _f:
                     _sb = _j.load(_f).get("sidebar", {})
                 txt = _sb.get("label_settings", {}).get(self._lang, "  Config. Etiquetas")
@@ -1881,12 +1881,12 @@ class MainWindow(QMainWindow):
         )
         self._btn_label_settings.setIconSize(_QSize(16, 16))
         self._btn_label_settings.setStyleSheet(
-            "QPushButton { background-color: #1a5276; color: #aed6f1; "
+            "QPushButton { background-color: #CB0017; color: white; "
             "text-align: left; padding: 10px 20px; font-size: 13px; border: none; }"
-            "QPushButton:hover { background-color: #21618c; color: white; }"
+            "QPushButton:hover { background-color: #E5001C; color: white; }"
         )
-        sbl.insertWidget(sbl.count() - 1, self._btn_label_settings)
-        # Final order: nav buttons → compare → spacer → btn_lang → label_settings → version
+        sbl.insertWidget(3, self._btn_label_settings)
+        # Final order: title → model → line → label_settings → home → prelabeling → train → results → compare → spacer → btn_lang → version
 
     def _setup_compare_page(self) -> None:
         from gui.controllers.group_stats_page import GroupStatsPage

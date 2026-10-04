@@ -1,10 +1,12 @@
 """
 Logica espacial basada en la calibracion de zonas (coords.json).
 
-Clases:
+Classes:
     SpatialAnalyzer — analiza la posicion del raton respecto a las paredes y los agujeros
                       de la caja, usando los datos generados por ZoneCalibrator.
 """
+
+from __future__ import annotations
 
 import json
 import numpy as np
@@ -19,16 +21,16 @@ class SpatialAnalyzer:
 
     DIPPING_RATIO: float = 0.9    # snout dentro del 90% del radio -> head_dipping
 
-    def __init__(self, config_path) -> None:
-        self.holes: list[tuple] = []
+    def __init__(self, config_path: Path | str) -> None:
+        self.holes: list[tuple[float, float]] = []
         self.hole_radius: int = 20
-        self.inner_limits: dict | None = None
-        self.outer_limits: dict | None = None
-        self.limits_center: dict | None = None
+        self.inner_limits: dict[str, int] | None = None
+        self.outer_limits: dict[str, int] | None = None
+        self.limits_center: dict[str, int] | None = None
         self._calibrated: bool = False
         self._load_config(config_path)
 
-    def _load_config(self, path) -> None:
+    def _load_config(self, path: Path | str) -> None:
         """Carga los datos de calibracion desde coords.json."""
         p = Path(path)
         if not p.exists():
@@ -70,7 +72,7 @@ class SpatialAnalyzer:
                 return True
         return False
 
-    def check_dipping_hole(self, snout_xy) -> int:
+    def check_dipping_hole(self, snout_xy: np.ndarray | None) -> int:
         """
         Devuelve el indice (0-3) del agujero en el que el snout esta asomado,
         o -1 si no esta en ningun agujero.
@@ -84,13 +86,13 @@ class SpatialAnalyzer:
                 return i
         return -1
 
-    def check_dipping(self, snout_xy) -> bool:
+    def check_dipping(self, snout_xy: np.ndarray | None) -> bool:
         """Devuelve True si el snout esta dentro del radio de alguno de los agujeros."""
         return self.check_dipping_hole(snout_xy) >= 0
 
     WALL_CLIMB_MARGIN: int = 10   # px que el snout debe penetrar en la zona de pared
 
-    def snout_in_wall_zone(self, snout_point) -> bool:
+    def snout_in_wall_zone(self, snout_point: np.ndarray | None) -> bool:
         """
         Devuelve True si el snout esta claramente en la zona de pared
         (al menos WALL_CLIMB_MARGIN px mas alla del borde interior).
@@ -111,7 +113,7 @@ class SpatialAnalyzer:
         return (lim_o["x_min"] <= x <= lim_o["x_max"] and
                 lim_o["y_min"] <= y <= lim_o["y_max"])
 
-    def check_sniffing_wall(self, snout_point, margin: int = 30) -> bool:
+    def check_sniffing_wall(self, snout_point: np.ndarray | None, margin: int = 30) -> bool:
         """
         Devuelve True si el snout esta dentro del area interior y a menos de
         'margin' pixeles de cualquiera de los cuatro lados del rectangulo interior.
@@ -150,7 +152,7 @@ class SpatialAnalyzer:
         return (x1 >= lim["x_min"] - margin and x2 <= lim["x_max"] + margin and
                 y1 >= lim["y_min"] - margin and y2 <= lim["y_max"] + margin)
 
-    def check_in_center(self, point) -> bool:
+    def check_in_center(self, point: np.ndarray | None) -> bool:
         """Devuelve True si el punto (x, y) esta dentro de la zona central definida por el usuario."""
         if point is None or self.limits_center is None:
             return False
