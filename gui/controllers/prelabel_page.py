@@ -445,9 +445,10 @@ class PreprocessWorker(QThread):
                 if not ret or self._stop:
                     break
                 frame = raw[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
-                res_list = model.predict(
-                    source=frame, stream=False,
+                res_list = model.track(
+                    source=frame, persist=True,
                     conf=0.18, device=device, iou=0.5, verbose=False,
+                    tracker="bytetrack.yaml",
                 )
                 box_out = kps_xy_out = kps_conf_out = None
                 best_out = 0
@@ -475,13 +476,14 @@ class PreprocessWorker(QThread):
             cap.release()
         else:
             # Sin recorte util: pasar ruta de video directamente
-            results_iter = model.predict(
+            results_iter = model.track(
                 source=self._video_path,
                 stream=True,
                 conf=0.18,
                 device=device,
                 iou=0.5,
                 verbose=False,
+                tracker="bytetrack.yaml",
             )
             frame_idx = 0
             for res in results_iter:
