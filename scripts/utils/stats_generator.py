@@ -307,8 +307,8 @@ class StatsGenerator:
         Algoritmo (acumulacion + desenfoque gaussiano, 3 pasos):
           1. Por cada frame con snout detectado se suma 1 en la posicion (x,y)
              del snout sobre una matriz float32 del tamano del canvas.
-          2. cv2.GaussianBlur (sigma=18 px) convierte los puntos en manchas
-             suaves que representan la zona de influencia del raton.
+          2. cv2.GaussianBlur (sigma adaptativo ≈ canvas/27, minimo 18 px) convierte
+             los puntos en manchas suaves del tamaño de un cuerpo de rata.
           3. La matriz normalizada [0,1] se convierte a uint8 y se aplica
              cv2.COLORMAP_JET: azul oscuro = zona poco visitada,
              rojo = hotspot donde el raton paso mas tiempo.
@@ -341,7 +341,14 @@ class StatsGenerator:
             cx, cy = self._to_canvas(sx, sy, x_min, y_min, x_scale, y_scale)
             accum[cy, cx] += 1.0
 
-        accum = cv2.GaussianBlur(accum, (0, 0), sigmaX=12)
+        # Sigma adaptativo: ~3.5% del ancho del canvas.
+        # Con 600px de arena → sigma≈22 px ≈ 2.2 cm en una caja de 60 cm.
+        # Esto produce manchas del tamaño de un cuerpo de rata (5-8 cm),
+        # coherente con los heatmaps de OFT publicados en literatura.
+        # sigma=12 quedaba demasiado puntual; 22 da densidad suave sin borronar.
+        arena_px = sz - 2 * m
+        sigma = max(18, int(arena_px / 27))
+        accum = cv2.GaussianBlur(accum, (0, 0), sigmaX=sigma)
 
         if accum.max() > 0:
             accum = accum / accum.max()
@@ -361,19 +368,24 @@ class StatsGenerator:
             cv2.rectangle(img, p1, p2, (255, 255, 255), 1)
 
         if self.holes:
-            r_canvas = max(6, int(self.hole_radius * min(x_scale, y_scale)))
-            for hx, hy in self.holes:
+            r_canvas  = max(6, int(self.hole_radius * min(x_scale, y_scale)))
+            hole_names = self._hole_position_names()
+            for idx, (hx, hy) in enumerate(self.holes):
                 cx, cy = self._to_canvas(hx, hy, x_min, y_min, x_scale, y_scale)
                 cv2.circle(img, (cx, cy), r_canvas, (255, 255, 255), 2)
+                label = hole_names[idx] if len(self.holes) == 4 else str(idx + 1)
+                (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.30, 1)
+                cv2.putText(img, label, (cx - tw // 2, cy + th // 2),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.30, (255, 255, 255), 1, cv2.LINE_AA)
 
         self._draw_heatmap_legend(img, sz, m)
         cv2.imwrite(str(out_path), img)
 
     def _draw_heatmap_legend(self, img: np.ndarray, sz: int, m: int) -> None:
-        """Leyenda de gradiente COLORMAP_JET en el margen blanco derecho (fuera del canvas)."""
-        legend_h = 80
-        legend_w = 12
-        lx = sz - m + 4   # dentro del margen blanco derecho, a la derecha del borde del canvas
+        """Barra de color JET con escala porcentual en el margen derecho."""
+        legend_h = 160
+        legend_w = 14
+        lx = sz - m + 5
         ly = m + 10
 
         for i in range(legend_h):
@@ -384,10 +396,16 @@ class StatsGenerator:
                      (int(color_bgr[0]), int(color_bgr[1]), int(color_bgr[2])), 1)
 
         cv2.rectangle(img, (lx, ly), (lx + legend_w, ly + legend_h), (80, 80, 80), 1)
-        cv2.putText(img, "alto",  (lx + legend_w + 3, ly + 8),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.30, (40, 40, 40), 1)
-        cv2.putText(img, "bajo",  (lx + legend_w + 3, ly + legend_h),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.30, (40, 40, 40), 1)
+
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        for pct in [100, 75, 50, 25, 0]:
+            y_pos = ly + int((1 - pct / 100) * (legend_h - 1))
+            cv2.line(img, (lx - 2, y_pos), (lx, y_pos), (80, 80, 80), 1)
+            cv2.putText(img, f"{pct}%", (lx + legend_w + 3, y_pos + 4),
+                        font, 0.28, (40, 40, 40), 1, cv2.LINE_AA)
+
+        cv2.putText(img, "Tiempo", (lx - 2, ly - 4),
+                    font, 0.28, (40, 40, 40), 1, cv2.LINE_AA)
 
     # ------------------------------------------------------------------
     # Utilidades Excel
@@ -470,6 +488,34 @@ class StatsGenerator:
             prev_border = border
         return borders
 
+    def _speed_bins(self, bin_s: float = 30.0) -> list[tuple[float, float, float]]:
+        """
+        Divide el video en periodos de bin_s segundos y calcula por cada uno:
+          (t_inicio_s, distancia_px, velocidad_media_px_s)
+        Util para ver habituacion (la actividad tipicamente decrece con el tiempo).
+        """
+        if len(self.rows) < 2:
+            return []
+        duration_s = float(self.rows[-1]["time_s"])
+        n_bins = max(1, int(np.ceil(duration_s / bin_s)))
+        result = []
+        for b in range(n_bins):
+            t0 = b * bin_s
+            t1 = (b + 1) * bin_s
+            bin_rows = [r for r in self.rows
+                        if t0 <= float(r.get("time_s", 0)) < t1]
+            pts = [(float(r["tail_x"]), float(r["tail_y"]))
+                   for r in bin_rows
+                   if float(r.get("tail_x", -1)) > 0]
+            dist = float(sum(
+                np.linalg.norm(np.array(pts[i + 1]) - np.array(pts[i]))
+                for i in range(len(pts) - 1)
+            )) if len(pts) > 1 else 0.0
+            actual_s = len(bin_rows) / self.fps if self.fps > 0 else bin_s
+            speed = dist / actual_s if actual_s > 0 else 0.0
+            result.append((t0, round(dist, 1), round(speed, 1)))
+        return result
+
     def _count_hole_usage(self) -> tuple[dict[int, int], dict[int, int]]:
         """
         Cuenta frames y bouts de head dipping por agujero.
@@ -525,7 +571,7 @@ class StatsGenerator:
 
         for col, h in enumerate(
             ["Comportamiento", "Fotogramas", "Duracion (s)", "% Tiempo",
-             "Episodios", "Dur. media por episodio (s)"], 1
+             "Veces", "Dur. media por vez (s)"], 1
         ):
             c = ws.cell(row=1, column=col, value=h)
             c.font = hdr_font
@@ -732,15 +778,15 @@ class StatsGenerator:
 
         r += 1
         _s(r, "Introduccion en Agujeros (Indice Principal de Exploracion)"); r += 1
-        _m(r, "N. de episodios de introduccion (bouts)",   dipping_b,    "episodios");    r += 1
-        _m(r, "Episodios de introduccion por minuto",      dipping_pm,   "episod./min");  r += 1
-        _m(r, "Latencia al primer episodio",               latencia_hd,  "s");            r += 1
+        _m(r, "N. de veces de introduccion (bouts)",   dipping_b,    "veces");    r += 1
+        _m(r, "Veces de introduccion por minuto",      dipping_pm,   "veces/min");  r += 1
+        _m(r, "Latencia al primer vez",               latencia_hd,  "s");            r += 1
         _m(r, "Duracion total de introduccion",            dipping_dur,  "s");            r += 1
-        _m(r, "Duracion media por episodio",               dipping_avg,  "s/episodio");   r += 1
-        _m(r, "Habituacion — episodios (1er cuarto)",      hd_q[0],      "episodios");    r += 1
-        _m(r, "Habituacion — episodios (2o cuarto)",       hd_q[1],      "episodios");    r += 1
-        _m(r, "Habituacion — episodios (3er cuarto)",      hd_q[2],      "episodios");    r += 1
-        _m(r, "Habituacion — episodios (4o cuarto)",       hd_q[3],      "episodios");    r += 1
+        _m(r, "Duracion media por vez",               dipping_avg,  "s/vez");   r += 1
+        _m(r, "Habituacion — veces (1er cuarto)",      hd_q[0],      "veces");    r += 1
+        _m(r, "Habituacion — veces (2o cuarto)",       hd_q[1],      "veces");    r += 1
+        _m(r, "Habituacion — veces (3er cuarto)",      hd_q[2],      "veces");    r += 1
+        _m(r, "Habituacion — veces (4o cuarto)",       hd_q[3],      "veces");    r += 1
 
         # Head-dipping por agujero individual
         if self.holes:
@@ -752,7 +798,7 @@ class StatsGenerator:
                 bt_h  = hole_bouts.get(i, 0)
                 dur_h = round(fr_h / self.fps, 2)
                 nom   = f"Agujero {i + 1} ({hole_names[i]})"
-                _m(r, f"  {nom} — episodios",      bt_h,  "episodios"); r += 1
+                _m(r, f"  {nom} — veces",      bt_h,  "veces"); r += 1
                 _m(r, f"  {nom} — duracion",        dur_h, "s");         r += 1
                 _m(r, f"  {nom} — % del tiempo de introduccion",
                    round(fr_h / max(dipping_fr, 1) * 100, 1), "%"); r += 1
@@ -767,7 +813,7 @@ class StatsGenerator:
         r += 1
         _s(r, "Distribucion Espacial y Conducta de Pared"); r += 1
         _m(r, "Thigmotaxis — escalando (conducta de pared)", climbing_pct, "%");   r += 1
-        _m(r, "Escalando (n. episodios)",                  climbing_b,     "episodios"); r += 1
+        _m(r, "Escalando (n. veces)",                  climbing_b,     "veces"); r += 1
         _m(r, "Tiempo en zona interior (centroide)",        central_pct,   "%");    r += 1
         _m(r, "Tiempo en zona periferica (centroide)",      periph_pct,    "%");    r += 1
 
@@ -786,7 +832,7 @@ class StatsGenerator:
                 bt_b  = rearing_borders[key][1]
                 dur_b = round(fr_b / self.fps, 2)
                 pct_b = round(fr_b / max(rearing_total_fr, 1) * 100, 1)
-                _m(r, f"  {nombre} — episodios",    bt_b,  "episodios"); r += 1
+                _m(r, f"  {nombre} — veces",    bt_b,  "veces"); r += 1
                 _m(r, f"  {nombre} — duracion",     dur_b, "s");         r += 1
                 _m(r, f"  {nombre} — % del tiempo erguido", pct_b, "%"); r += 1
         else:
@@ -810,8 +856,60 @@ class StatsGenerator:
 
         r += 1
         _s(r, "Acicalamiento (Conducta de Desplazamiento de Estres)"); r += 1
-        _m(r, "Acicalamiento (episodios/min)",              grooming_pm,    "episod./min"); r += 1
-        _m(r, "Acicalamiento duracion total",               grooming_dur,   "s");           r += 1
-        _m(r, "Acicalamiento duracion media por episodio",  grooming_avg,   "s/episodio");  r += 1
+        _m(r, "Acicalamiento (veces/min)",              grooming_pm,    "veces/min"); r += 1
+        _m(r, "Acicalamiento duracion total",               grooming_dur,   "s");     r += 1
+        _m(r, "Acicalamiento duracion media por vez",       grooming_avg,   "s/vez"); r += 1
+
+        # ---- Hoja 3: Actividad a lo largo del tiempo ----------------- #
+        bins = self._speed_bins(bin_s=30.0)
+        if bins:
+            from openpyxl.chart import LineChart, Reference as _Ref
+            ws3 = wb.create_sheet("Actividad")
+            ws3.column_dimensions["A"].width = 18
+            ws3.column_dimensions["B"].width = 18
+            ws3.column_dimensions["C"].width = 18
+
+            act_fill = PatternFill("solid", fgColor="1F4E79")
+            act_font = Font(bold=True, color="FFFFFF")
+
+            speed_unit_lbl = "cm/s" if self.px_per_cm else "px/s"
+            dist_unit_lbl  = "m"    if self.px_per_cm else "px"
+
+            for col, h in enumerate(
+                ["Periodo (inicio, s)",
+                 f"Distancia ({dist_unit_lbl})",
+                 f"Velocidad media ({speed_unit_lbl})"], 1
+            ):
+                c = ws3.cell(row=1, column=col, value=h)
+                c.font = act_font
+                c.fill = act_fill
+                c.alignment = Alignment(horizontal="center")
+
+            for i, (t0, dist_px, speed_px) in enumerate(bins, 2):
+                if self.px_per_cm:
+                    dist_val  = round(dist_px  / self.px_per_cm / 100, 3)
+                    speed_val = round(speed_px / self.px_per_cm, 2)
+                else:
+                    dist_val  = dist_px
+                    speed_val = speed_px
+                ws3.cell(row=i, column=1, value=t0)
+                ws3.cell(row=i, column=2, value=dist_val)
+                ws3.cell(row=i, column=3, value=speed_val)
+
+            n_bins = len(bins)
+
+            # Grafica de velocidad a lo largo del tiempo
+            lc = LineChart()
+            lc.title  = "Actividad locomotora a lo largo del tiempo"
+            lc.y_axis.title = f"Velocidad media ({speed_unit_lbl})"
+            lc.x_axis.title = "Periodo (s)"
+            lc.style   = 10
+            lc.width   = 22
+            lc.height  = 14
+            lc.grouping = "standard"
+            lc.add_data(_Ref(ws3, min_col=3, min_row=1, max_row=1 + n_bins),
+                        titles_from_data=True)
+            lc.set_categories(_Ref(ws3, min_col=1, min_row=2, max_row=1 + n_bins))
+            ws3.add_chart(lc, "E2")
 
         wb.save(str(out_path))
