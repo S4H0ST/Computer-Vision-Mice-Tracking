@@ -627,6 +627,15 @@ class MainWindow(QMainWindow):
         self._elapsed_s: int = 0
         self._timer.timeout.connect(self._tick_timer)
 
+        # Modelo activo (se actualiza cuando el usuario inicia deteccion)
+        self._active_model_path: "Path | None" = None
+
+        # Tamaño de fuente del area de contenido
+        from PyQt5.QtWidgets import QApplication as _QApp
+        _pt = _QApp.instance().font().pointSize()
+        self._default_font_size: int = _pt if _pt > 0 else 9
+        self._content_font_size: int = self._default_font_size
+
         self._setup_model_status()
         self._setup_nav_compare()
         self._connect_signals()
@@ -665,7 +674,7 @@ class MainWindow(QMainWindow):
         self.nav_train.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(5))
         self.nav_results.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(3))
         self._nav_compare.clicked.connect(lambda: self.stackedWidget.setCurrentIndex(6))
-        self._btn_label_settings.clicked.connect(self._on_label_settings)
+        self._btn_label_settings.clicked.connect(self._on_settings)
 
         # Home
         self.btn_video.clicked.connect(self._on_select_video)
@@ -815,6 +824,123 @@ class MainWindow(QMainWindow):
         if dlg.exec_() == QDialog.Accepted:
             if hasattr(self, "_prelabel_page"):
                 self._prelabel_page.rebuild_label_ui()
+
+    def _on_settings(self) -> None:
+        """Dialogo de configuracion: etiquetas de comportamiento y tamaño de texto."""
+        from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QGroupBox,
+                                     QPushButton, QSlider, QLabel as _QL, QSpacerItem,
+                                     QSizePolicy as _QSP)
+        from PyQt5.QtCore import Qt as _Qt
+
+        L = self._lang
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Configuración" if L == "es" else "Settings")
+        dlg.setMinimumWidth(380)
+        dlg.setModal(True)
+
+        root = QVBoxLayout(dlg)
+        root.setSpacing(14)
+        root.setContentsMargins(20, 20, 20, 20)
+
+        # ── Sección 1: Etiquetas ─────────────────────────────────────────
+        grp_labels = QGroupBox(
+            "Etiquetas de comportamiento" if L == "es" else "Behaviour labels", dlg
+        )
+        lay_labels = QVBoxLayout(grp_labels)
+        lbl_desc = _QL(
+            "Añade, elimina o cambia los atajos de teclado y colores de cada comportamiento."
+            if L == "es" else
+            "Add, remove or change keyboard shortcuts and colours for each behaviour.",
+            grp_labels
+        )
+        lbl_desc.setWordWrap(True)
+        lbl_desc.setStyleSheet("color: #555; font-size: 11px;")
+        btn_open_labels = QPushButton(
+            "Abrir editor de etiquetas" if L == "es" else "Open label editor", grp_labels
+        )
+        btn_open_labels.clicked.connect(lambda: (self._on_label_settings(), None))
+        lay_labels.addWidget(lbl_desc)
+        lay_labels.addWidget(btn_open_labels)
+        root.addWidget(grp_labels)
+
+        # ── Sección 2: Tamaño de texto ───────────────────────────────────
+        grp_font = QGroupBox(
+            "Tamaño del texto en pantalla" if L == "es" else "On-screen text size", dlg
+        )
+        lay_font = QVBoxLayout(grp_font)
+
+        lbl_font_desc = _QL(
+            "Cambia el tamaño del texto dentro de las pantallas de la aplicación "
+            "(no afecta al menú lateral)."
+            if L == "es" else
+            "Adjust the text size inside the application screens "
+            "(does not affect the sidebar).",
+            grp_font
+        )
+        lbl_font_desc.setWordWrap(True)
+        lbl_font_desc.setStyleSheet("color: #555; font-size: 11px;")
+
+        slider_row = QHBoxLayout()
+        lbl_small = _QL("A", grp_font)
+        lbl_small.setStyleSheet("font-size: 9px;")
+        lbl_big   = _QL("A", grp_font)
+        lbl_big.setStyleSheet("font-size: 16px; font-weight: bold;")
+
+        slider = QSlider(_Qt.Horizontal, grp_font)
+        slider.setRange(8, 16)
+        slider.setValue(self._content_font_size)
+        slider.setTickInterval(1)
+        slider.setTickPosition(QSlider.TicksBelow)
+
+        lbl_value = _QL(f"{self._content_font_size} pt", grp_font)
+        lbl_value.setFixedWidth(36)
+        lbl_value.setAlignment(_Qt.AlignRight | _Qt.AlignVCenter)
+
+        def _on_slider(val: int) -> None:
+            lbl_value.setText(f"{val} pt")
+            self._apply_content_font_size(val)
+
+        slider.valueChanged.connect(_on_slider)
+
+        slider_row.addWidget(lbl_small)
+        slider_row.addWidget(slider, 1)
+        slider_row.addWidget(lbl_big)
+        slider_row.addWidget(lbl_value)
+
+        btn_reset = QPushButton(
+            "Restablecer por defecto" if L == "es" else "Reset to default", grp_font
+        )
+        btn_reset.setStyleSheet("font-size: 11px;")
+
+        def _on_reset() -> None:
+            slider.setValue(self._default_font_size)
+            self._apply_content_font_size(self._default_font_size)
+
+        btn_reset.clicked.connect(_on_reset)
+
+        lay_font.addWidget(lbl_font_desc)
+        lay_font.addLayout(slider_row)
+        lay_font.addWidget(btn_reset)
+        root.addWidget(grp_font)
+
+        # ── Cerrar ───────────────────────────────────────────────────────
+        root.addItem(QSpacerItem(0, 8, _QSP.Minimum, _QSP.Expanding))
+        btn_close = QPushButton("Cerrar" if L == "es" else "Close", dlg)
+        btn_close.clicked.connect(dlg.accept)
+        root.addWidget(btn_close)
+
+        dlg.exec_()
+
+    def _apply_content_font_size(self, size: int) -> None:
+        """Aplica el tamaño de fuente (pt) a todos los widgets del area de contenido."""
+        from PyQt5.QtGui import QFont
+        from PyQt5.QtWidgets import QWidget as _QW
+        self._content_font_size = size
+        font = QFont()
+        font.setPointSize(size)
+        self.stackedWidget.setFont(font)
+        for w in self.stackedWidget.findChildren(_QW):
+            w.setFont(font)
 
     # ------------------------------------------------------------------
     # Pagina inicio — banner informativo GPU/CPU
@@ -1487,6 +1613,8 @@ class MainWindow(QMainWindow):
         chosen_model = self._resolve_model_path()
         if chosen_model is None:
             return
+        self._active_model_path = chosen_model
+        self._setup_model_status()
 
         if self._worker and self._worker.isRunning():
             self._worker.request_stop()
@@ -1870,7 +1998,9 @@ class MainWindow(QMainWindow):
         for i, title in enumerate(tabs):
             self.tab_images.setTabText(i, title)
 
-        self.btn_lang.setText("EN" if self._lang == "es" else "ES")
+        self.btn_lang.setText(
+            "Cambiar idioma: EN" if self._lang == "es" else "Change language: ES"
+        )
 
         # Actualiza etiquetas dinamicas segun idioma activo
         self._setup_model_status()
@@ -1897,15 +2027,8 @@ class MainWindow(QMainWindow):
             self._compare_page.apply_language(self._lang)
 
         if hasattr(self, "_btn_label_settings"):
-            try:
-                import json as _j
-                with open(PROJECT_ROOT / "scripts" / "app_config" / "translations.json",
-                          "r", encoding="utf-8") as _f:
-                    _sb = _j.load(_f).get("sidebar", {})
-                txt = _sb.get("label_settings", {}).get(self._lang, "  Config. Etiquetas")
-                self._btn_label_settings.setText(txt)
-            except Exception:
-                pass
+            _cfg_txt = "  ⚙  Configuración" if self._lang == "es" else "  ⚙  Settings"
+            self._btn_label_settings.setText(_cfg_txt)
 
         if hasattr(self, "_grp_calib_hole_size"):
             self._grp_calib_hole_size.setTitle(
@@ -2059,13 +2182,10 @@ class MainWindow(QMainWindow):
         sbl.insertWidget(sbl.count() - 1, self.btn_lang)
         # Layout: 0-8=spacer, 9=btn_lang, 10=version
 
-        # Add label settings button between btn_lang and lbl_version
-        self._btn_label_settings = _QPB("  Config. Etiquetas", self.sidebar)
+        # Boton de configuracion (etiquetas + tamaño de texto)
+        self._btn_label_settings = _QPB("  ⚙  Configuración", self.sidebar)
         self._btn_label_settings.setFlat(True)
         self._btn_label_settings.setObjectName("btn_label_settings")
-        self._btn_label_settings.setIcon(
-            self.style().standardIcon(QStyle.SP_FileDialogDetailedView)
-        )
         self._btn_label_settings.setIconSize(_QSize(16, 16))
         self._btn_label_settings.setStyleSheet(
             "QPushButton { background-color: #CB0017; color: white; "
@@ -2085,13 +2205,21 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _setup_model_status(self) -> None:
-        ok = paths.yolo_model.exists()
-        if ok:
-            status = paths.yolo_model.name
-        else:
-            status = "SELECCIONAR MODELO" if self._lang == "es" else "SELECT MODEL"
+        # Mostrar el modelo que se usara realmente: activo > pick_model_path() > fallback
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+            from utils.model_loader import pick_model_path as _pmp
+            display = (self._active_model_path or _pmp()).name
+            ok = True
+        except Exception:
+            ok = paths.yolo_model.exists() or paths.yolo_model_onnx.exists()
+            display = (paths.yolo_model_onnx if paths.yolo_model_onnx.exists()
+                       else paths.yolo_model).name if ok else (
+                "SELECCIONAR MODELO" if self._lang == "es" else "SELECT MODEL"
+            )
         color  = "#2ecc71" if ok else "#e74c3c"
-        self.lbl_model_status.setText(f"Model: {status}")
+        self.lbl_model_status.setText(f"Model: {display}")
         self.lbl_model_status.setStyleSheet(
             f"font-size: 10px; color: {color}; padding: 0px 8px 14px 12px;"
         )
