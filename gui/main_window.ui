@@ -16,26 +16,26 @@
   <property name="styleSheet">
    <string notr="true">
 QFrame#sidebar {
-    background-color: #2c3e50;
+    background-color: #1e1e1e;
 }
 QFrame#sidebar QLabel {
-    color: #ecf0f1;
+    color: #ffffff;
     padding-left: 8px;
 }
 QFrame#sidebar QPushButton {
     background-color: transparent;
-    color: #bdc3c7;
+    color: #ffffff;
     border: none;
     text-align: left;
     padding: 12px 20px;
     font-size: 13px;
 }
 QFrame#sidebar QPushButton:hover {
-    background-color: #34495e;
+    background-color: #2d2d2d;
     color: white;
 }
 QFrame#sidebar QPushButton:disabled {
-    color: #4a5568;
+    color: #4a4a4a;
 }
 QPushButton#btn_video, QPushButton#btn_camera {
     background-color: #CB0017;
@@ -251,7 +251,7 @@ QListWidget#list_result_runs::item:selected {
        <item>
         <widget class="QFrame" name="sidebar_line">
          <property name="styleSheet">
-          <string notr="true">background-color: #34495e; max-height: 1px;</string>
+          <string notr="true">background-color: #333333; max-height: 1px;</string>
          </property>
          <property name="frameShape">
           <enum>QFrame::HLine</enum>
@@ -330,7 +330,7 @@ QListWidget#list_result_runs::item:selected {
        <item>
         <widget class="QLabel" name="lbl_version">
          <property name="text">
-          <string>  v2.0</string>
+          <string>  v2.1</string>
          </property>
         </widget>
        </item>
