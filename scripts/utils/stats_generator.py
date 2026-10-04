@@ -406,8 +406,10 @@ class StatsGenerator:
             cv2.putText(img, f"{pct}%", (lx + legend_w + 3, y_pos + 4),
                         font, 0.28, (40, 40, 40), 1, cv2.LINE_AA)
 
-        cv2.putText(img, "Tiempo", (lx - 2, ly - 4),
+        cv2.putText(img, "Presencia", (lx - 8, ly - 16),
                     font, 0.28, (40, 40, 40), 1, cv2.LINE_AA)
+        cv2.putText(img, "(% max)", (lx - 2, ly - 5),
+                    font, 0.26, (90, 90, 90), 1, cv2.LINE_AA)
 
     # ------------------------------------------------------------------
     # Utilidades Excel

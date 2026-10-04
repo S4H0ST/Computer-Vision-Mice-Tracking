@@ -662,6 +662,7 @@ class MainWindow(QMainWindow):
         self._setup_home_info_banner()
         self._setup_detection_live_panels()
         self._apply_language()  # idioma por defecto: espanol
+        self._apply_label_colors_to_stats()
         self._update_confirm_state()
 
     # ------------------------------------------------------------------
@@ -837,6 +838,7 @@ class MainWindow(QMainWindow):
         if dlg.exec_() == QDialog.Accepted:
             if hasattr(self, "_prelabel_page"):
                 self._prelabel_page.rebuild_label_ui()
+            self._apply_label_colors_to_stats()
 
     def _on_settings(self) -> None:
         """Dialogo de configuracion: etiquetas de comportamiento y tamaño de texto."""
@@ -848,6 +850,7 @@ class MainWindow(QMainWindow):
         L = self._lang
         dlg = QDialog(self)
         dlg.setWindowTitle("Configuración" if L == "es" else "Settings")
+        dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
         dlg.setMinimumWidth(380)
         dlg.setModal(True)
 
@@ -1706,6 +1709,67 @@ class MainWindow(QMainWindow):
 
         return chosen
 
+    def _compute_hole_names(self, coords_path) -> list[str]:
+        """Devuelve 4 nombres posicionales (Sup. Izq. etc.) basados en coords.json."""
+        try:
+            import json
+            data = json.loads(Path(coords_path).read_text(encoding="utf-8"))
+            holes = data.get("holes", [])
+            inner = data.get("limits_inner") or data.get("limits_outer")
+            if len(holes) != 4 or inner is None:
+                raise ValueError
+            cx = (inner["x_min"] + inner["x_max"]) / 2
+            cy = (inner["y_min"] + inner["y_max"]) / 2
+            names = []
+            for hx, hy in holes:
+                if self._lang == "es":
+                    v = "Sup." if hy < cy else "Inf."
+                    h = "Izq." if hx < cx else "Der."
+                else:
+                    v = "Top" if hy < cy else "Bot."
+                    h = "Left" if hx < cx else "Right"
+                names.append(f"{v} {h}:")
+            return names
+        except Exception:
+            return [f"A{i + 1}:" for i in range(4)]
+
+    def _apply_label_colors_to_stats(self) -> None:
+        """Aplica los colores de labels.json a los labels de comportamiento del panel de stats."""
+        import json
+        color_map: dict[str, str] = {}
+        try:
+            from app_config.config import paths
+            lp = paths.root / "scripts" / "app_config" / "labels.json"
+            for entry in json.loads(lp.read_text(encoding="utf-8")):
+                name  = entry.get("name", "")
+                hex_c = entry.get("hex_color", "")
+                if name and hex_c:
+                    color_map[name] = hex_c
+            if "head_dipping" in color_map:
+                color_map["dipping"] = color_map["head_dipping"]
+            if "horizontal" in color_map:
+                color_map["walking"] = color_map["horizontal"]
+        except Exception:
+            pass
+
+        beh_widgets = [
+            ("immobile", self.s_lbl_beh_idle),
+            ("walking",  self.s_lbl_beh_walking),
+            ("sniffing", self.s_lbl_beh_sniffing),
+            ("climbing", self.s_lbl_beh_climbing),
+            ("rearing",  self.s_lbl_beh_rearing),
+            ("dipping",  self.s_lbl_beh_dipping),
+            ("grooming", self.s_lbl_beh_grooming),
+        ]
+        for key, lbl in beh_widgets:
+            hex_c = color_map.get(key, "")
+            if hex_c:
+                lbl.setStyleSheet(
+                    f"border-left: 4px solid {hex_c}; padding-left: 4px;"
+                )
+            else:
+                lbl.setStyleSheet("")
+
     def _start_detection(self) -> None:
         chosen_model = self._resolve_model_path()
         if chosen_model is None:
@@ -1752,7 +1816,10 @@ class MainWindow(QMainWindow):
         self._elapsed_s = 0
         self._timer.start(1000)
 
-        for _, lbl_v in self._lbl_hole:
+        # Nombres posicionales de agujeros y reset de contadores
+        hole_names = self._compute_hole_names(self._coords_json)
+        for i, (lbl_k, lbl_v) in enumerate(self._lbl_hole):
+            lbl_k.setText(hole_names[i])
             lbl_v.setText("0")
         self._lbl_live_trajectory.clear()
         self._lbl_live_trajectory.setStyleSheet("background-color: #ffffff; border: 1px solid #cccccc;")
