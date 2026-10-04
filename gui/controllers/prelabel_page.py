@@ -1628,6 +1628,12 @@ class PrelabelPage(QWidget):
         chosen = self._resolve_model_path()
         if chosen is None:
             return
+        # Notificar a la ventana principal para que actualice el label del modelo
+        mw = self.window()
+        if hasattr(mw, "_active_model_path"):
+            mw._active_model_path = chosen
+            if hasattr(mw, "_setup_model_status"):
+                mw._setup_model_status()
         self._inner_stack.setCurrentIndex(1)
         self._start_preprocess(model_path=chosen)
 
@@ -1687,7 +1693,7 @@ class PrelabelPage(QWidget):
                 msg.setText(
                     "<b>Se ha detectado una GPU NVIDIA (CUDA).</b><br><br>"
                     "El modelo por defecto es <code>.onnx</code> (CPU), "
-                    "pero con GPU el modelo <code>.pt</code> es hasta 5-10&times; mas rapido.<br><br>"
+                    "pero con GPU NVIDIA el modelo <code>.pt</code> es considerablemente mas rapido.<br><br>"
                     "¿Con cual modelo quieres continuar?"
                 )
                 btn_pt     = msg.addButton("Usar .pt  (GPU — recomendado)", QMessageBox.AcceptRole)
@@ -1698,7 +1704,7 @@ class PrelabelPage(QWidget):
                 msg.setText(
                     "<b>NVIDIA GPU (CUDA) detected.</b><br><br>"
                     "The default model is <code>.onnx</code> (CPU), "
-                    "but with a GPU the <code>.pt</code> model is up to 5-10&times; faster.<br><br>"
+                    "but with an NVIDIA GPU the <code>.pt</code> model is considerably faster.<br><br>"
                     "Which model do you want to use?"
                 )
                 btn_pt     = msg.addButton("Use .pt  (GPU — recommended)", QMessageBox.AcceptRole)
