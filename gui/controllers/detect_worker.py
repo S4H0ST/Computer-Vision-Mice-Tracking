@@ -269,16 +269,16 @@ class DetectionWorker(QThread):
 
             # Emit live trajectory every 15 frames when there is data
             if frame_idx % 15 == 0 and len(traj_pts) > 1:
-                canvas = np.full((_TRAJ_SIZE, _TRAJ_SIZE, 3), (15, 15, 30), dtype=np.uint8)
+                canvas = np.full((_TRAJ_SIZE, _TRAJ_SIZE, 3), 255, dtype=np.uint8)
                 if spatial.holes and crop_w > 0 and crop_h > 0:
                     _hr = max(3, int(spatial.hole_radius / max(crop_w, crop_h) * _TRAJ_SIZE))
                     for hx, hy in spatial.holes:
                         hxs = int(np.clip((hx - x1_c) / crop_w * _TRAJ_SIZE, 0, _TRAJ_SIZE - 1))
                         hys = int(np.clip((hy - y1_c) / crop_h * _TRAJ_SIZE, 0, _TRAJ_SIZE - 1))
-                        cv2.circle(canvas, (hxs, hys), _hr, (160, 160, 160), 1)
+                        cv2.circle(canvas, (hxs, hys), _hr, (80, 80, 80), -1)
                 pts_np = np.array(traj_pts, dtype=np.int32).reshape((-1, 1, 2))
-                cv2.polylines(canvas, [pts_np], False, (0, 180, 90), 1)
-                cv2.circle(canvas, traj_pts[-1], 3, (0, 255, 220), -1)
+                cv2.polylines(canvas, [pts_np], False, (30, 30, 30), 1)
+                cv2.circle(canvas, traj_pts[-1], 4, (0, 0, 200), -1)
                 self.trajectory_ready.emit(canvas)
 
             img_out = img[y1_c:y2_c, x1_c:x2_c]

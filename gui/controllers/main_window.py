@@ -987,7 +987,7 @@ class MainWindow(QMainWindow):
         lbl_traj.setMaximumSize(220, 220)
         lbl_traj.setAlignment(Qt.AlignCenter)
         lbl_traj.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-        lbl_traj.setStyleSheet("background-color: #0f0f1e;")
+        lbl_traj.setStyleSheet("background-color: #ffffff; border: 1px solid #cccccc;")
         vbox.addWidget(lbl_traj)
         self._lbl_live_trajectory = lbl_traj
         self._grp_live_trajectory = grp_traj
@@ -1755,7 +1755,7 @@ class MainWindow(QMainWindow):
         for _, lbl_v in self._lbl_hole:
             lbl_v.setText("0")
         self._lbl_live_trajectory.clear()
-        self._lbl_live_trajectory.setStyleSheet("background-color: #0f0f1e;")
+        self._lbl_live_trajectory.setStyleSheet("background-color: #ffffff; border: 1px solid #cccccc;")
 
         self._worker = DetectionWorker(
             self._video_source, self._output_dir, self._coords_json,
