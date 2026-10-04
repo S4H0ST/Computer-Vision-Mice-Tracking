@@ -227,8 +227,8 @@ handles on hole circles to resize them.</div>
   <li>Running totals (seconds) per behaviour: Idle, Climbing, Rearing, Head-dip, Grooming (and any custom labels you have configured).</li>
   <li><b>Hole Visits</b> — a counter for each of the 4 holes (A1–A4) showing how many times
       the rat has dipped its head into that hole so far.</li>
-  <li><b>Live Heatmap</b> — a density map of where the rat's snout has been, updated every 30 frames.
-      Warm colours (red) indicate areas of high activity; hole positions are marked as white circles.</li>
+  <li><b>Live Trajectory</b> — the path traced by the rat's snout, updated every 15 frames.
+      The line accumulates from the start of the session; hole positions are shown as grey circles.</li>
 </ul>
 <p>Press <b>Cancel</b> to stop early — partial results are still saved.<br>
 Use <b>← Back</b> (visible after cancelling) to fix the calibration and re-run.</p>
@@ -435,9 +435,9 @@ Arrastra las esquinas de los circulos de agujero para cambiar su radio.</div>
       Asomando, Aseo (y cualquier etiqueta personalizada configurada).</li>
   <li><b>Visitas por Agujero</b> — contador para cada uno de los 4 agujeros (A1–A4)
       con el numero de veces que la rata ha introducido la cabeza en ese agujero.</li>
-  <li><b>Mapa de Calor en Vivo</b> — densidad espacial de la posicion del hocico,
-      actualizado cada 30 frames. Los colores calidos (rojo) indican mayor actividad;
-      los agujeros se marcan con circulos blancos.</li>
+  <li><b>Trayectoria en Vivo</b> — recorrido trazado por el hocico de la rata,
+      actualizado cada 15 frames. La linea se acumula desde el inicio de la sesion;
+      los agujeros se muestran como circulos grises.</li>
 </ul>
 <p>Pulsa <b>Cancelar</b> para detener — los resultados parciales se guardan igualmente.<br>
 Usa <b>← Volver</b> (visible tras cancelar) para corregir la calibracion y volver a ejecutar.</p>
@@ -977,25 +977,25 @@ class MainWindow(QMainWindow):
             self._lbl_hole.append((lbl_k, lbl_v))
         self._grp_holes_live = grp
 
-        # -- Live heatmap --
-        grp_hmap = QGroupBox("Mapa de Calor en Vivo")
+        # -- Live trajectory --
+        grp_traj = QGroupBox("Trayectoria en Vivo")
         vbox = QVBoxLayout()
         vbox.setContentsMargins(4, 4, 4, 4)
-        grp_hmap.setLayout(vbox)
-        lbl_hmap = QLabel()
-        lbl_hmap.setMinimumSize(160, 160)
-        lbl_hmap.setMaximumSize(220, 220)
-        lbl_hmap.setAlignment(Qt.AlignCenter)
-        lbl_hmap.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
-        lbl_hmap.setStyleSheet("background-color: #1a1a2e;")
-        vbox.addWidget(lbl_hmap)
-        self._lbl_live_heatmap = lbl_hmap
-        self._grp_live_heatmap = grp_hmap
+        grp_traj.setLayout(vbox)
+        lbl_traj = QLabel()
+        lbl_traj.setMinimumSize(160, 160)
+        lbl_traj.setMaximumSize(220, 220)
+        lbl_traj.setAlignment(Qt.AlignCenter)
+        lbl_traj.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        lbl_traj.setStyleSheet("background-color: #0f0f1e;")
+        vbox.addWidget(lbl_traj)
+        self._lbl_live_trajectory = lbl_traj
+        self._grp_live_trajectory = grp_traj
 
         # Insert before the trailing spacer (last item in layout)
         spacer_pos = layout.count() - 1
         layout.insertWidget(spacer_pos,     grp)
-        layout.insertWidget(spacer_pos + 1, grp_hmap)
+        layout.insertWidget(spacer_pos + 1, grp_traj)
 
     def _setup_home_info_banner(self) -> None:
         """Inserta la pastilla informativa GPU/CPU en la pagina de inicio."""
@@ -1754,15 +1754,15 @@ class MainWindow(QMainWindow):
 
         for _, lbl_v in self._lbl_hole:
             lbl_v.setText("0")
-        self._lbl_live_heatmap.clear()
-        self._lbl_live_heatmap.setStyleSheet("background-color: #1a1a2e;")
+        self._lbl_live_trajectory.clear()
+        self._lbl_live_trajectory.setStyleSheet("background-color: #0f0f1e;")
 
         self._worker = DetectionWorker(
             self._video_source, self._output_dir, self._coords_json,
             model_path=chosen_model,
         )
         self._worker.frame_ready.connect(self._on_frame_ready)
-        self._worker.heatmap_ready.connect(self._on_heatmap_ready)
+        self._worker.trajectory_ready.connect(self._on_trajectory_ready)
         self._worker.log_msg.connect(self._on_log_msg)
         self._worker.finished.connect(self._on_detection_finished)
         self._worker.error.connect(self._on_detection_error)
@@ -1807,15 +1807,15 @@ class MainWindow(QMainWindow):
             lbl_v.setText(str(stats.get(f"hole_{i}", 0)))
 
     @pyqtSlot(object)
-    def _on_heatmap_ready(self, hmap_bgr: np.ndarray) -> None:
-        lbl = self._lbl_live_heatmap
+    def _on_trajectory_ready(self, traj_bgr: np.ndarray) -> None:
+        lbl = self._lbl_live_trajectory
         lw, lh = lbl.width(), lbl.height()
         if lw < 10 or lh < 10:
             return
-        h, w = hmap_bgr.shape[:2]
+        h, w = traj_bgr.shape[:2]
         scale = min(lw / w, lh / h)
         dw, dh = max(1, int(w * scale)), max(1, int(h * scale))
-        resized = cv2.resize(hmap_bgr, (dw, dh))
+        resized = cv2.resize(traj_bgr, (dw, dh))
         rgb     = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         qimg    = QImage(rgb.data, dw, dh, dw * 3, QImage.Format_RGB888)
         lbl.setPixmap(QPixmap.fromImage(qimg))
@@ -2172,8 +2172,8 @@ class MainWindow(QMainWindow):
             self._grp_holes_live.setTitle(
                 "Visitas por Agujero" if self._lang == "es" else "Hole Visits"
             )
-            self._grp_live_heatmap.setTitle(
-                "Mapa de Calor en Vivo" if self._lang == "es" else "Live Heatmap"
+            self._grp_live_trajectory.setTitle(
+                "Trayectoria en Vivo" if self._lang == "es" else "Live Trajectory"
             )
 
 

@@ -24,7 +24,7 @@ from pathlib import Path
 from PyQt5.QtCore import QThread, pyqtSignal
 
 BEHAVIOR_KEYS = ("immobile", "walking", "sniffing", "climbing", "rearing", "dipping", "grooming")
-_HMAP_SIZE    = 200   # live heatmap canvas pixels
+_TRAJ_SIZE    = 200   # live trajectory canvas pixels
 
 
 def _draw_kps(
@@ -76,9 +76,9 @@ class DetectionWorker(QThread):
     finished     : dict con rutas de archivos de salida y valores de resumen
     error        : cadena con el mensaje de error
     """
-    frame_ready   = pyqtSignal(object, dict, int)
-    heatmap_ready = pyqtSignal(object)       # BGR ndarray _HMAP_SIZE x _HMAP_SIZE
-    log_msg       = pyqtSignal(str)
+    frame_ready      = pyqtSignal(object, dict, int)
+    trajectory_ready = pyqtSignal(object)    # BGR ndarray _TRAJ_SIZE x _TRAJ_SIZE
+    log_msg          = pyqtSignal(str)
     finished      = pyqtSignal(dict)
     error         = pyqtSignal(str)
 
@@ -165,7 +165,7 @@ class DetectionWorker(QThread):
         # ---- Bucle stream=True: ByteTrack activo, sin parpadeo ----
         stats: dict[str, int] = {k: 0 for k in BEHAVIOR_KEYS}
         stats.update({"hole_0": 0, "hole_1": 0, "hole_2": 0, "hole_3": 0})
-        hmap_accum    = np.zeros((_HMAP_SIZE, _HMAP_SIZE), dtype=np.float32)
+        traj_pts: list[tuple[int, int]] = []
         hole_bouts    = [0, 0, 0, 0]
         prev_hole_idx = -1
 
@@ -261,24 +261,25 @@ class DetectionWorker(QThread):
             stats["hole_2"] = hole_bouts[2]
             stats["hole_3"] = hole_bouts[3]
 
-            # Accumulate snout position for live heatmap
+            # Accumulate snout position for live trajectory
             if snout_kp is not None and crop_w > 0 and crop_h > 0:
-                sx = int(np.clip((snout_kp[0] - x1_c) / crop_w * _HMAP_SIZE, 0, _HMAP_SIZE - 1))
-                sy = int(np.clip((snout_kp[1] - y1_c) / crop_h * _HMAP_SIZE, 0, _HMAP_SIZE - 1))
-                hmap_accum[sy, sx] += 1.0
+                sx = int(np.clip((snout_kp[0] - x1_c) / crop_w * _TRAJ_SIZE, 0, _TRAJ_SIZE - 1))
+                sy = int(np.clip((snout_kp[1] - y1_c) / crop_h * _TRAJ_SIZE, 0, _TRAJ_SIZE - 1))
+                traj_pts.append((sx, sy))
 
-            # Emit live heatmap every 30 frames when there is data
-            if frame_idx % 30 == 0 and hmap_accum.max() > 0:
-                blurred = cv2.GaussianBlur(hmap_accum, (0, 0), sigmaX=12)
-                norm    = cv2.normalize(blurred, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-                colored = cv2.applyColorMap(norm, cv2.COLORMAP_JET)
+            # Emit live trajectory every 15 frames when there is data
+            if frame_idx % 15 == 0 and len(traj_pts) > 1:
+                canvas = np.full((_TRAJ_SIZE, _TRAJ_SIZE, 3), (15, 15, 30), dtype=np.uint8)
                 if spatial.holes and crop_w > 0 and crop_h > 0:
-                    _hr = max(3, int(spatial.hole_radius / max(crop_w, crop_h) * _HMAP_SIZE))
+                    _hr = max(3, int(spatial.hole_radius / max(crop_w, crop_h) * _TRAJ_SIZE))
                     for hx, hy in spatial.holes:
-                        hxs = int(np.clip((hx - x1_c) / crop_w * _HMAP_SIZE, 0, _HMAP_SIZE - 1))
-                        hys = int(np.clip((hy - y1_c) / crop_h * _HMAP_SIZE, 0, _HMAP_SIZE - 1))
-                        cv2.circle(colored, (hxs, hys), _hr, (255, 255, 255), 1)
-                self.heatmap_ready.emit(colored)
+                        hxs = int(np.clip((hx - x1_c) / crop_w * _TRAJ_SIZE, 0, _TRAJ_SIZE - 1))
+                        hys = int(np.clip((hy - y1_c) / crop_h * _TRAJ_SIZE, 0, _TRAJ_SIZE - 1))
+                        cv2.circle(canvas, (hxs, hys), _hr, (160, 160, 160), 1)
+                pts_np = np.array(traj_pts, dtype=np.int32).reshape((-1, 1, 2))
+                cv2.polylines(canvas, [pts_np], False, (0, 180, 90), 1)
+                cv2.circle(canvas, traj_pts[-1], 3, (0, 255, 220), -1)
+                self.trajectory_ready.emit(canvas)
 
             img_out = img[y1_c:y2_c, x1_c:x2_c]
             vid_out.write(img_out)
