@@ -71,6 +71,7 @@ class StatsGenerator:
         self._hole_center_derived: bool = False
 
         self._load()
+        self._load_traj_colors()
 
         if use_holes_as_center and self.limits_center is None and len(self.holes) == 4:
             xs = [h[0] for h in self.holes]
@@ -179,9 +180,8 @@ class StatsGenerator:
         cy = max(m, min(sz - m, int(m + (y - y_min) * y_scale)))
         return cx, cy
 
-    # Colores BGR por etiqueta para la trayectoria (mismo esquema que el video anotado)
-    # Orden: de menor a mayor actividad/relevancia conductual en OFT
-    _TRAJ_COLORS: list[tuple[str, str, tuple[int, int, int]]] = [
+    # Fallback si labels.json no esta disponible
+    _TRAJ_COLORS_DEFAULT: list[tuple[str, str, tuple[int, int, int]]] = [
         ("immobile",         "Inmovil",      (180, 180, 180)),
         ("walking",          "Caminando",    (0,   255, 255)),
         ("sniffing",         "Olfateando",   (0,   200, 255)),
@@ -190,14 +190,74 @@ class StatsGenerator:
         ("rat_climbing",     "Escalando",    (255,   0, 255)),
         ("rat_grooming",     "Acicalamiento",(180, 255, 180)),
     ]
-    _DEFAULT_TRAJ_COLOR: tuple[int, int, int] = (120, 120, 120)
 
-    @classmethod
-    def _traj_color(cls, label: str) -> tuple[int, int, int]:
-        for key, _, color in cls._TRAJ_COLORS:
+    def _load_traj_colors(self) -> None:
+        """Carga colores desde labels.json; si falla usa los colores por defecto."""
+        # Mapeo: clave de deteccion → nombre en labels.json
+        _DET_TO_JSON = {
+            "rat_grooming":      "grooming",
+            "rat_head_dipping":  "head_dipping",
+            "rat_rearing":       "rearing",
+            "rat_climbing":      "climbing",
+            "walking":           "horizontal",
+            "sniffing_walking":  "horizontal",
+            "immobile":          "immobile",
+            "sniffing":          "sniffing",
+            "sniffing_immobile": "immobile",
+        }
+        _DISPLAY_FALLBACK = {
+            "immobile":    "Inmovil",
+            "horizontal":  "Caminando",
+            "sniffing":    "Olfateando",
+            "head_dipping":"Agujero",
+            "rearing":     "Erguido",
+            "climbing":    "Escalando",
+            "grooming":    "Acicalamiento",
+        }
+        try:
+            from app_config.config import paths
+            lp = paths.root / "scripts" / "app_config" / "labels.json"
+            entries = json.loads(lp.read_text(encoding="utf-8"))
+            name_to_bgr: dict[str, tuple] = {}
+            name_to_disp: dict[str, str] = {}
+            for e in entries:
+                n = e.get("name", "")
+                b = e.get("bgr_color")
+                d = e.get("display_es", n)
+                if n and b and len(b) == 3:
+                    name_to_bgr[n]  = tuple(int(x) for x in b)
+                    name_to_disp[n] = d.split(":", 1)[-1].strip() if ":" in d else d
+            # Construir mapa det_key → bgr
+            color_map: dict[str, tuple] = {}
+            for det_key, json_name in _DET_TO_JSON.items():
+                color_map[det_key] = name_to_bgr.get(json_name,
+                    next((c for k, _, c in self._TRAJ_COLORS_DEFAULT if k == det_key),
+                         (120, 120, 120)))
+            self._traj_color_map = color_map
+            # Entradas de leyenda en orden fijo
+            legend_order = [
+                ("immobile",        "immobile"),
+                ("walking",         "horizontal"),
+                ("sniffing",        "sniffing"),
+                ("rat_head_dipping","head_dipping"),
+                ("rat_rearing",     "rearing"),
+                ("rat_climbing",    "climbing"),
+                ("rat_grooming",    "grooming"),
+            ]
+            self._traj_legend: list[tuple[str, str, tuple]] = [
+                (det, name_to_disp.get(jn, _DISPLAY_FALLBACK.get(jn, jn)),
+                 name_to_bgr.get(jn, color_map.get(det, (120, 120, 120))))
+                for det, jn in legend_order
+            ]
+        except Exception:
+            self._traj_color_map = {k: c for k, _, c in self._TRAJ_COLORS_DEFAULT}
+            self._traj_legend    = list(self._TRAJ_COLORS_DEFAULT)
+
+    def _traj_color(self, label: str) -> tuple[int, int, int]:
+        for key, color in self._traj_color_map.items():
             if key in label:
                 return color
-        return cls._DEFAULT_TRAJ_COLOR
+        return (120, 120, 120)
 
     # ------------------------------------------------------------------
     # Imagen de trayectoria
@@ -282,7 +342,7 @@ class StatsGenerator:
         gap    = 6    # espacio entre cuadrado y texto
         sep    = 18   # espacio entre un item y el siguiente
 
-        labels = self._TRAJ_COLORS
+        labels = self._traj_legend
         # Calcular ancho de cada item: box + gap + text_w + sep
         item_widths = [
             box_s + gap + cv2.getTextSize(name, font, fscale, fthick)[0][0] + sep
