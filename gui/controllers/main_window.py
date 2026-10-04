@@ -2117,12 +2117,12 @@ class MainWindow(QMainWindow):
                             "en": "YOLO models (*.pt);;All files (*.*)"},
         }
         L = self._lang
-        models_dir = paths.models_dir
-        if not models_dir.exists():
+        models_gpu_dir = paths.models_gpu_dir
+        if not models_gpu_dir.exists():
             QMessageBox.information(self, _M["no_folder_t"][L], _M["no_folder"][L])
             return
 
-        available = list(models_dir.glob("*.pt"))
+        available = list(models_gpu_dir.glob("*.pt"))
         if not available:
             QMessageBox.information(self, _M["no_folder_t"][L], _M["none"][L])
             return
@@ -2133,7 +2133,7 @@ class MainWindow(QMainWindow):
             return
 
         selected, _ = QFileDialog.getOpenFileName(
-            self, _M["dlg"][L], str(models_dir), _M["flt"][L],
+            self, _M["dlg"][L], str(models_gpu_dir), _M["flt"][L],
         )
         if selected:
             paths.yolo_model = Path(selected)

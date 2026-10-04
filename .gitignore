@@ -26,9 +26,9 @@ datasets/coords.json
 media_original/
 
 # Pesos del modelo (binarios grandes, no van al repo)
-models/*.pt
-models/*.pth
-models/*.onnx
+models/gpu/*.pt
+models/gpu/*.pth
+models/cpu/*.onnx
 
 # Herramientas de desarrollo de assets (no parte de la app)
 gui/assets/crear_icono.py

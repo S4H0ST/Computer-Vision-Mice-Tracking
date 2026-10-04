@@ -172,23 +172,27 @@ class TrainWorker(QThread):
         if best_pt is None:
             raise FileNotFoundError("No se encontro best.pt tras el entrenamiento.")
 
-        # Copiar al directorio de modelos con nombre elegido
-        paths.models_dir.mkdir(parents=True, exist_ok=True)
-        dest = paths.models_dir / f"{self._model_name}.pt"
+        # Copiar al directorio gpu/ con nombre elegido
+        paths.models_gpu_dir.mkdir(parents=True, exist_ok=True)
+        dest = paths.models_gpu_dir / f"{self._model_name}.pt"
         suffix = 2
         while dest.exists():
-            dest = paths.models_dir / f"{self._model_name}_{suffix}.pt"
+            dest = paths.models_gpu_dir / f"{self._model_name}_{suffix}.pt"
             suffix += 1
 
         shutil.copy2(str(best_pt), str(dest))
         self.log_msg.emit(f"Modelo guardado en: {dest}")
 
-        # Exportar a ONNX
+        # Exportar a ONNX → va siempre a models/cpu/
         try:
             self.log_msg.emit("Exportando a ONNX (esto puede tardar ~30s)...")
             from utils.model_loader import export_to_onnx
-            onnx_path = export_to_onnx(dest)
-            self.log_msg.emit(f"ONNX guardado en: {onnx_path}")
+            import shutil as _sh
+            onnx_tmp = export_to_onnx(dest)          # genera .onnx junto al .pt en gpu/
+            paths.models_cpu_dir.mkdir(parents=True, exist_ok=True)
+            onnx_final = paths.models_cpu_dir / onnx_tmp.name
+            _sh.move(str(onnx_tmp), str(onnx_final))
+            self.log_msg.emit(f"ONNX guardado en: {onnx_final}")
         except Exception as exc:
             self.log_msg.emit(f"[!] Exportacion ONNX fallida (el .pt sigue disponible): {exc}")
 
@@ -440,7 +444,7 @@ class TrainPage(QWidget):
         self._lbl_row_model.setStyleSheet(  _err if not has_name    else _ok)
 
         name = self._edit_model_name.text().strip() or "rata_model"
-        dest = paths.models_dir / f"{name}.pt"
+        dest = paths.models_gpu_dir / f"{name}.pt"
         self._edit_output_path.setText(str(dest))
 
         training = self._worker is not None and self._worker.isRunning()
@@ -484,7 +488,7 @@ class TrainPage(QWidget):
             self._update_train_btn()
 
     def _on_open_output_folder(self) -> None:
-        folder = paths.models_dir
+        folder = paths.models_gpu_dir
         folder.mkdir(parents=True, exist_ok=True)
         os.startfile(str(folder))
 
@@ -515,7 +519,7 @@ class TrainPage(QWidget):
         self._console.append("=" * 55)
         self._console.append(f"  Dataset:   {self._dataset_dir}")
         self._console.append(f"  YAML:      {self._yaml_path}")
-        self._console.append(f"  Modelo:    {paths.models_dir / (model_name + '.pt')}")
+        self._console.append(f"  Modelo:    {paths.models_gpu_dir / (model_name + '.pt')}")
         self._console.append("=" * 55)
         self._btn_train.setEnabled(False)
         self._btn_train.setText(self._t("training_btn"))
