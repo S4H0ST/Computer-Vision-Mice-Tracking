@@ -447,7 +447,7 @@ class PreprocessWorker(QThread):
                 frame = raw[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
                 res_list = model.track(
                     source=frame, persist=True,
-                    conf=0.18, device=device, iou=0.5, verbose=False,
+                    conf=0.10, device=device, iou=0.4, verbose=False,
                     tracker="bytetrack.yaml",
                 )
                 box_out = kps_xy_out = kps_conf_out = None
@@ -479,9 +479,9 @@ class PreprocessWorker(QThread):
             results_iter = model.track(
                 source=self._video_path,
                 stream=True,
-                conf=0.18,
+                conf=0.10,
                 device=device,
-                iou=0.5,
+                iou=0.4,
                 verbose=False,
                 tracker="bytetrack.yaml",
             )
