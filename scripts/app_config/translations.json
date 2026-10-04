@@ -52,7 +52,7 @@
         "done_msg":       {"es": "Graficas y Excel generados en:",               "en": "Charts and Excel generated in:"},
         "done_log":       {"es": "Completado. Carpeta:",                         "en": "Completed. Folder:"},
         "err_no_files":   {"es": "Sin archivos",                                 "en": "No files"},
-        "err_no_files_m": {"es": "Anade al menos un archivo Excel.",             "en": "Add at least one Excel file."},
+        "err_no_files_m": {"es": "Añade al menos un archivo Excel.",             "en": "Add at least one Excel file."},
         "err_title":      {"es": "Error al generar",                             "en": "Error generating"},
         "dlg_add":        {"es": "Seleccionar archivos Excel de estadisticas",   "en": "Select statistics Excel files"},
         "dlg_out":        {"es": "Carpeta de salida",                            "en": "Output folder"},
