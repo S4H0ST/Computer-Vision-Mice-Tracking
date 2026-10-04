@@ -1,33 +1,44 @@
 # Python 3.10 recommended
 # Install with: pip install -r requirements.txt
 #
-# PyTorch CPU (no GPU required). If you have an NVIDIA GPU with CUDA 11.8,
-# replace the three torch lines with:
+# GPU (NVIDIA CUDA 11.8) — usa estas 3 lineas de torch y el extra-index-url de CUDA:
+#   --extra-index-url https://download.pytorch.org/whl/cu118
 #   torch==2.7.1+cu118
 #   torchvision==0.22.1+cu118
 #   torchaudio==2.7.1+cu118
-# and add: --extra-index-url https://download.pytorch.org/whl/cu118
+#
+# CPU — usa el bloque por defecto de abajo.
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch==2.7.1+cpu
 torchvision==0.22.1+cpu
 torchaudio==2.7.1+cpu
 
-# Core vision & detection
+# Core vision & deteccion
 ultralytics==8.4.14
 opencv-python==4.9.0.80
-numpy==1.26.4
-pillow==11.3.0
+numpy==1.26.4  # <2 required: onnxruntime-gpu pulls numpy 2.x which breaks opencv
+pillow==11.1.0
 imagehash==4.3.1
 
-# Data & analysis
+# Tracker (ByteTrack necesita lap)
+lap==0.5.13
+
+# Datos y analisis
 pandas==2.3.3
 scipy==1.15.3
 matplotlib==3.10.6
+openpyxl==3.1.5
 
 # GUI
-PyQt5==5.15.11
+PyQt5==5.15.9
 
-# Utilities
+# ONNX (exportacion e inferencia)
+# Para GPU: onnxruntime-gpu. Para CPU: reemplazar por onnxruntime
+onnx==1.23.1
+onnxslim==0.1.97
+onnxruntime-gpu==1.23.2
+
+# Utilidades
 tqdm==4.67.1
 pyyaml==6.0.2
 psutil==7.1.0
