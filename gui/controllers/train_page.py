@@ -24,11 +24,11 @@ from PyQt5.QtGui import QFont, QColor
 _DEV_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_DEV_ROOT / "scripts"))
 
-from config.config import paths, train_cfg
+from app_config.config import paths, train_cfg
 
 # paths.root is always correct: exe dir when frozen, project root in dev.
 # _DEV_ROOT is only used for the translation file at import time (safe).
-_TRANS_PATH = _DEV_ROOT / "scripts" / "config" / "translations.json"
+_TRANS_PATH = _DEV_ROOT / "scripts" / "app_config" / "translations.json"
 
 def _load_train_t() -> dict:
     try:
@@ -182,6 +182,15 @@ class TrainWorker(QThread):
 
         shutil.copy2(str(best_pt), str(dest))
         self.log_msg.emit(f"Modelo guardado en: {dest}")
+
+        # Exportar a ONNX
+        try:
+            self.log_msg.emit("Exportando a ONNX (esto puede tardar ~30s)...")
+            from utils.model_loader import export_to_onnx
+            onnx_path = export_to_onnx(dest)
+            self.log_msg.emit(f"ONNX guardado en: {onnx_path}")
+        except Exception as exc:
+            self.log_msg.emit(f"[!] Exportacion ONNX fallida (el .pt sigue disponible): {exc}")
 
         # Limpiar directorio temporal de runs
         if save_dir is not None:

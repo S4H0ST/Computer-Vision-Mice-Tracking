@@ -1,16 +1,21 @@
 """
 QThread que ejecuta el pipeline de deteccion y emite senales por frame.
-Reimplementa el bucle principal de RatDetector para que la interfaz reciba
-actualizaciones en vivo sin bloquear el hilo principal.
 
-Deteccion: model.predict(stream=True) sobre la fuente completa — ByteTrack activo,
-sin parpadeo de cajas. YOLO procesa el frame original; el recorte al borde exterior
-se aplica solo al output (video + senal frame_ready).
-Anadidos:
-  - _draw_kps dibuja los 3 keypoints (snout/spine/tail) y sus conexiones.
-  - hole_idx en CSV: agujero activo durante head_dipping (0-3), -1 en otro caso.
-  - Sin dual_output: solo se genera el video anotado.
+Reimplementa el bucle principal de RatDetector para que la interfaz reciba
+actualizaciones en vivo sin bloquear el hilo principal. Usa model.predict(stream=True)
+con ByteTrack activo para evitar parpadeo de cajas. YOLO procesa el frame original;
+el recorte al borde exterior se aplica solo al output (video + senal frame_ready).
+
+Classes:
+    DetectionWorker — QThread que produce frames anotados, estadisticas por comportamiento
+                      y archivos de salida (video, CSV, estadisticas).
+
+Functions:
+    _draw_kps        — dibuja los 3 keypoints (snout/spine/tail) y sus conexiones sobre img.
+    _label_to_stat_key — mapea una etiqueta final al nombre de clave de estadisticas.
 """
+
+from __future__ import annotations
 
 import cv2
 import numpy as np
@@ -22,10 +27,10 @@ BEHAVIOR_KEYS = ("immobile", "walking", "sniffing", "climbing", "rearing", "dipp
 
 
 def _draw_kps(
-    img:   "np.ndarray",
-    snout: "np.ndarray | None",
-    spine: "np.ndarray | None",
-    tail:  "np.ndarray | None",
+    img:   np.ndarray,
+    snout: np.ndarray | None,
+    spine: np.ndarray | None,
+    tail:  np.ndarray | None,
 ) -> None:
     """Dibuja los 3 keypoints (posiciones ya corregidas) y sus conexiones."""
     kps_with_color = [(snout, (0, 0, 255)), (spine, (0, 255, 0)), (tail, (255, 80, 0))]
@@ -43,7 +48,8 @@ def _draw_kps(
 
 
 def _label_to_stat_key(label: str) -> str:
-    if "immobile" in label and "sniffing" not in label:
+    """Mapea la etiqueta final de comportamiento a la clave de estadisticas del widget."""
+    if ("immobile" in label or "inmobile" in label) and "sniffing" not in label:
         return "immobile"
     if "walking" in label and "sniffing" not in label:
         return "walking"
@@ -93,16 +99,19 @@ class DetectionWorker(QThread):
 
     def _detect(self) -> None:
         from ultralytics import YOLO
-        from spatial.spatial import SpatialAnalyzer
-        from behavior.behavior_classifier import BehaviorClassifier
-        from output.writers import VideoOutput, CsvOutput
-        from config.config import paths
+        from zone_analyzer.spatial import SpatialAnalyzer
+        from behavior_classifier.behavior_classifier import BehaviorClassifier
+        from result_writers.writers import VideoOutput, CsvOutput
+        from app_config.config import paths
         from utils.stats_generator import StatsGenerator
-        from detection.detector import KP_SNOUT, KP_SPINE, KP_TAIL, _SpeedTracker, _get_color
+        from utils.detection_utils import KP_SNOUT, KP_SPINE, KP_TAIL, _get_color
+        from detection_core.detector import _SpeedTracker
 
         # ---- Inicializacion ----
-        self.log_msg.emit(f"Cargando modelo: {paths.yolo_model.name}")
-        model = YOLO(str(paths.yolo_model))
+        from utils.model_loader import pick_model_path
+        _model_path = pick_model_path()
+        self.log_msg.emit(f"Cargando modelo: {_model_path.name}")
+        model = YOLO(str(_model_path))
 
         spatial    = SpatialAnalyzer(self._coords_json)
         classifier = BehaviorClassifier(spatial_logic=spatial)
@@ -205,7 +214,7 @@ class DetectionWorker(QThread):
                             spine_kp = sp
 
             if rat_box is not None:
-                speed_val   = speed_tracker.update(rat_box, w, h)
+                speed_val   = speed_tracker.update(rat_box, w, h, tail_kp=tail_kp)
                 final_label = classifier.classify(yolo_label, speed_val, snout_kp, rat_box, spatial_ok)
 
                 if final_label == "rat_head_dipping" and snout_kp is not None and spatial_ok:

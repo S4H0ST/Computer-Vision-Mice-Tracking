@@ -33,14 +33,14 @@ from PyQt5.QtGui import QImage, QPixmap, QPainter, QColor, QPen
 _DEV_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(_DEV_ROOT / "scripts"))
 
-from config.config import paths, detect_cfg
+from app_config.config import paths, detect_cfg
 
 # paths.root = exe dir when frozen, project root in dev — always correct for user data.
 DATASETS_DIR = paths.root / "datasets"
 MODELS_DIR   = paths.root / "models"
 HOLE_RADIUS  = 15
 
-_LABEL_CONFIG_PATH = paths.root / "scripts" / "config" / "labels.json"
+_LABEL_CONFIG_PATH = paths.root / "scripts" / "app_config" / "labels.json"
 
 _DEFAULT_LABEL_CONFIG: list[dict] = [
     {"key_char": "1", "name": "climbing",     "display_es": "1: Escalando",     "display_en": "1: Climbing",   "hex_color": "#ff00ff", "bgr_color": [255,   0, 255]},
@@ -381,44 +381,107 @@ class PreprocessWorker(QThread):
 
     def _process(self) -> None:
         from ultralytics import YOLO
+        from zone_analyzer.spatial import SpatialAnalyzer
+        import torch
 
         cap = cv2.VideoCapture(self._video_path)
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        w_full = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h_full = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
-        model  = YOLO(str(paths.yolo_model))
+        from utils.model_loader import pick_model_path
+        _mp    = pick_model_path()
+        model  = YOLO(str(_mp))
         device = detect_cfg.device
 
-        results_iter = model.predict(
-            source=self._video_path,
-            stream=True,
-            conf=0.18,
-            device=device,
-            iou=0.5,
-            verbose=False,
-        )
+        # Intentar recortar al area del laberinto (coords.json) para reducir
+        # la resolucion que recibe YOLO y acelerar la inferencia en CPU.
+        crop_x, crop_y, crop_w, crop_h = 0, 0, w_full, h_full
+        try:
+            spatial = SpatialAnalyzer(paths.coords_json)
+            lim = spatial.outer_limits
+            if lim:
+                margin = 5
+                cx1 = max(0, lim["x_min"] - margin)
+                cy1 = max(0, lim["y_min"] - margin)
+                cx2 = min(w_full, lim["x_max"] + margin)
+                cy2 = min(h_full, lim["y_max"] + margin)
+                if cx2 > cx1 and cy2 > cy1:
+                    crop_x, crop_y = cx1, cy1
+                    crop_w, crop_h = cx2 - cx1, cy2 - cy1
+        except Exception:
+            pass
+
+        use_crop = (crop_w < w_full or crop_h < h_full)
+        offset   = np.array([crop_x, crop_y, crop_x, crop_y], dtype=float)
 
         detections: dict = {}
-        frame_idx = 0
 
-        for res in results_iter:
-            if self._stop:
-                break
-
-            box_out = kps_xy_out = kps_conf_out = None
-            best_out = 0
-
-            if res.boxes and len(res.boxes) > 0:
-                confs    = res.boxes.conf.cpu().numpy()
-                best_out = int(np.argmax(confs))
-                box_out  = res.boxes.xyxy[best_out].cpu().numpy()
-                if res.keypoints is not None:
-                    kps_xy_out   = res.keypoints.xy.cpu()
-                    kps_conf_out = res.keypoints.conf.cpu() if res.keypoints.conf is not None else None
-
-            detections[frame_idx] = (box_out, kps_xy_out, kps_conf_out, best_out)
-            frame_idx += 1
-            self.progress.emit(frame_idx, total if total > 0 else frame_idx)
+        if use_crop:
+            # Frame a frame con recorte — coordenadas reconvertidas al frame completo
+            cap = cv2.VideoCapture(self._video_path)
+            frame_idx = 0
+            while True:
+                ret, raw = cap.read()
+                if not ret or self._stop:
+                    break
+                frame = raw[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
+                res_list = model.predict(
+                    source=frame, stream=False,
+                    conf=0.18, device=device, iou=0.5, verbose=False,
+                )
+                box_out = kps_xy_out = kps_conf_out = None
+                best_out = 0
+                if res_list:
+                    res = res_list[0]
+                    if res.boxes and len(res.boxes) > 0:
+                        confs    = res.boxes.conf.cpu().numpy()
+                        best_out = int(np.argmax(confs))
+                        # Reconvertir bbox a coordenadas del frame completo
+                        box_out  = res.boxes.xyxy[best_out].cpu().numpy() + offset[:4]
+                        if res.keypoints is not None:
+                            kps_xy_raw   = res.keypoints.xy.cpu()
+                            kps_conf_out = (res.keypoints.conf.cpu()
+                                            if res.keypoints.conf is not None else None)
+                            # Reconvertir keypoints a coordenadas del frame completo
+                            # Solo los keypoints visibles (no cercanos a [0,0])
+                            kps_np = kps_xy_raw.numpy().copy()
+                            visible = ~((kps_np[..., 0] < 1.0) & (kps_np[..., 1] < 1.0))
+                            kps_np[..., 0] += np.where(visible, crop_x, 0)
+                            kps_np[..., 1] += np.where(visible, crop_y, 0)
+                            kps_xy_out = torch.from_numpy(kps_np)
+                detections[frame_idx] = (box_out, kps_xy_out, kps_conf_out, best_out)
+                frame_idx += 1
+                self.progress.emit(frame_idx, total if total > 0 else frame_idx)
+            cap.release()
+        else:
+            # Sin recorte util: pasar ruta de video directamente
+            results_iter = model.predict(
+                source=self._video_path,
+                stream=True,
+                conf=0.18,
+                device=device,
+                iou=0.5,
+                verbose=False,
+            )
+            frame_idx = 0
+            for res in results_iter:
+                if self._stop:
+                    break
+                box_out = kps_xy_out = kps_conf_out = None
+                best_out = 0
+                if res.boxes and len(res.boxes) > 0:
+                    confs    = res.boxes.conf.cpu().numpy()
+                    best_out = int(np.argmax(confs))
+                    box_out  = res.boxes.xyxy[best_out].cpu().numpy()
+                    if res.keypoints is not None:
+                        kps_xy_out   = res.keypoints.xy.cpu()
+                        kps_conf_out = (res.keypoints.conf.cpu()
+                                        if res.keypoints.conf is not None else None)
+                detections[frame_idx] = (box_out, kps_xy_out, kps_conf_out, best_out)
+                frame_idx += 1
+                self.progress.emit(frame_idx, total if total > 0 else frame_idx)
 
         if not self._stop:
             self.finished.emit(detections)
@@ -702,6 +765,7 @@ def _write_data_yaml(class_names: list[str], yaml_path: Path,
         f"nc: {len(class_names)}",
         f"names: {class_names!r}",
         "kpt_shape: [3, 3]",
+        "flip_idx: [0, 1, 2]",
         "",
     ]
     with open(yaml_path, "w", encoding="utf-8") as f:
@@ -1701,6 +1765,18 @@ class PrelabelPage(QWidget):
     # Frame display
     # ------------------------------------------------------------------
 
+    def _det_for_frame(self, frame_idx: int):
+        """Return detection for frame_idx, or the most recent past strided detection."""
+        det = self._detections.get(frame_idx)
+        if det is not None:
+            return det
+        if not self._detections:
+            return None
+        past = sorted(k for k in self._detections if k <= frame_idx)
+        if past:
+            return self._detections[past[-1]]
+        return self._detections[min(self._detections)]
+
     def _show_frame(self, frame_idx: int) -> None:
         if self._cap is None:
             return
@@ -1731,7 +1807,7 @@ class PrelabelPage(QWidget):
                 x_off, y_off = x1c, y1c
 
         # Dibujar detecciones
-        det = self._detections.get(frame_idx)
+        det = self._det_for_frame(frame_idx)
         if det is not None:
             box, kps_xy, kps_conf, best = det
             if box is not None:
@@ -1928,9 +2004,8 @@ class PrelabelPage(QWidget):
 
         all_labeled = [
             f for f in self._label_map
-            if f in self._detections
-            and self._detections[f] is not None
-            and self._detections[f][0] is not None
+            if self._det_for_frame(f) is not None
+            and self._det_for_frame(f)[0] is not None
         ]
 
         stride = self._spn_stride.value() if hasattr(self, "_spn_stride") else 1
@@ -2073,7 +2148,7 @@ class PrelabelPage(QWidget):
         img_path = base / split / "images" / img_name
         cv2.imwrite(str(img_path), frame, [cv2.IMWRITE_JPEG_QUALITY, 92])
 
-        det = self._detections.get(frame_idx)
+        det = self._det_for_frame(frame_idx)
         if det is None:
             return
         box, kps_xy, kps_conf, best = det
