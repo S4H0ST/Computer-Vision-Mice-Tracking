@@ -384,113 +384,35 @@ class PreprocessWorker(QThread):
 
     def _process(self) -> None:
         from ultralytics import YOLO
-        from zone_analyzer.spatial import SpatialAnalyzer
-        import torch
 
         cap = cv2.VideoCapture(self._video_path)
-        total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        w_full = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        h_full = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap.release()
 
         from utils.model_loader import pick_model_path
         _mp   = self._model_path if self._model_path is not None else pick_model_path()
         model = YOLO(str(_mp))
-        # ONNX Runtime maneja el dispositivo internamente; forzar "cpu" evita el
-        # error de tensor binding de onnxruntime-gpu cuando device="0" (CUDA).
         device = "cpu" if _mp.suffix.lower() == ".onnx" else detect_cfg.device
-
-        # Recorte del area del laberinto para acelerar la inferencia en CPU.
-        # Prioridad: exterior calibrado en el paso 0 → coords.json global → sin recorte.
-        crop_x, crop_y, crop_w, crop_h = 0, 0, w_full, h_full
-        if self._exterior_pts and len(self._exterior_pts) == 2:
-            # Usar el exterior marcado por el usuario en el paso 0
-            margin = 5
-            pts_x = [p[0] for p in self._exterior_pts]
-            pts_y = [p[1] for p in self._exterior_pts]
-            cx1 = max(0, min(pts_x) - margin)
-            cy1 = max(0, min(pts_y) - margin)
-            cx2 = min(w_full, max(pts_x) + margin)
-            cy2 = min(h_full, max(pts_y) + margin)
-            if cx2 > cx1 and cy2 > cy1:
-                crop_x, crop_y = cx1, cy1
-                crop_w, crop_h = cx2 - cx1, cy2 - cy1
-        else:
-            try:
-                spatial = SpatialAnalyzer(paths.coords_json)
-                lim = spatial.outer_limits
-                if lim:
-                    margin = 5
-                    cx1 = max(0, lim["x_min"] - margin)
-                    cy1 = max(0, lim["y_min"] - margin)
-                    cx2 = min(w_full, lim["x_max"] + margin)
-                    cy2 = min(h_full, lim["y_max"] + margin)
-                    if cx2 > cx1 and cy2 > cy1:
-                        crop_x, crop_y = cx1, cy1
-                        crop_w, crop_h = cx2 - cx1, cy2 - cy1
-            except Exception:
-                pass
-
-        use_crop = (crop_w < w_full or crop_h < h_full)
-        offset   = np.array([crop_x, crop_y, crop_x, crop_y], dtype=float)
 
         detections: dict = {}
 
-        if use_crop:
-            # Frame a frame con recorte — coordenadas reconvertidas al frame completo
-            cap = cv2.VideoCapture(self._video_path)
-            frame_idx = 0
-            while True:
-                ret, raw = cap.read()
-                if not ret or self._stop:
-                    break
-                frame = raw[crop_y:crop_y + crop_h, crop_x:crop_x + crop_w]
-                res_list = model.track(
-                    source=frame, persist=True,
-                    conf=0.10, device=device, iou=0.4, verbose=False,
-                    tracker="bytetrack.yaml",
-                )
-                box_out = kps_xy_out = kps_conf_out = None
-                best_out = 0
-                if res_list:
-                    res = res_list[0]
-                    if res.boxes and len(res.boxes) > 0:
-                        confs    = res.boxes.conf.cpu().numpy()
-                        best_out = int(np.argmax(confs))
-                        # Reconvertir bbox a coordenadas del frame completo
-                        box_out  = res.boxes.xyxy[best_out].cpu().numpy() + offset[:4]
-                        if res.keypoints is not None:
-                            kps_xy_raw   = res.keypoints.xy.cpu()
-                            kps_conf_out = (res.keypoints.conf.cpu()
-                                            if res.keypoints.conf is not None else None)
-                            # Reconvertir keypoints a coordenadas del frame completo
-                            # Solo los keypoints visibles (no cercanos a [0,0])
-                            kps_np = kps_xy_raw.numpy().copy()
-                            visible = ~((kps_np[..., 0] < 1.0) & (kps_np[..., 1] < 1.0))
-                            kps_np[..., 0] += np.where(visible, crop_x, 0)
-                            kps_np[..., 1] += np.where(visible, crop_y, 0)
-                            kps_xy_out = torch.from_numpy(kps_np)
-                detections[frame_idx] = (box_out, kps_xy_out, kps_conf_out, best_out)
-                frame_idx += 1
-                self.progress.emit(frame_idx, total if total > 0 else frame_idx)
-            cap.release()
-        else:
-            # Sin recorte util: pasar ruta de video directamente
-            results_iter = model.track(
-                source=self._video_path,
-                stream=True,
-                conf=0.10,
-                device=device,
-                iou=0.4,
-                verbose=False,
-                tracker="bytetrack.yaml",
+        # Pasar el frame COMPLETO a YOLO (igual que DetectionWorker) para que la
+        # deteccion sea identica a la pantalla de inicio.
+        # El recorte al borde exterior solo se aplica al display en _show_frame.
+        cap = cv2.VideoCapture(self._video_path)
+        frame_idx = 0
+        while True:
+            ret, raw = cap.read()
+            if not ret or self._stop:
+                break
+            res_list = model.predict(
+                source=raw,
+                conf=0.18, device=device, iou=0.5, verbose=False,
             )
-            frame_idx = 0
-            for res in results_iter:
-                if self._stop:
-                    break
-                box_out = kps_xy_out = kps_conf_out = None
-                best_out = 0
+            box_out = kps_xy_out = kps_conf_out = None
+            best_out = 0
+            if res_list:
+                res = res_list[0]
                 if res.boxes and len(res.boxes) > 0:
                     confs    = res.boxes.conf.cpu().numpy()
                     best_out = int(np.argmax(confs))
@@ -499,9 +421,10 @@ class PreprocessWorker(QThread):
                         kps_xy_out   = res.keypoints.xy.cpu()
                         kps_conf_out = (res.keypoints.conf.cpu()
                                         if res.keypoints.conf is not None else None)
-                detections[frame_idx] = (box_out, kps_xy_out, kps_conf_out, best_out)
-                frame_idx += 1
-                self.progress.emit(frame_idx, total if total > 0 else frame_idx)
+            detections[frame_idx] = (box_out, kps_xy_out, kps_conf_out, best_out)
+            frame_idx += 1
+            self.progress.emit(frame_idx, total if total > 0 else frame_idx)
+        cap.release()
 
         if not self._stop:
             self.finished.emit(detections)
@@ -839,7 +762,6 @@ class PrelabelPage(QWidget):
 
         # Reproduccion
         self._cap: cv2.VideoCapture | None = None
-        self._cap_pos: int = -1   # siguiente frame esperado; evita seeks innecesarios
         self._frame_idx: int = 0
         self._total_frames: int = 0
         self._fps: float = 25.0
@@ -1775,7 +1697,6 @@ class PrelabelPage(QWidget):
         if self._cap is not None:
             self._cap.release()
         self._cap = cv2.VideoCapture(str(self._video_path))
-        self._cap_pos = 0
         self._total_frames = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
         self._fps = self._cap.get(cv2.CAP_PROP_FPS) or 25.0
         self._frame_idx = 0
@@ -1895,12 +1816,9 @@ class PrelabelPage(QWidget):
         if self._cap is None:
             return
         try:
-            if self._cap_pos != frame_idx:
-                self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
             ret, raw = self._cap.read()
-            self._cap_pos = frame_idx + 1 if ret else -1
         except Exception:
-            self._cap_pos = -1
             return
         if not ret:
             return
@@ -1919,6 +1837,25 @@ class PrelabelPage(QWidget):
             if x2c > x1c and y2c > y1c:
                 img = img[y1c:y2c, x1c:x2c]
                 x_off, y_off = x1c, y1c
+
+        # Dibujar zonas de calibracion sobre el recorte
+        if len(self._pl_calib_interior) == 2:
+            xs = sorted(p[0] for p in self._pl_calib_interior)
+            ys = sorted(p[1] for p in self._pl_calib_interior)
+            cv2.rectangle(img,
+                          (xs[0] - x_off, ys[0] - y_off),
+                          (xs[1] - x_off, ys[1] - y_off),
+                          (255, 80, 80), 1)
+        for hx, hy in self._pl_calib_holes:
+            cv2.circle(img, (hx - x_off, hy - y_off), self._pl_hole_radius,
+                       (80, 200, 80), 1)
+        if len(self._pl_calib_center) == 2:
+            xs = sorted(p[0] for p in self._pl_calib_center)
+            ys = sorted(p[1] for p in self._pl_calib_center)
+            cv2.rectangle(img,
+                          (xs[0] - x_off, ys[0] - y_off),
+                          (xs[1] - x_off, ys[1] - y_off),
+                          (0, 220, 220), 1)
 
         # Dibujar detecciones
         det = self._det_for_frame(frame_idx)
@@ -2169,7 +2106,6 @@ class PrelabelPage(QWidget):
         if self._cap is not None:
             self._cap.release()
             self._cap = None
-        self._cap_pos = -1
         self._video_path = None
         self._detections = {}
         self._label_map = {}
