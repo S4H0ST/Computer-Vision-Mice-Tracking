@@ -40,6 +40,28 @@ os.environ.setdefault("ULTRALYTICS_SKIP_REQUIREMENTS_CHECKS", "1")
 os.environ.setdefault("YOLO_AUTOINSTALL", "False")
 
 # --------------------------------------------------------------------------- #
+# FIX: PyTorch 2.7+ llama a inspect.getsource() en tiempo de import para
+# parsear comentarios "compile_ignored" en torch.fx.experimental._config.
+# En un bundle congelado (PyInstaller) no hay codigo fuente disponible y
+# getsource() lanza OSError, abortando la carga de torch.__init__.
+# Parcheamos getsource() para devolver "" en lugar de lanzar, de modo que
+# install_config_module() obtenga un conjunto vacio de compile_ignored_keys
+# — correcto para uso de inferencia donde no se usa torch.compile().
+# --------------------------------------------------------------------------- #
+if getattr(sys, "frozen", False):
+    import inspect as _inspect
+    _orig_getsource = _inspect.getsource
+
+    def _safe_getsource(obj):
+        try:
+            return _orig_getsource(obj)
+        except OSError:
+            return ""
+
+    _inspect.getsource = _safe_getsource
+    del _orig_getsource
+
+# --------------------------------------------------------------------------- #
 # Helpers de diagnóstico
 # --------------------------------------------------------------------------- #
 
