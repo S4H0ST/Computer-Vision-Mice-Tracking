@@ -258,6 +258,9 @@ __marimo__/
 # Claude Code (metadata local, no va al repo)
 .claude/
 
+# Script de build con rutas personales hardcodeadas
+build_exe.py
+
 # Logs de build locales
 build_log*.txt
 
