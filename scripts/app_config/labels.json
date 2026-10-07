@@ -16,11 +16,11 @@
         "name": "grooming",
         "display_es": "2: Acicalamiento",
         "display_en": "2: Grooming",
-        "hex_color": "#c50000",
+        "hex_color": "#000000",
         "bgr_color": [
             0,
             0,
-            197
+            0
         ]
     },
     {

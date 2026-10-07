@@ -12,6 +12,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtGui import QIcon
 from gui.controllers.main_window import MainWindow
+from app_config.config import paths
 
 if getattr(sys, "frozen", False):
     _ICON_PATH = Path(sys._MEIPASS) / "gui" / "assets" / "icons" / "app_icon.ico"
@@ -20,6 +21,7 @@ else:
 
 
 def main() -> None:
+    paths.check_dirs()
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
     if _ICON_PATH.exists():

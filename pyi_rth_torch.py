@@ -123,6 +123,25 @@ _add()
 
 _add("--- Python packages ---")
 
+# FIX: en un build CPU sin DLLs CUDA, shm.dll (memoria compartida de PyTorch)
+# no puede cargar porque le faltan dependencias CUDA. shm.dll solo se usa en
+# multiprocessing/DataLoader con workers; para inferencia pura no es necesaria.
+# Parcheamos ctypes.CDLL.__init__ para ignorar silenciosamente su fallo de carga.
+if getattr(sys, "frozen", False):
+    import ctypes as _ctypes
+    _orig_cdll_init = _ctypes.CDLL.__init__
+
+    def _cdll_init_tolerant(self, name=None, *args, **kwargs):
+        if isinstance(name, str) and "shm.dll" in name.lower():
+            try:
+                _orig_cdll_init(self, name, *args, **kwargs)
+            except OSError:
+                return
+        else:
+            _orig_cdll_init(self, name, *args, **kwargs)
+
+    _ctypes.CDLL.__init__ = _cdll_init_tolerant
+
 import torch  # noqa: E402 — también inicializa torch en el bundle (como el hook original)
 
 _chk("torch",         lambda: torch.__version__)

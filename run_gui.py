@@ -1,3 +1,6 @@
+import multiprocessing
+multiprocessing.freeze_support()   # imprescindible en exe congelado en Windows
+
 import os
 import sys
 from pathlib import Path
@@ -15,4 +18,6 @@ else:
     sys.path.insert(0, str(_ROOT))
 
 from gui.app import main
-main()
+
+if __name__ == "__main__":
+    main()

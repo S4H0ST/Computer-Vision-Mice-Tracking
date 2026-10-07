@@ -638,20 +638,35 @@ QListWidget#list_result_runs::item:selected {
            </widget>
           </item>
           <item>
-           <widget class="QWidget" name="calibControlsContainer">
-            <property name="minimumSize">
-             <size>
-              <width>200</width>
-              <height>0</height>
-             </size>
+           <layout class="QVBoxLayout" name="calibRightLayout">
+            <property name="spacing">
+             <number>4</number>
             </property>
-            <property name="maximumSize">
-             <size>
-              <width>215</width>
-              <height>16777215</height>
-             </size>
-            </property>
-            <layout class="QVBoxLayout" name="calibControlsLayout">
+            <item>
+             <widget class="QScrollArea" name="scrollCalibControls">
+              <property name="minimumSize">
+               <size>
+                <width>200</width>
+                <height>0</height>
+               </size>
+              </property>
+              <property name="maximumSize">
+               <size>
+                <width>215</width>
+                <height>16777215</height>
+               </size>
+              </property>
+              <property name="frameShape">
+               <enum>QFrame::NoFrame</enum>
+              </property>
+              <property name="horizontalScrollBarPolicy">
+               <enum>Qt::ScrollBarAlwaysOff</enum>
+              </property>
+              <property name="widgetResizable">
+               <bool>true</bool>
+              </property>
+              <widget class="QWidget" name="calibControlsContainer">
+               <layout class="QVBoxLayout" name="calibControlsLayout">
              <property name="spacing">
               <number>5</number>
              </property>
@@ -979,18 +994,9 @@ QListWidget#list_result_runs::item:selected {
               </property>
              </widget>
             </item>
-            <item>
-             <spacer name="calibCtrlSpacer">
-              <property name="orientation">
-               <enum>Qt::Vertical</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>20</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
+            </layout>
+           </widget>
+             </widget>
             </item>
             <item>
              <widget class="QLabel" name="lbl_warn_coords">
@@ -1024,7 +1030,6 @@ QListWidget#list_result_runs::item:selected {
              </layout>
             </item>
            </layout>
-          </widget>
           </item>
          </layout>
         </item>
