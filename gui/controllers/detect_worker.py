@@ -96,10 +96,11 @@ class DetectionWorker(QThread):
 
     # ------------------------------------------------------------------
     def run(self) -> None:
+        import traceback
         try:
             self._detect()
         except Exception as exc:
-            self.error.emit(str(exc))
+            self.error.emit(traceback.format_exc())
 
     def _detect(self) -> None:
         from ultralytics import YOLO
@@ -116,6 +117,7 @@ class DetectionWorker(QThread):
         _model_path = self._model_path if self._model_path is not None else pick_model_path()
         self.log_msg.emit(f"Cargando modelo: {_model_path.name}")
         model = YOLO(str(_model_path))
+        self.log_msg.emit(f"task={model.task}  clases={list(model.names.values())[:4]}")
 
         spatial    = SpatialAnalyzer(self._coords_json)
         classifier = BehaviorClassifier(spatial_logic=spatial)
@@ -127,10 +129,11 @@ class DetectionWorker(QThread):
         stem       = "camara" if is_camera else Path(self._source).stem
 
         cap = cv2.VideoCapture(cv2_source)
+        if not cap.isOpened():
+            raise RuntimeError(f"No se pudo abrir la fuente de video: {cv2_source}")
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         w   = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         h   = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        cap.release()
 
         # ---- Recorte de salida: YOLO ve el frame completo, output se recorta ----
         x1_c = y1_c = 0
@@ -158,29 +161,36 @@ class DetectionWorker(QThread):
             self.log_msg.emit("[!] Calibracion parcial: head_dipping no usara referencias espaciales.")
 
         # ---- Dispositivo ----
-        import torch
-        device = "cpu" if _model_path.suffix.lower() == ".onnx" else ("0" if torch.cuda.is_available() else "cpu")
+        try:
+            import torch
+            device = "0" if torch.cuda.is_available() else "cpu"
+        except (ImportError, OSError):
+            device = "cpu"
         self.log_msg.emit(f"Dispositivo: {'GPU (CUDA)' if device == '0' else 'CPU'}")
 
-        # ---- Bucle stream=True: ByteTrack activo, sin parpadeo ----
+        # ---- Bucle frame a frame: evita DataLoader/multiprocessing en exe congelado ----
         stats: dict[str, int] = {k: 0 for k in BEHAVIOR_KEYS}
         stats.update({"hole_0": 0, "hole_1": 0, "hole_2": 0, "hole_3": 0})
         traj_pts: list[tuple[int, int]] = []
         hole_bouts    = [0, 0, 0, 0]
         prev_hole_idx = -1
 
-        results = model.predict(
-            source=cv2_source, stream=True,
-            conf=0.18, device=device, iou=0.5, verbose=False,
-        )
-
+        self.log_msg.emit("Modelo listo. Iniciando deteccion...")
         frame_idx = 0
-        for res in results:
+        while cap.isOpened():
             if self._stop:
                 self.log_msg.emit("Deteccion detenida por el usuario.")
                 break
 
-            img = res.orig_img.copy()
+            ret, frame = cap.read()
+            if not ret:
+                break
+
+            res_list = model.predict(
+                frame, conf=0.18, device=device, iou=0.5, verbose=False,
+            )
+            res = res_list[0]
+            img = frame.copy()
 
             if spatial_ok:
                 spatial.draw_zones(img)
@@ -194,6 +204,11 @@ class DetectionWorker(QThread):
             speed_val   = 0.0
             hole_idx    = -1
             best        = 0
+
+            if frame_idx == 0:
+                n_b = len(res.boxes) if res.boxes is not None else -1
+                n_k = len(res.keypoints) if res.keypoints is not None else -1
+                self.log_msg.emit(f"[DBG] frame0 boxes={n_b} kpts={n_k}")
 
             if res.boxes and len(res.boxes) > 0:
                 confs      = res.boxes.conf.cpu().numpy()
@@ -286,6 +301,7 @@ class DetectionWorker(QThread):
             self.frame_ready.emit(img_out, dict(stats), frame_idx)
             frame_idx += 1
 
+        cap.release()
         vid_out.release()
         csv_out.close()
         self.log_msg.emit(f"Deteccion completada: {frame_idx} frames.")

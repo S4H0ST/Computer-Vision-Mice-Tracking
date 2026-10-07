@@ -183,19 +183,6 @@ class TrainWorker(QThread):
         shutil.copy2(str(best_pt), str(dest))
         self.log_msg.emit(f"Modelo guardado en: {dest}")
 
-        # Exportar a ONNX → va siempre a models/cpu/
-        try:
-            self.log_msg.emit("Exportando a ONNX (esto puede tardar ~30s)...")
-            from utils.model_loader import export_to_onnx
-            import shutil as _sh
-            onnx_tmp = export_to_onnx(dest)          # genera .onnx junto al .pt en gpu/
-            paths.models_cpu_dir.mkdir(parents=True, exist_ok=True)
-            onnx_final = paths.models_cpu_dir / onnx_tmp.name
-            _sh.move(str(onnx_tmp), str(onnx_final))
-            self.log_msg.emit(f"ONNX guardado en: {onnx_final}")
-        except Exception as exc:
-            self.log_msg.emit(f"[!] Exportacion ONNX fallida (el .pt sigue disponible): {exc}")
-
         # Limpiar directorio temporal de runs
         if save_dir is not None:
             try:

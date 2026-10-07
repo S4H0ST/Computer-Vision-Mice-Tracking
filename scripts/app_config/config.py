@@ -23,7 +23,8 @@ from dataclasses import dataclass
 try:
     import torch
     _DEFAULT_DEVICE: str = "0" if torch.cuda.is_available() else "cpu"
-except ImportError:
+except (ImportError, OSError):
+    # OSError ocurre en builds PyInstaller cuando las DLLs de CUDA no están disponibles
     _DEFAULT_DEVICE: str = "cpu"
 
 # Raiz del proyecto
@@ -40,12 +41,10 @@ class Paths:
 
     # Rutas de modelos
     models_dir:     Path = root / "models"
-    models_gpu_dir: Path = models_dir / "gpu"   # modelos .pt  (PyTorch, requiere GPU CUDA)
-    models_cpu_dir: Path = models_dir / "cpu"   # modelos .onnx (ONNX Runtime, CPU por defecto)
+    models_gpu_dir: Path = models_dir / "gpu"
 
     base_yolo_model: Path = models_gpu_dir / "yolov8s-pose.pt"
     yolo_model:      Path = models_gpu_dir / "yolo_ratas.pt"
-    yolo_model_onnx: Path = models_cpu_dir / "yolo_ratas.onnx"
     rnn_model:       Path = models_gpu_dir / "best_rnn.pth"
 
     # Rutas de salida
@@ -64,7 +63,6 @@ class Paths:
     def check_dirs(self) -> None:
         """Crea los directorios esenciales y avisa si falta el video fuente."""
         self.models_gpu_dir.mkdir(parents=True, exist_ok=True)
-        self.models_cpu_dir.mkdir(parents=True, exist_ok=True)
         self.detect_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.video_source.exists():

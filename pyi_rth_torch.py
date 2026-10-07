@@ -50,16 +50,14 @@ os.environ.setdefault("YOLO_AUTOINSTALL", "False")
 # --------------------------------------------------------------------------- #
 if getattr(sys, "frozen", False):
     import inspect as _inspect
-    _orig_getsource = _inspect.getsource
 
-    def _safe_getsource(obj):
+    def _safe_getsource(obj, _orig=_inspect.getsource):
         try:
-            return _orig_getsource(obj)
+            return _orig(obj)
         except OSError:
             return ""
 
     _inspect.getsource = _safe_getsource
-    del _orig_getsource
 
 # --------------------------------------------------------------------------- #
 # Helpers de diagnóstico
@@ -132,7 +130,6 @@ _chk("torch CUDA",    lambda: (
     f"available={torch.cuda.is_available()}"
     + (f"  device={torch.cuda.get_device_name(0)}" if torch.cuda.is_available() else "")
 ))
-_chk("onnxruntime",   lambda: __import__("onnxruntime").__version__)
 _chk("cv2",           lambda: __import__("cv2").__version__)
 _chk("numpy",         lambda: __import__("numpy").__version__)
 _chk("ultralytics",   lambda: __import__("ultralytics").__version__)
@@ -154,11 +151,9 @@ _add()
 # --------------------------------------------------------------------------- #
 
 _add("--- Model files ---")
-_model_onnx = _exe_dir / "models" / "cpu" / "yolo_ratas.onnx"
-_model_pt   = _exe_dir / "models" / "gpu" / "yolo_ratas.pt"
+_model_pt = _exe_dir / "models" / "gpu" / "yolo_ratas.pt"
 
-_file("models/cpu/yolo_ratas.onnx", _model_onnx)
-_file("models/gpu/yolo_ratas.pt",   _model_pt)
+_file("models/gpu/yolo_ratas.pt", _model_pt)
 
 # Muestra qué modelo elegiría pick_model_path() — diagnóstico para el caso
 # en que el video se muestra pero YOLO no detecta nada (modelo no encontrado).
@@ -202,7 +197,7 @@ _add()
 
 if _DIAG_MODE:
     _add("--- YOLO model load test (--diag) ---")
-    _best = _model_onnx if _model_onnx.exists() else (_model_pt if _model_pt.exists() else None)
+    _best = _model_pt if _model_pt.exists() else None
     if _best is None:
         _add("  [SKIP]  No model file found")
         _err_n += 1
@@ -213,8 +208,7 @@ if _DIAG_MODE:
             _m = _YOLO(str(_best))
             _add(f"  [OK]    Loaded {_best.name}")
             _add(f"          task={_m.task}  classes={list(_m.names.values())}")
-            # Inferencia de prueba con frame en blanco
-            _device = "cpu" if _best.suffix == ".onnx" else ("0" if torch.cuda.is_available() else "cpu")
+            _device = "0" if torch.cuda.is_available() else "cpu"
             _dummy  = np.zeros((320, 320, 3), dtype=np.uint8)
             _res    = _m.predict(_dummy, verbose=False, device=_device)
             _add(f"  [OK]    Inference on 320x320 blank frame: {len(_res)} result(s)")

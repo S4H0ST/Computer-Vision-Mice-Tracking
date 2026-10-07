@@ -81,7 +81,7 @@ _TRANSLATIONS: list[tuple] = [
     ("grp_output_folder",     "setTitle", "Carpeta de Salida",                "Output Folder"),
     ("btn_select_output",     "setText",  "Examinar...",                      "Browse..."),
     ("btn_clear_calib",       "setText",  "Limpiar",                          "Clear"),
-    ("btn_confirm_calib",     "setText",  "Siguiente →",                      "Next →"),
+    ("btn_confirm_calib",     "setText",  "Confirmar →",                      "Confirm →"),
     ("lbl_stats_title",       "setText",  "Estadisticas en Vivo",             "Live Statistics"),
     ("grp_progress",          "setTitle", "Progreso",                         "Progress"),
     ("grp_behaviors",         "setTitle", "Comportamientos",                  "Behaviours"),
@@ -213,7 +213,7 @@ click it to browse and load a <code>.pt</code> weights file from <code>models/</
   <li><b style="color:#cc9900">Step 4</b> — (optional) 2 clicks for a <b>central zone</b> border (yellow),
       or enable <b>Central border from holes</b> to auto-compute it as the union bounding box of the 4 holes.</li>
 </ul>
-<p>Set the real-world box dimensions (cm) and choose an <b>Output Folder</b> before clicking <b>Next →</b>.</p>
+<p>Set the real-world box dimensions (cm) and choose an <b>Output Folder</b> before clicking <b>Confirm →</b>.</p>
 <div class="tip">Tip: reuse a previous calibration via <b>Import Coordinates → Browse…</b>
 and selecting a <code>coords_*.json</code> file.</div>
 <div class="tip">Tip: <b>Clear</b> resets all points so you can start over. Drag the corner
@@ -249,7 +249,7 @@ Use <b>← Back</b> (visible after cancelling) to fix the calibration and re-run
 (a structured folder of labelled images and annotations that the trainer reads).</p>
 <div class="step">
   <b>Step 1</b> — Select the video, calibrate the arena (or import existing coords),
-  choose an output dataset folder, then click <b>Next →</b>.<br>
+  choose an output dataset folder, then click <b>Confirm →</b>.<br>
   <b>Step 2</b> — The model pre-processes all frames (runs inference to extract bounding boxes
   and keypoints). Progress is shown on screen; press <b>Cancel</b> to abort.<br>
   <b>Step 3</b> — Use the playback controls or <b>click/drag the colour timeline bar</b> to
@@ -344,16 +344,9 @@ from the <code>models/</code> folder next to the application.
 Until a model is loaded, <b>Select Video</b>, <b>Start Camera</b> and <b>Labeling</b>
 are disabled.</p>
 
-<h3>Which model file should I use — .pt or .onnx?</h3>
-<p>It depends on your hardware:</p>
-<ul>
-  <li><b>NVIDIA GPU (CUDA)</b> → use <code>.pt</code>. PyTorch uses the GPU directly for fast inference.</li>
-  <li><b>CPU only (no NVIDIA GPU)</b> → use <code>.onnx</code>. ONNX Runtime processes ~2× faster than PyTorch on CPU.</li>
-</ul>
-<p>The app selects the right file automatically based on your hardware.
-If only a <code>.pt</code> is present on a CPU machine, a warning will appear before processing starts.
-You can generate the <code>.onnx</code> file from the <b>Training</b> page (it is exported automatically
-after training) or by running <code>scripts/convert_to_onnx.py</code>.</p>
+<h3>Which model file should I use?</h3>
+<p>Always use the <code>.pt</code> file. The app uses it on both CPU and GPU machines.
+With an NVIDIA GPU it runs on CUDA automatically; without a GPU it runs on CPU.</p>
 
 <h3>Can I stop detection mid-way and still get results?</h3>
 <p>Yes. Press <b>Cancel</b>, confirm the prompt, and the app will save whatever has
@@ -420,7 +413,7 @@ haz clic en esa etiqueta para elegir un archivo <code>.pt</code> de la carpeta <
       caja contenedora de los 4 agujeros.</li>
 </ul>
 <p>Introduce las dimensiones reales de la caja (cm) y elige una <b>Carpeta de Salida</b>
-antes de pulsar <b>Siguiente →</b>.</p>
+antes de pulsar <b>Confirmar →</b>.</p>
 <div class="tip">Consejo: reutiliza una calibracion anterior con
 <b>Importar Coordenadas → Examinar…</b> y seleccionando un archivo <code>coords_*.json</code>.</div>
 <div class="tip">Consejo: <b>Limpiar</b> restablece todos los puntos para empezar de nuevo.
@@ -460,7 +453,7 @@ para cargar resultados de cualquier ejecucion anterior.</div>
 (carpeta estructurada de imagenes etiquetadas y anotaciones que el entrenador lee).</p>
 <div class="step">
   <b>Paso 1</b> — Selecciona el video, calibra la arena (o importa coordenadas existentes),
-  elige una carpeta de dataset y pulsa <b>Siguiente →</b>.<br>
+  elige una carpeta de dataset y pulsa <b>Confirmar →</b>.<br>
   <b>Paso 2</b> — El modelo pre-procesa todos los frames (inferencia para extraer cajas y keypoints).
   El progreso se muestra en pantalla; pulsa <b>Cancelar</b> para abortar.<br>
   <b>Paso 3</b> — Usa los controles de reproduccion o <b>haz clic / arrastra la barra de colores</b>
@@ -556,17 +549,9 @@ de pesos <code>.pt</code> de la carpeta <code>models/</code> junto a la aplicaci
 Hasta que se cargue un modelo, <b>Seleccionar Video</b>, <b>Iniciar Camara</b> y
 <b>Etiquetado</b> estan desactivados.</p>
 
-<h3>¿Que archivo de modelo debo usar — .pt o .onnx?</h3>
-<p>Depende de tu hardware:</p>
-<ul>
-  <li><b>GPU NVIDIA (CUDA)</b> → usa <code>.pt</code>. PyTorch aprovecha la GPU directamente.</li>
-  <li><b>Solo CPU (sin GPU NVIDIA)</b> → usa <code>.onnx</code>. ONNX Runtime es ~2× mas rapido
-      que PyTorch en CPU.</li>
-</ul>
-<p>La aplicacion selecciona el archivo correcto segun tu hardware de forma automatica.
-Si solo hay un <code>.pt</code> en un equipo sin GPU, aparecera un aviso antes de comenzar.
-Puedes generar el <code>.onnx</code> desde la pagina <b>Entrenamiento</b> (se exporta automaticamente
-al finalizar el entrenamiento) o ejecutando <code>scripts/convert_to_onnx.py</code>.</p>
+<h3>¿Que archivo de modelo debo usar?</h3>
+<p>Siempre el archivo <code>.pt</code>. La aplicacion lo usa tanto en CPU como en GPU.
+Con GPU NVIDIA usa CUDA automaticamente; sin GPU corre en CPU.</p>
 
 <h3>¿Puedo detener la deteccion a mitad y obtener igualmente los resultados?</h3>
 <p>Si. Pulsa <b>Cancelar</b>, confirma el dialogo, y la app guardara todo lo procesado:
@@ -647,6 +632,7 @@ class MainWindow(QMainWindow):
         _pt = _QApp.instance().font().pointSize()
         self._default_font_size: int = _pt if _pt > 0 else 9
         self._content_font_size: int = self._default_font_size
+        self._orig_stylesheets: dict = {}  # id(widget) -> stylesheet original
 
         self._setup_model_status()
         self._setup_nav_compare()
@@ -949,14 +935,44 @@ class MainWindow(QMainWindow):
         dlg.exec_()
 
     def _apply_content_font_size(self, size: int) -> None:
-        """Aplica el tamaño de fuente (pt) a todos los widgets del area de contenido."""
+        """Aplica el tamaño de fuente (pt) a los widgets de contenido (no botones, no título)."""
+        import re as _re
         from PyQt5.QtGui import QFont
-        from PyQt5.QtWidgets import QWidget as _QW
+        from PyQt5.QtWidgets import QWidget as _QW, QPushButton
+
         self._content_font_size = size
         font = QFont()
         font.setPointSize(size)
+        scale = size / self._default_font_size
+
         self.stackedWidget.setFont(font)
         for w in self.stackedWidget.findChildren(_QW):
+            # Botones: no tocar su fuente ni su tamaño (evita texto cortado)
+            if isinstance(w, QPushButton):
+                continue
+
+            # Título de la home: siempre 22pt bold, no escala con el slider
+            if w.objectName() == "lbl_welcome":
+                tf = QFont()
+                tf.setPointSize(22)
+                tf.setBold(True)
+                w.setFont(tf)
+                continue
+
+            # Si el widget tiene font-size en su stylesheet, escalar proporcionalmente
+            ss = w.styleSheet()
+            if ss and "font-size" in ss:
+                wid = id(w)
+                if wid not in self._orig_stylesheets:
+                    self._orig_stylesheets[wid] = ss  # guardar original la primera vez
+                orig = self._orig_stylesheets[wid]
+
+                def _scale_px(m, _s=scale):
+                    new_val = max(8, round(float(m.group(1)) * _s))
+                    return f"font-size: {new_val}{m.group(2)}"
+
+                w.setStyleSheet(_re.sub(r"font-size\s*:\s*([\d.]+)(px|pt)", _scale_px, orig))
+
             w.setFont(font)
 
     # ------------------------------------------------------------------
@@ -1049,17 +1065,15 @@ class MainWindow(QMainWindow):
             return
         if self._lang == "es":
             self._lbl_model_info.setText(
-                "<b>Archivo de modelo:</b> &nbsp;"
-                "Sin tarjeta grafica: <code>.pt</code> y <code>.onnx</code> funcionan, "
-                "pero <code>.onnx</code> es ~2&times; mas rapido. &nbsp;|&nbsp; "
-                "Con tarjeta grafica NVIDIA: usa <code>.pt</code>."
+                "<b>Modelo:</b> &nbsp;"
+                "Con GPU NVIDIA el modelo usa CUDA automaticamente. "
+                "Sin GPU el modelo corre en CPU."
             )
         else:
             self._lbl_model_info.setText(
-                "<b>Model file:</b> &nbsp;"
-                "No graphics card: <code>.pt</code> and <code>.onnx</code> both work, "
-                "but <code>.onnx</code> is ~2&times; faster. &nbsp;|&nbsp; "
-                "NVIDIA graphics card: use <code>.pt</code>."
+                "<b>Model:</b> &nbsp;"
+                "With an NVIDIA GPU the model uses CUDA automatically. "
+                "Without a GPU the model runs on CPU."
             )
 
     # ------------------------------------------------------------------
@@ -1416,16 +1430,14 @@ class MainWindow(QMainWindow):
     def _update_confirm_state(self) -> None:
         """Habilita/deshabilita Siguiente y muestra avisos de lo que falta."""
         coords_ok = self._calib_done()
-        folder_ok = self._custom_output_dir is not None
 
         done = len(self._calib_exterior) + len(self._calib_interior) + len(self._calib_holes)
         self.lbl_warn_coords.setText(_WARN_COORDS[self._lang].format(done=done))
         self.lbl_warn_coords.setVisible(not coords_ok)
 
-        self.lbl_warn_output.setText(_WARN_OUTPUT[self._lang])
-        self.lbl_warn_output.setVisible(not folder_ok)
+        self.lbl_warn_output.setVisible(False)
 
-        self.btn_confirm_calib.setEnabled(coords_ok and folder_ok)
+        self.btn_confirm_calib.setEnabled(coords_ok)
 
     def _on_clear_calib(self) -> None:
         self._reset_calib_state()
@@ -1536,6 +1548,9 @@ class MainWindow(QMainWindow):
             self._update_confirm_state()
 
     def _on_confirm_calib(self) -> None:
+        self._on_confirm_calib_impl()
+
+    def _on_confirm_calib_impl(self) -> None:
         e = [[p[0], p[1]] for p in self._calib_exterior]
         i = [[p[0], p[1]] for p in self._calib_interior]
         h = [[p[0], p[1]] for p in self._calib_holes]
@@ -1618,97 +1633,16 @@ class MainWindow(QMainWindow):
         return f"{s // 60}:{s % 60:02d}"
 
     def _resolve_model_path(self) -> "Path | None":
-        """
-        Elige el modelo a usar y muestra avisos si el hardware no coincide con el formato.
-
-        Casos:
-          - CPU + solo .pt disponible → aviso de rendimiento, usuario puede cancelar.
-          - GPU detectada + modelo por defecto es .onnx + existe .pt → ofrece cambiar a .pt.
-          - Todo correcto → devuelve la ruta sin dialogo.
-
-        Retorna la Path al modelo elegido, o None si el usuario cancela.
-        """
+        """Devuelve la ruta al modelo activo (.pt), o None si no existe."""
+        if self._active_model_path is not None:
+            return self._active_model_path
         try:
             import sys as _sys
             _sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
-            from utils.model_loader import pick_model_path, needs_cpu_pt_warning, gpu_can_upgrade
-            from app_config.config import paths as _paths
+            from utils.model_loader import pick_model_path
+            return pick_model_path()
         except Exception:
-            return None
-
-        # Usar el modelo que el usuario haya seleccionado explicitamente; si no, pick_model_path
-        chosen = self._active_model_path if self._active_model_path is not None else pick_model_path()
-
-        # ── Caso 1: CPU + solo .pt (sin .onnx) ──────────────────────────────
-        if needs_cpu_pt_warning():
-            msg = QMessageBox(self)
-            msg.setIcon(QMessageBox.Warning)
-            if self._lang == "es":
-                msg.setWindowTitle("Modelo no optimo para CPU")
-                msg.setText(
-                    "<b>No se detecto GPU NVIDIA (CUDA).</b><br><br>"
-                    "El modelo <code>.pt</code> en CPU es muy lento.<br><br>"
-                    "<b>Recomendado:</b> genera el <code>.onnx</code> desde la pagina "
-                    "<b>Entrenamiento</b> (se exporta automaticamente al terminar) o ejecuta "
-                    "<code>scripts/convert_to_onnx.py</code>.<br><br>"
-                    "Con <code>.onnx</code> la inferencia es ~2&times; mas rapida en CPU."
-                )
-                btn_cancel = msg.addButton("Cancelar", QMessageBox.RejectRole)
-                msg.addButton("Continuar igualmente", QMessageBox.AcceptRole)
-            else:
-                msg.setWindowTitle("Suboptimal model for CPU")
-                msg.setText(
-                    "<b>No NVIDIA GPU (CUDA) detected.</b><br><br>"
-                    "Running a <code>.pt</code> model on CPU is very slow.<br><br>"
-                    "<b>Recommended:</b> generate <code>.onnx</code> from the <b>Training</b> "
-                    "page (exported automatically after training) or run "
-                    "<code>scripts/convert_to_onnx.py</code>.<br><br>"
-                    "With <code>.onnx</code>, CPU inference is ~2&times; faster."
-                )
-                btn_cancel = msg.addButton("Cancel", QMessageBox.RejectRole)
-                msg.addButton("Continue anyway", QMessageBox.AcceptRole)
-            msg.exec_()
-            if msg.clickedButton() == btn_cancel:
-                return None
-            return chosen
-
-        # ── Caso 2: GPU disponible pero el modelo elegido es .onnx ──────────
-        if gpu_can_upgrade(chosen):
-            msg = QMessageBox(self)
-            msg.setIcon(QMessageBox.Information)
-            if self._lang == "es":
-                msg.setWindowTitle("GPU detectada")
-                msg.setText(
-                    "<b>Se ha detectado una GPU NVIDIA (CUDA).</b><br><br>"
-                    "El modelo por defecto es <code>.onnx</code> (optimo para CPU), "
-                    "pero con GPU NVIDIA disponible el modelo <code>.pt</code> "
-                    "es considerablemente mas rapido.<br><br>"
-                    "¿Con cual modelo quieres continuar?"
-                )
-                btn_pt   = msg.addButton("Usar .pt  (GPU — recomendado)", QMessageBox.AcceptRole)
-                btn_onnx = msg.addButton("Continuar con .onnx  (CPU)", QMessageBox.RejectRole)
-                btn_cancel = msg.addButton("Cancelar", QMessageBox.DestructiveRole)
-            else:
-                msg.setWindowTitle("GPU detected")
-                msg.setText(
-                    "<b>NVIDIA GPU (CUDA) detected.</b><br><br>"
-                    "The default model is <code>.onnx</code> (optimised for CPU), "
-                    "but with an NVIDIA GPU the <code>.pt</code> model "
-                    "is considerably faster.<br><br>"
-                    "Which model do you want to use?"
-                )
-                btn_pt   = msg.addButton("Use .pt  (GPU — recommended)", QMessageBox.AcceptRole)
-                btn_onnx = msg.addButton("Continue with .onnx  (CPU)", QMessageBox.RejectRole)
-                btn_cancel = msg.addButton("Cancel", QMessageBox.DestructiveRole)
-            msg.exec_()
-            clicked = msg.clickedButton()
-            if clicked == btn_cancel:
-                return None
-            if clicked == btn_pt:
-                return _paths.yolo_model
-            return chosen  # btn_onnx → usar .onnx tal cual
-
-        return chosen
+            return paths.yolo_model if paths.yolo_model.exists() else None
 
     def _compute_hole_names(self, coords_path) -> list[str]:
         """Devuelve 4 nombres posicionales (Sup. Izq. etc.) basados en coords.json."""
@@ -1901,9 +1835,15 @@ class MainWindow(QMainWindow):
     @pyqtSlot(str)
     def _on_detection_error(self, msg: str) -> None:
         self._timer.stop()
-        # Desbloquea el boton volver para que pueda corregir la calibracion
         self.btn_back_detection.setVisible(True)
         self.btn_stop.setEnabled(False)
+        _log = (Path(sys.executable).parent if getattr(sys, "frozen", False)
+                else Path(__file__).parent.parent.parent) / "detection_error.txt"
+        try:
+            with open(_log, "w", encoding="utf-8") as _f:
+                _f.write(msg)
+        except Exception:
+            pass
         QMessageBox.critical(self, "Detection error", msg)
 
     def _on_cancel_detection(self) -> None:
@@ -2433,7 +2373,6 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
 
     def _setup_model_status(self) -> None:
-        # Mostrar el modelo que se usara realmente: activo > pick_model_path() > fallback
         try:
             import sys as _sys
             _sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
@@ -2441,9 +2380,8 @@ class MainWindow(QMainWindow):
             display = (self._active_model_path or _pmp()).name
             ok = True
         except Exception:
-            ok = paths.yolo_model.exists() or paths.yolo_model_onnx.exists()
-            display = (paths.yolo_model_onnx if paths.yolo_model_onnx.exists()
-                       else paths.yolo_model).name if ok else (
+            ok = paths.yolo_model.exists()
+            display = paths.yolo_model.name if ok else (
                 "SELECCIONAR MODELO" if self._lang == "es" else "SELECT MODEL"
             )
         color  = "#2ecc71" if ok else "#e74c3c"
@@ -2467,13 +2405,13 @@ class MainWindow(QMainWindow):
         self.nav_prelabeling.setToolTip(tip)
 
     def _on_model_status_click(self, event) -> None:
-        """Permite al usuario cambiar el modelo .pt activo desde la barra lateral."""
+        """Permite al usuario cambiar el modelo activo desde la barra lateral."""
         _M = {
-            "no_folder_t": {"es": "Sin modelos",               "en": "No models"},
+            "no_folder_t": {"es": "Sin modelos",  "en": "No models"},
             "no_folder":   {"es": "La carpeta de modelos no existe todavia.",
                             "en": "The models folder does not exist yet."},
-            "none":        {"es": "No hay archivos .pt en la carpeta de modelos.",
-                            "en": "No .pt files found in the models folder."},
+            "none":        {"es": "No hay archivos .pt en la carpeta models/gpu/.",
+                            "en": "No .pt model files found in models/gpu/."},
             "one_t":       {"es": "Solo un modelo disponible", "en": "Only one model available"},
             "one":         {"es": "Solo hay un modelo disponible:\n{n}",
                             "en": "Only one model available:\n{n}"},
@@ -2483,18 +2421,19 @@ class MainWindow(QMainWindow):
         }
         L = self._lang
         models_gpu_dir = paths.models_gpu_dir
+
         if not models_gpu_dir.exists():
             QMessageBox.information(self, _M["no_folder_t"][L], _M["no_folder"][L])
             return
 
-        available = list(models_gpu_dir.glob("*.pt"))
-        if not available:
+        pt_files = list(models_gpu_dir.glob("*.pt"))
+        if not pt_files:
             QMessageBox.information(self, _M["no_folder_t"][L], _M["none"][L])
             return
 
-        if len(available) == 1:
+        if len(pt_files) == 1:
             QMessageBox.information(self, _M["one_t"][L],
-                                    _M["one"][L].format(n=available[0].name))
+                                    _M["one"][L].format(n=pt_files[0].name))
             return
 
         selected, _ = QFileDialog.getOpenFileName(
@@ -2502,7 +2441,6 @@ class MainWindow(QMainWindow):
         )
         if selected:
             self._active_model_path = Path(selected)
-            paths.yolo_model = Path(selected)
             self._setup_model_status()
 
     # ------------------------------------------------------------------
