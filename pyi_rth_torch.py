@@ -123,10 +123,9 @@ _add()
 
 _add("--- Python packages ---")
 
-# FIX: en un build CPU sin DLLs CUDA, shm.dll (memoria compartida de PyTorch)
-# no puede cargar porque le faltan dependencias CUDA. shm.dll solo se usa en
-# multiprocessing/DataLoader con workers; para inferencia pura no es necesaria.
-# Parcheamos ctypes.CDLL.__init__ para ignorar silenciosamente su fallo de carga.
+# shm.dll se incluye en el build CPU (torch_python.dll tiene dependencia hard en ella).
+# En yolorat_cpu, shm.dll no tiene dependencias CUDA y carga sin problemas.
+# Este patch es una red de seguridad por si shm.dll fallara en alguna maquina.
 if getattr(sys, "frozen", False):
     import ctypes as _ctypes
     _orig_cdll_init = _ctypes.CDLL.__init__
