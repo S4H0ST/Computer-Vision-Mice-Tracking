@@ -255,3 +255,9 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Claude Code (metadata local, no va al repo)
+.claude/
+
+# Logs de build locales
+build_log*.txt
+
