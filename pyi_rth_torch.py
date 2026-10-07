@@ -244,13 +244,16 @@ if _DIAG_MODE:
 _add(f"--- Summary: {_ok_n} OK / {_err_n} problems ---")
 
 _log_path = _exe_dir / "startup_diag.log"
-try:
-    _log_path.write_text("\n".join(_lines) + "\n", encoding="utf-8")
-except Exception:
-    pass
 
-# En modo --diag imprimir resumen por consola (no crear QApplication aqui;
-# la crea gui/app.py y no puede haber dos instancias en el mismo proceso)
+# Solo escribir el log si hay problemas o si se pidio explicitamente con --diag.
+# En arranque normal sin errores no se genera ningun archivo.
+if _err_n or _DIAG_MODE:
+    try:
+        _log_path.write_text("\n".join(_lines) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+# En modo --diag mostrar cuadro de dialogo con el resumen
 if _DIAG_MODE:
     try:
         import ctypes
@@ -258,7 +261,7 @@ if _DIAG_MODE:
         ctypes.windll.user32.MessageBoxW(
             0,
             f"Resultado: {_ok_n} OK / {_err_n} problemas\n\nLog guardado en:\n{_log_path}",
-            "RatTracker — Diagnóstico",
+            "RatTracker — Diagnostico",
             icon,
         )
     except Exception:
